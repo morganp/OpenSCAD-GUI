@@ -32,6 +32,7 @@
     window.__TransformControls = TransformControls;
     let CSG = null;
     try { CSG = await import('three-bvh-csg'); } catch (e) { console.warn('CSG unavailable, falling back to solid primitives:', e && e.message); }
+    try { const CG = await import('three/addons/geometries/ConvexGeometry.js'); window.__ConvexGeometry = CG.ConvexGeometry; } catch (e) { console.warn('ConvexGeometry unavailable (hull/minkowski approximate):', e && e.message); }
     window.THREE = THREE;
     window.__OrbitControls = OrbitControls;
     window.__CSG = CSG;
@@ -41,6 +42,7 @@
     console.error('three failed to load', e);
   }
 </script>
+<script src="scad-engine.js"></script>
 </helmet>
 <div style="position:fixed;inset:0;background:#15171B;color:#C7CCD4;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased;user-select:none;">
 
@@ -82,6 +84,9 @@
     <button onClick="{{ addCylinder }}" title="Add cylinder (C)" style="{{ btnCylinder }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><ellipse cx="10" cy="5" rx="6" ry="2.3" stroke="currentColor" stroke-width="1.3"/><path d="M4 5v10c0 1.27 2.69 2.3 6 2.3s6-1.03 6-2.3V5" stroke="currentColor" stroke-width="1.3"/></svg>
     </button>
+    <button onClick="{{ addSphere }}" title="Add sphere (S)" style="{{ btnSphere }}">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.3"/><ellipse cx="10" cy="10" rx="7" ry="2.6" stroke="currentColor" stroke-width="1.1" opacity=".5"/><path d="M10 3a7 7 0 0 1 0 14" stroke="currentColor" stroke-width="1.1" opacity=".5"/></svg>
+    </button>
     <div style="height:1px;background:#2C3037;margin:2px 4px;"></div>
     <button onClick="{{ pickMove }}" title="Move selected (M)" style="{{ btnMove }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14M10 3 8 5.4m2-2.4 2 2.4M10 17l-2-2.4m2 2.4 2-2.4M3 10l2.4-2M3 10l2.4 2M17 10l-2.4-2m2.4 2-2.4 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -89,11 +94,45 @@
     <button onClick="{{ deleteSelected }}" title="Delete selected (\u232b)" style="{{ btnDelete }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4.5 5.5h11M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5m2 0-.6 9a1.5 1.5 0 0 1-1.5 1.4H6.6a1.5 1.5 0 0 1-1.5-1.4l-.6-9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
+    <div style="height:1px;background:#2C3037;margin:2px 4px;"></div>
+    <button onClick="{{ toggleParams }}" title="Parameters / variables" style="{{ btnParams }}">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M6 4C4 4 5 10 3 10c2 0 1 6 3 6M14 4c2 0 1 6 3 6-2 0-1 6-3 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
   </div>
 
+  <sc-if value="{{ paramsOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ paramsPanelStyle }}">
+      <div onMouseDown="{{ dragParams }}" style="display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid #2C3037;cursor:grab;">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M6 4C4 4 5 10 3 10c2 0 1 6 3 6M14 4c2 0 1 6 3 6-2 0-1 6-3 6" stroke="#9CC2F5" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">Parameters</span>
+        <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5B616B;">{{ varCount }}</span>
+        <button onClick="{{ toggleParams }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#C7CCD4;">×</button>
+      </div>
+      <div ref="{{ setParamScroll }}" class="cad-scroll" style="max-height:286px;overflow-y:auto;padding:9px;">
+        <sc-if value="{{ varsEmpty }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:10px 8px 14px;text-align:center;color:#5B616B;font-size:11.5px;line-height:1.55;">No parameters yet.<br/>Add one, then bind it to a<br/>dimension with the ƒx button.</div>
+        </sc-if>
+        <sc-for list="{{ varsList }}" as="v" hint-placeholder-count="0">
+          <div data-var="{{ v.name }}" style="{{ v.rowStyle }}">
+            <input value="{{ v.nameValue }}" onInput="{{ v.onNameInput }}" onKeyDown="{{ v.onNameKey }}" onBlur="{{ v.onNameBlur }}" spellcheck="false" style="width:0;flex:1;min-width:0;background:transparent;border:none;color:#9CC2F5;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:3px 2px;outline:none;" />
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5B616B;">=</span>
+            <input type="number" value="{{ v.value }}" onChange="{{ v.onValue }}" step="1" style="width:66px;flex:none;background:#0F1114;border:1px solid #2C3037;border-radius:6px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 6px;text-align:right;box-sizing:border-box;" />
+            <button onClick="{{ v.onDelete }}" title="Delete parameter" style="background:transparent;border:none;color:#5B616B;cursor:pointer;padding:3px;border-radius:5px;flex:none;" style-hover="color:#EF6B6B;background:#2B2023;">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </sc-for>
+        <button onClick="{{ addVar }}" style="width:100%;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:6px;background:#17283f;border:1px solid #2C4D78;color:#9CC2F5;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#1d3252;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Add parameter
+        </button>
+      </div>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ hasEdge }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #34495F;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;min-width:330px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;">
+    <div style="{{ edgePanelStyle }}">
+      <div onMouseDown="{{ dragEdge }}" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;cursor:grab;">
         <div style="display:flex;align-items:center;gap:9px;">
           <span style="width:9px;height:9px;border-radius:50%;background:#3B82F6;box-shadow:0 0 10px #3B82F6;"></span>
           <span style="font-size:12px;color:#9AA3AE;">Edge</span>
@@ -128,8 +167,8 @@
   </sc-if>
 
   <sc-if value="{{ hasShapePanel }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:344px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;">
+    <div style="{{ shapePanelStyle }}">
+      <div onMouseDown="{{ dragShape }}" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;cursor:grab;">
         <div style="display:flex;align-items:center;gap:9px;">
           <span style="{{ shapeDotStyle }}"></span>
           <span style="font-size:13px;color:#E6E9EE;font-weight:500;">{{ shapePanelLabel }}</span>
@@ -137,6 +176,7 @@
         <button onClick="{{ deselectShape }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;" style-hover="color:#C7CCD4;">×</button>
       </div>
 
+      <sc-if value="{{ showGizmoTabs }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;gap:6px;margin-bottom:14px;">
         <button onClick="{{ setGizmoMove }}" style="{{ moveTab }}">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12M8 2 6.4 3.8M8 2l1.6 1.8M8 14l-1.6-1.8M8 14l1.6-1.8M2 8l1.8-1.6M2 8l1.8 1.6M14 8l-1.8-1.6M14 8l-1.8 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -147,57 +187,98 @@
           Resize
         </button>
       </div>
+      </sc-if>
+      <sc-if value="{{ sshNested }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:13px;padding:7px 9px;border-radius:8px;background:#16191E;border:1px solid #23272E;font-size:11px;color:#8A9099;line-height:1.4;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="flex:none;"><path d="M5 7V5a3 3 0 0 1 6 0v2M4 7h8v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7Z" stroke="#7E96B8" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Inside a boolean group — gizmo off; edit via fields below.
+        </div>
+      </sc-if>
 
-      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Dimensions</div>
-      <sc-if value="{{ isCuboidSel }}" hint-placeholder-val="{{ false }}">
-        <div style="display:flex;gap:8px;margin-bottom:14px;">
-          <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">X</span>
-            <input type="number" value="{{ dimX }}" onChange="{{ onDimX }}" step="1" min="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-          </label>
-          <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">Y</span>
-            <input type="number" value="{{ dimY }}" onChange="{{ onDimY }}" step="1" min="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-          </label>
-          <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">Z (height)</span>
-            <input type="number" value="{{ dimZ }}" onChange="{{ onDimZ }}" step="1" min="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-          </label>
-        </div>
-      </sc-if>
-      <sc-if value="{{ isCylinderSel }}" hint-placeholder-val="{{ false }}">
-        <div style="display:flex;gap:8px;margin-bottom:14px;">
-          <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">⌀ diameter</span>
-            <input type="number" value="{{ cylDia }}" onChange="{{ onCylDia }}" step="1" min="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-          </label>
-          <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">Z (height)</span>
-            <input type="number" value="{{ cylH }}" onChange="{{ onCylH }}" step="1" min="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-          </label>
-        </div>
-      </sc-if>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Dimensions</span>
+        <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">type a value or variable</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start;">
+        <sc-for list="{{ dimFields }}" as="f" hint-placeholder-count="2">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
+            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
+            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
+                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
+                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
 
       <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Position</div>
-      <div style="display:flex;gap:8px;margin-bottom:13px;">
-        <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">X</span>
-          <input type="number" value="{{ posX }}" onChange="{{ onPosX }}" step="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-        </label>
-        <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">Y</span>
-          <input type="number" value="{{ posY }}" onChange="{{ onPosY }}" step="1" style="width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-        </label>
-        <label style="flex:1;display:flex;flex-direction:column;gap:4px;">
-          <span style="font-size:10px;color:#79AEF5;font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;">Z (plane)</span>
-          <input type="number" value="{{ posZ }}" onChange="{{ onPosZ }}" step="1" style="width:100%;background:#0F1114;border:1px solid #34495F;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;" />
-        </label>
+      <div style="display:flex;gap:8px;margin-bottom:13px;align-items:flex-start;">
+        <sc-for list="{{ posFields }}" as="f" hint-placeholder-count="3">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
+            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
+            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
+                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
+                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
       </div>
       <button onClick="{{ placeOnFloor }}" style="width:100%;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">Rest base on floor</button>
     </div>
   </sc-if>
 
-  <div style="position:absolute;left:16px;bottom:16px;z-index:30;width:212px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;">
+  <sc-if value="{{ hasGroupPanel }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ groupPanelStyle }}">
+      <div onMouseDown="{{ dragGroup }}" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;cursor:grab;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <span style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:#1C2530;color:#9CC2F5;font-family:'IBM Plex Mono',monospace;font-size:13px;">{{ groupGlyph }}</span>
+          <span style="font-size:13px;color:#E6E9EE;font-weight:500;">{{ groupPanelLabel }}</span>
+        </div>
+        <button onClick="{{ deselectGroup }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;" style-hover="color:#C7CCD4;">×</button>
+      </div>
+
+      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Boolean operation</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button onClick="{{ setGroupUnion }}" style="{{ groupUnionTab }}">∪ Union</button>
+        <button onClick="{{ setGroupDiff }}" style="{{ groupDiffTab }}">− Difference</button>
+        <button onClick="{{ setGroupInt }}" style="{{ groupIntTab }}">∩ Intersect</button>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Members</span>
+        <sc-if value="{{ grpIsDiff }}" hint-placeholder-val="{{ false }}">
+          <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">base − the rest</span>
+        </sc-if>
+      </div>
+      <div style="display:flex;flex-direction:column;margin-bottom:13px;">
+        <sc-for list="{{ grpMembers }}" as="m" hint-placeholder-count="2">
+          <div onClick="{{ m.onSelect }}" style="{{ m.rowStyle }}">
+            <span style="{{ m.badgeStyle }}">{{ m.badge }}</span>
+            <span style="flex:1;min-width:0;font-size:12px;color:#E6E9EE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ m.label }}</span>
+            <sc-if value="{{ m.baseTag }}" hint-placeholder-val="{{ false }}">
+              <span style="{{ m.tagStyle }}">{{ m.baseTag }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <button onClick="{{ ungroupCurrent }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 6V3.5h2.5M13 6V3.5h-2.5M3 10v2.5h2.5M13 10v2.5h-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Ungroup
+      </button>
+    </div>
+  </sc-if>
+
+  <div style="position:absolute;left:16px;bottom:16px;z-index:30;width:226px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;">
     <div style="display:flex;align-items:center;gap:7px;padding:10px 13px;border-bottom:1px solid #2C3037;">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" stroke="#6B7280" stroke-width="1.3" stroke-linecap="round"/></svg>
       <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">Model Tree</span>
@@ -207,22 +288,72 @@
       <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
         <div style="padding:14px 10px;text-align:center;color:#5B616B;font-size:11.5px;line-height:1.5;">No solids yet.<br/>Add a cuboid to begin.</div>
       </sc-if>
-      <sc-for list="{{ shapesList }}" as="s" hint-placeholder-count="0">
-        <div onClick="{{ s.onSelect }}" style="{{ s.rowStyle }}">
-          <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#23272E;flex:none;">
-            <span style="{{ s.dotStyle }}"></span>
+      <sc-for list="{{ treeRows }}" as="s" hint-placeholder-count="0">
+        <div onClick="{{ s.onSelect }}" onContextMenu="{{ s.onCtx }}" style="{{ s.rowStyle }}">
+          <sc-if value="{{ s.hasCaret }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ s.onCaret }}" style="{{ s.caretStyle }}">
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M4 2.5 8 6l-4 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </sc-if>
+          <sc-if value="{{ s.noCaret }}" hint-placeholder-val="{{ true }}">
+            <span style="width:14px;flex:none;"></span>
+          </sc-if>
+          <span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:{{ s.iconBg }};flex:none;">
+            <span style="{{ s.dotStyle }}">{{ s.glyph }}</span>
           </span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:12.5px;color:#E6E9EE;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ s.label }}</div>
             <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6B7280;">{{ s.meta }}</div>
           </div>
-          <button onClick="{{ s.onDelete }}" style="background:transparent;border:none;color:#5B616B;cursor:pointer;padding:3px;border-radius:5px;flex:none;" style-hover="color:#EF6B6B;background:#2B2023;">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4.5 5.5h7l-.5 7.5h-6l-.5-7.5ZM6.5 5.5V4.2h3v1.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
+          <sc-if value="{{ s.hasOrder }}" hint-placeholder-val="{{ false }}">
+            <span style="{{ s.orderStyle }}">{{ s.order }}</span>
+          </sc-if>
+          <sc-if value="{{ s.showDelete }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ s.onDelete }}" style="background:transparent;border:none;color:#5B616B;cursor:pointer;padding:3px;border-radius:5px;flex:none;" style-hover="color:#EF6B6B;background:#2B2023;">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4.5 5.5h7l-.5 7.5h-6l-.5-7.5ZM6.5 5.5V4.2h3v1.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </sc-if>
         </div>
       </sc-for>
+      <sc-if value="{{ readOnlyTree }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;align-items:center;gap:7px;">
+          <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Advanced features can't be gizmo-edited.</span>
+          <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ hasMultiSel }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:5px;padding:7px 8px;border-radius:8px;background:#14161A;border:1px solid #23272E;display:flex;flex-direction:column;gap:6px;">
+          <span style="font-size:10px;color:#6B7280;line-height:1.4;">{{ multiSelHint }}</span>
+          <div style="display:flex;gap:5px;">
+            <button onClick="{{ groupUnion }}" title="Union" style="{{ comboBtn }}">∪ Union</button>
+            <button onClick="{{ groupDifference }}" title="Difference (first = base)" style="{{ comboBtn }}">− Diff</button>
+            <button onClick="{{ groupIntersection }}" title="Intersection" style="{{ comboBtn }}">∩ Int</button>
+          </div>
+        </div>
+      </sc-if>
+      <div style="margin-top:6px;padding:0 2px;font-size:10px;color:#4F555E;line-height:1.4;">⌘/Ctrl-click to multi-select · right-click to group</div>
     </div>
   </div>
+
+  <sc-if value="{{ ctxOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeCtx }}" style="position:fixed;inset:0;z-index:48;"></div>
+    <div style="{{ ctxStyle }}">
+      <sc-for list="{{ ctxItems }}" as="m" hint-placeholder-count="0">
+        <sc-if value="{{ m.isSep }}" hint-placeholder-val="{{ false }}">
+          <div style="height:1px;background:#2C3037;margin:4px 0;"></div>
+        </sc-if>
+        <sc-if value="{{ m.isItem }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ m.onClick }}" style="{{ m.style }}" style-hover="background:#23272E;">
+            <span style="width:16px;flex:none;text-align:center;color:{{ m.glyphColor }};">{{ m.glyph }}</span>
+            <span style="flex:1;">{{ m.label }}</span>
+            <sc-if value="{{ m.checked }}" hint-placeholder-val="{{ false }}">
+              <span style="color:#9CC2F5;">✓</span>
+            </sc-if>
+          </button>
+        </sc-if>
+      </sc-for>
+    </div>
+  </sc-if>
 
   <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:25;display:flex;align-items:center;gap:0;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:9px;padding:5px 4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9099;box-shadow:0 8px 24px rgba(0,0,0,.4);">
     <span style="padding:2px 11px;">{{ statusHint }}</span>
@@ -231,6 +362,14 @@
     <span style="width:1px;height:13px;background:#2C3037;"></span>
     <span style="padding:2px 11px;color:#5B616B;">mm</span>
   </div>
+
+  <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:16px;right:16px;z-index:33;display:flex;align-items:center;gap:8px;background:rgba(40,33,18,.9);backdrop-filter:blur(12px);border:1px solid #5A4A22;border-radius:10px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);">
+      <span style="width:8px;height:8px;border-radius:50%;background:#E0A33B;box-shadow:0 0 8px #E0A33B;flex:none;"></span>
+      <span style="font-size:11.5px;color:#E7C98A;">read-only — evaluated from code</span>
+      <button onClick="{{ exitReadOnly }}" style="background:transparent;border:none;color:#9C8550;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#E7C98A;">×</button>
+    </div>
+  </sc-if>
 
   <div style="{{ drawerStyle }}">
     <div style="display:flex;align-items:center;gap:9px;padding:13px 14px;border-bottom:1px solid #23272E;flex:none;">
@@ -248,8 +387,16 @@
       </div>
     </div>
     <textarea ref="{{ setCodeArea }}" class="scad cad-scroll" value="{{ code }}" onChange="{{ onCodeChange }}" spellcheck="false" style="flex:1;width:100%;background:#101216;border:none;color:#CBD2DA;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.62;padding:15px 16px;letter-spacing:.01em;tab-size:2;"></textarea>
+    <sc-if value="{{ consoleVisible }}" hint-placeholder-val="{{ false }}">
+      <div class="cad-scroll" style="flex:none;max-height:168px;overflow-y:auto;border-top:1px solid #23272E;background:#0D0F12;padding:7px 0;">
+        <sc-for list="{{ consoleRows }}" as="c" hint-placeholder-count="0">
+          <div style="{{ c.style }}"><span style="{{ c.tagStyle }}">{{ c.tag }}</span><span style="white-space:pre-wrap;word-break:break-word;">{{ c.msg }}</span></div>
+        </sc-for>
+      </div>
+    </sc-if>
     <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #23272E;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#5B616B;flex:none;">
       <span style="{{ csgBadge }}">{{ csgText }}</span>
+      <button onClick="{{ toggleConsole }}" title="Console" style="{{ consoleBtnStyle }}">{{ consoleBtnText }}</button>
       <span style="margin-left:auto;">{{ codeMeta }}</span>
     </div>
   </div>
@@ -277,11 +424,33 @@ class Component extends DCLogic {
     csgOk: true,
     dirty: false,
     fn: 48,
+    vars: [],              // serializable mirror of this.vars
+    paramsOpen: false,
+    fxEdit: null,          // 'shapeId:key' of the field whose expression editor is open
+    fxText: '',
+    varDraft: null,        // { idx, text } while renaming a parameter
+    highlightVar: null,    // var name to pulse in the Parameters panel
+    tree: [],              // serializable nested mirror of this.tree for the Model Tree
+    selectedIds: [],       // ordered multi-selection (first = base for difference)
+    expanded: {},          // { groupId: true } expand/collapse in the tree
+    ctxMenu: null,         // { x, y, id } right-click menu in the tree
+    panelPos: {},          // { shape|group|params|edge: {left, top} } dragged panel positions
+    readOnly: false,       // true when an advanced program is rendered from the SCAD evaluator
+    consoleOpen: false,    // console panel visibility
+    consoleLog: [],        // [{type:'echo'|'warn'|'error', msg}]
   };
+  _panels = {};            // live refs to draggable panel elements
 
   // ---- non-react engine state ----
-  shapes = [];             // [{id, type, label, dims, pos, treatments:{}, edges:[], group, solid, proxies:[]}]
-  seq = { cuboid: 0, cylinder: 0 };
+  // tree node (PRIMITIVE leaf): {id, type:'cuboid'|'cylinder'|'sphere', label, dims, pos,
+  //                              treatments:{}, edges:[], group, solid, proxies:[], expr:{}, parent}
+  // tree node (GROUP branch):    {id, op:'union'|'difference'|'intersection', label,
+  //                              children:[node...], group, solid, parent}
+  tree = [];               // ordered TOP-LEVEL nodes (primitives and/or groups)
+  shapes = [];             // FLAT mirror of all primitive leaves (rebuilt by reindex())
+  _rendered = [];          // nodes currently added to the scene (for teardown)
+  vars = [];               // [{ name, value }] ordered
+  seq = { cuboid: 0, cylinder: 0, sphere: 0, group: 0 };
 
   componentDidMount() {
     this._onKey = (e) => this.onKey(e);
@@ -472,10 +641,12 @@ class Component extends DCLogic {
     const g = new THREE.Group();
     g.position.set(shape.pos[0], shape.pos[1], shape.pos[2]);
 
-    // edges list (local)
+    // edges list (local) — spheres have no treatable edges in v1
     shape.edges = shape.type === 'cuboid'
       ? this.cuboidEdges(shape.dims.x, shape.dims.y, shape.dims.z)
-      : this.cylinderEdges(shape.dims.r, shape.dims.h);
+      : shape.type === 'cylinder'
+        ? this.cylinderEdges(shape.dims.r, shape.dims.h)
+        : [];
 
     // solid (with CSG treatments)
     const solid = this.buildSolid(shape);
@@ -485,7 +656,9 @@ class Component extends DCLogic {
     // wire edges (faint), from base outline
     const baseGeom = shape.type === 'cuboid'
       ? new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z)
-      : this.cylBase(shape.dims.r, shape.dims.h);
+      : shape.type === 'cylinder'
+        ? this.cylBase(shape.dims.r, shape.dims.h)
+        : new THREE.SphereGeometry(shape.dims.r, 24, 16);
     const wire = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeom, 25), this.lineMat);
     g.add(wire); baseGeom.dispose();
 
@@ -502,39 +675,10 @@ class Component extends DCLogic {
   }
 
   buildSolid(shape) {
-    const THREE = this.THREE;
-    if (shape.type === 'cylinder') return this.buildCylinderSolid(shape);
-    const base = new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z);
-
-    const treats = Object.entries(shape.treatments || {});
-    if (!treats.length || !this.CSG) {
-      const m = new THREE.Mesh(base, this.matFor(shape));
-      return m;
-    }
-    try {
-      const { Brush, Evaluator, SUBTRACTION } = this.CSG;
-      if (!this._ev) this._ev = new Evaluator();
-      let result = new Brush(base);
-      result.updateMatrixWorld();
-      for (const [name, t] of treats) {
-        const e = shape.edges.find(x => x.name === name);
-        if (!e) continue;
-        const mg = this.cuboidMaskGeom(e, t);
-        if (!mg) continue;
-        const mb = new Brush(mg); mb.updateMatrixWorld();
-        result = this._ev.evaluate(result, mb, SUBTRACTION);
-        mg.dispose();
-      }
-      base.dispose();
-      const mesh = new THREE.Mesh(result.geometry, this.matFor(shape));
-      return mesh;
-    } catch (err) {
-      console.warn('CSG cut failed, showing base solid', err);
-      return new THREE.Mesh(base, this.matFor(shape));
-    }
+    return new this.THREE.Mesh(this.solidGeometry(shape), this.matFor(shape));
   }
 
-  matFor(shape) { return shape.id === this.state.selectedShapeId ? this.selMat : this.solidMat; }
+  matFor(shape) { return (shape.id === this.state.selectedShapeId || (this.state.selectedIds || []).includes(shape.id)) ? this.selMat : this.solidMat; }
 
   cylBase(r, h) {
     const g = new this.THREE.CylinderGeometry(r, r, h, this.state.fn);
@@ -660,13 +804,137 @@ class Component extends DCLogic {
     g.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   }
 
+  // ============ TREE HELPERS ============
+  isGroup(n) { return !!(n && n.op && n.children); }
+  reindex() {
+    const prims = [];
+    const walk = (arr, parent) => { for (const n of arr) { n.parent = parent ? parent.id : null; if (this.isGroup(n)) walk(n.children, n); else prims.push(n); } };
+    walk(this.tree, null);
+    this.shapes = prims;
+  }
+  findNode(id) {
+    let found = null;
+    const walk = (arr) => { for (const n of arr) { if (found) return; if (n.id === id) { found = n; return; } if (this.isGroup(n)) walk(n.children); } };
+    walk(this.tree); return found;
+  }
+  parentArrayOf(id) {
+    let res = null;
+    const walk = (arr) => { for (const n of arr) { if (res) return; if (n.id === id) { res = arr; return; } if (this.isGroup(n)) walk(n.children); } };
+    walk(this.tree); return res;
+  }
+  isTopLevel(id) { return this.tree.some(n => n.id === id); }
+  collectPrimitives(arr) { const out = []; const walk = (a) => { for (const n of a) { if (this.isGroup(n)) walk(n.children); else out.push(n); } }; walk(arr); return out; }
+  clampAllTreatments() { for (const s of this.shapes) this.clampTreatments(s); }
+
+  // ============ SCENE BUILD (top-level only; groups render their CSG result) ============
+  rebuildScene() {
+    if (!this.scene) return;
+    for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); n.group = null; n.solid = null; } }
+    this._rendered = [];
+    for (const node of this.tree) {
+      if (this.isGroup(node)) this.buildGroupRender(node);
+      else this.buildGroup(node);
+      this._rendered.push(node);
+    }
+    this.refreshSelectionMat();
+    this.updateGizmo();
+    const se = this.state.selectedEdge;
+    if (se && this.isTopLevel(se.shapeId)) this.selectEdgeAfterRebuild(se);
+  }
+
+  // geometry of a primitive (with edge treatments baked in) — shared by solo render + CSG
+  solidGeometry(shape) {
+    const THREE = this.THREE;
+    if (shape.type === 'sphere') {
+      return new THREE.SphereGeometry(Math.max(0.1, shape.dims.r), Math.max(16, this.state.fn), Math.max(8, Math.round(this.state.fn / 2)));
+    }
+    if (shape.type === 'cylinder') {
+      const pts = this.cylProfile(shape.dims.r, shape.dims.h, shape.treatments || {});
+      const geom = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), this.state.fn);
+      geom.rotateX(Math.PI / 2); geom.computeVertexNormals();
+      return geom;
+    }
+    const base = new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z);
+    const treats = Object.entries(shape.treatments || {});
+    if (!treats.length || !this.CSG) return base;
+    try {
+      const { Brush, Evaluator, SUBTRACTION } = this.CSG;
+      if (!this._ev) this._ev = new Evaluator();
+      let result = new Brush(base); result.updateMatrixWorld();
+      for (const [name, t] of treats) {
+        const e = (shape.edges || []).find(x => x.name === name); if (!e) continue;
+        const mg = this.cuboidMaskGeom(e, t); if (!mg) continue;
+        const mb = new Brush(mg); mb.updateMatrixWorld();
+        result = this._ev.evaluate(result, mb, SUBTRACTION); mg.dispose();
+      }
+      base.dispose();
+      return result.geometry;
+    } catch (err) { console.warn('CSG edge cut failed', err); return base; }
+  }
+
+  // recursive boolean evaluation -> a three-bvh-csg Brush positioned in world space
+  evalBrush(node) {
+    if (!this.CSG) return null;
+    const THREE = this.THREE;
+    const { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } = this.CSG;
+    if (!this._ev) this._ev = new Evaluator();
+    if (!this.isGroup(node)) {
+      const b = new Brush(this.solidGeometry(node));
+      b.position.set(node.pos[0], node.pos[1], node.pos[2]);
+      b.updateMatrixWorld(true);
+      return b;
+    }
+    const kids = node.children.map(c => this.evalBrush(c)).filter(Boolean);
+    if (!kids.length) return null;
+    if (kids.length === 1) { kids[0].updateMatrixWorld(true); return kids[0]; }
+    const mode = node.op === 'union' ? ADDITION : node.op === 'intersection' ? INTERSECTION : SUBTRACTION;
+    let acc = kids[0];
+    for (let i = 1; i < kids.length; i++) acc = this._ev.evaluate(acc, kids[i], mode);
+    acc.updateMatrixWorld(true);
+    return acc;
+  }
+
+  buildGroupRender(node) {
+    const THREE = this.THREE;
+    const g = new THREE.Group();
+    let mesh = null;
+    if (this.CSG) {
+      try {
+        const brush = this.evalBrush(node);
+        if (brush && brush.geometry) { mesh = new THREE.Mesh(brush.geometry, this.matFor(node)); mesh.castShadow = true; mesh.receiveShadow = true; }
+      } catch (err) { console.warn('group CSG failed', err); }
+    }
+    if (!mesh) {
+      // fallback: just show member primitives (no boolean) so the model stays visible
+      mesh = new THREE.Group();
+      for (const p of this.collectPrimitives([node])) {
+        const m = new THREE.Mesh(this.solidGeometry(p), this.matFor(node));
+        m.position.set(p.pos[0], p.pos[1], p.pos[2]); m.castShadow = true; m.receiveShadow = true;
+        mesh.add(m);
+      }
+    }
+    g.add(mesh);
+    g.userData.shapeId = node.id;
+    node.group = g; node.solid = mesh;
+    this.scene.add(g);
+    return g;
+  }
+
   // ============ POINTER / PICK ============
   ndc(e) {
     const r = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   }
-  allProxies() { const a = []; for (const s of this.shapes) for (const p of (s.proxies || [])) a.push(p); return a; }
-  allSolids() { return this.shapes.map(s => s.solid).filter(Boolean); }
+  allProxies() { const a = []; for (const n of this.tree) if (!this.isGroup(n)) for (const p of (n.proxies || [])) a.push(p); return a; }
+  allSolids() {
+    const a = [];
+    for (const n of this.tree) {
+      if (!n.solid) continue;
+      if (n.solid.isMesh) a.push(n.solid);
+      else n.solid.traverse(o => { if (o.isMesh) a.push(o); });
+    }
+    return a;
+  }
 
   onPointerMove(e) {
     if (!this.raycaster) return;
@@ -757,6 +1025,7 @@ class Component extends DCLogic {
     this.setState({
       selectedEdge: { shapeId: ud.shapeId, edgeName: e.name, label: e.name },
       selectedShapeId: ud.shapeId,
+      selectedIds: [ud.shapeId],
       treatType: existing ? existing.type : this.state.treatType,
       radius: existing ? existing.size : this.state.radius,
     }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
@@ -771,12 +1040,13 @@ class Component extends DCLogic {
   // ============ TRANSFORM GIZMO ============
   updateGizmo() {
     if (!this.tc) return;
-    const s = (!this.state.selectedEdge && this.state.selectedShapeId)
-      ? this.shapes.find(x => x.id === this.state.selectedShapeId) : null;
-    if (s && s.group) {
+    const id = this.state.selectedShapeId;
+    const n = (!this.state.selectedEdge && id) ? this.findNode(id) : null;
+    // gizmo only drives TOP-LEVEL primitives (nested members & groups are edited via fields)
+    if (n && !this.isGroup(n) && this.isTopLevel(id) && n.group) {
       this.tc.setMode(this.state.gizmoMode === 'scale' ? 'scale' : 'translate');
       this.tc.setSpace(this.state.gizmoMode === 'scale' ? 'local' : 'world');
-      this.tc.attach(s.group);
+      this.tc.attach(n.group);
       this.tc.visible = true; this.tc.enabled = true;
     } else {
       this.tc.detach(); this.tc.visible = false;
@@ -784,29 +1054,43 @@ class Component extends DCLogic {
   }
   onGizmoChange() {
     const s = this.selShape(); if (!s || !this.tc || !this.tc.object) return;
-    if (this.state.gizmoMode !== 'scale') {
-      s.pos = [+s.group.position.x.toFixed(2), +s.group.position.y.toFixed(2), +s.group.position.z.toFixed(2)];
-      this.regenCode(); this.forceUpdate();
+    if (this.state.gizmoMode === 'scale') return;
+    const p = s.group.position;
+    const np = [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)];
+    const keys = ['px', 'py', 'pz'];
+    for (let i = 0; i < 3; i++) {
+      const expr = s.expr && s.expr[keys[i]];
+      if (expr) { const vn = this.isSingleVar(expr); if (vn) this.setVarValueRaw(vn, np[i]); /* locked: reverts below */ }
+      else s.pos[i] = np[i];
     }
+    this.resolveShape(s);                 // locked axes snap back to expression value
+    s.group.position.set(s.pos[0], s.pos[1], s.pos[2]);
+    this.syncVarsState(); this.regenCode(); this.forceUpdate();
   }
   onGizmoEnd() {
     const s = this.selShape(); if (!s) return;
     if (this.state.gizmoMode === 'scale') {
       const sc = s.group.scale;
       if (s.type === 'cuboid') {
-        s.dims.x = Math.max(1, +(s.dims.x * sc.x).toFixed(2));
-        s.dims.y = Math.max(1, +(s.dims.y * sc.y).toFixed(2));
-        s.dims.z = Math.max(1, +(s.dims.z * sc.z).toFixed(2));
+        this.bakeDim(s, 'x', s.dims.x * sc.x);
+        this.bakeDim(s, 'y', s.dims.y * sc.y);
+        this.bakeDim(s, 'z', s.dims.z * sc.z);
       } else {
         const rs = (Math.abs(sc.x) + Math.abs(sc.y)) / 2;
-        s.dims.r = Math.max(0.5, +(s.dims.r * rs).toFixed(2));
-        s.dims.h = Math.max(1, +(s.dims.h * sc.z).toFixed(2));
+        this.bakeDim(s, 'd', s.dims.r * 2 * rs);
+        this.bakeDim(s, 'h', s.dims.h * sc.z);
       }
       s.group.scale.set(1, 1, 1);
-      this.rebuildShape(s);
+      this.syncVarsState(); this.resolveShape(s); this.rebuildField(s);
     } else {
-      this.regenCode(); this.forceUpdate();
+      this.onGizmoChange();
     }
+  }
+  bakeDim(s, key, newVal) {
+    const v = +(+newVal).toFixed(2);
+    const expr = s.expr && s.expr[key];
+    if (expr) { const vn = this.isSingleVar(expr); if (vn) this.setVarValueRaw(vn, v); /* locked equation: leave untouched */ }
+    else this.applyFieldNumber(s, key, v);
   }
   setGizmoMove = () => { this.setState({ gizmoMode: 'translate' }, () => this.updateGizmo()); };
   setGizmoScale = () => { this.setState({ gizmoMode: 'scale' }, () => this.updateGizmo()); };
@@ -853,7 +1137,7 @@ class Component extends DCLogic {
   onRadiusInput = (e) => { const v = Math.max(0.5, parseFloat(e.target.value) || 0.5); const se = this.state.selectedEdge; const has = se && this.shapeHasTreatment(se); this.setState({ radius: v }, () => { if (has) this.applyTreatment(); }); };
 
   // ---- shape dimension / position editing ----
-  selShape() { return this.shapes.find(s => s.id === this.state.selectedShapeId); }
+  selShape() { return this.findNode(this.state.selectedShapeId); }
   setDim = (key, val) => {
     const s = this.selShape(); if (!s) return;
     const v = Math.max(1, parseFloat(val) || 1);
@@ -868,10 +1152,9 @@ class Component extends DCLogic {
     this.afterMove(s);
   };
   placeOnFloor = () => {
-    const s = this.selShape(); if (!s) return;
-    s.pos[2] = (s.type === 'cuboid' ? s.dims.z : s.dims.h) / 2;
-    s.group.position.set(s.pos[0], s.pos[1], s.pos[2]);
-    this.afterMove(s);
+    const s = this.selShape(); if (!s || this.isGroup(s)) return;
+    const target = s.type === 'cuboid' ? s.dims.z / 2 : s.type === 'sphere' ? s.dims.r : s.dims.h / 2;
+    this.setFieldValueRespectingBinding(s, 'pz', target);
   };
   rebuildShape(s) {
     for (const [n, t] of Object.entries(s.treatments || {})) { const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
@@ -890,70 +1173,428 @@ class Component extends DCLogic {
     this.forceUpdate();
   }
 
+  // ============ VARIABLES / EXPRESSIONS ============
+  RESERVED = new Set(['cube','cylinder','sphere','translate','rotate','scale','mirror','difference','union','intersection','hull','minkowski','linear_extrude','rotate_extrude','polygon','polyhedron','module','function','color','true','false','undef','PI','for','if','else']);
+  reserved(name) { return this.RESERVED.has(name); }
+  varMap() { const m = {}; for (const v of this.vars) m[v.name] = v.value; return m; }
+  syncVarsState() { this.setState({ vars: this.vars.map(v => ({ name: v.name, value: v.value })) }); }
+
+  // --- safe arithmetic evaluator (no eval): tokenize -> shunting-yard -> RPN ---
+  tokenizeExpr(str) {
+    if (typeof str !== 'string') return null;
+    if (!/^[\sA-Za-z0-9_+\-*/%().]*$/.test(str)) return null;
+    return str.match(/([0-9]*\.?[0-9]+|[A-Za-z_]\w*|[-+*/%()])/g) || [];
+  }
+  toRPN(toks) {
+    const out = [], ops = [];
+    const prec = { 'u-': 4, '*': 3, '/': 3, '%': 3, '+': 2, '-': 2 };
+    let prev = null;
+    for (const t of toks) {
+      if (/^[0-9.]/.test(t) || /^[A-Za-z_]/.test(t)) { out.push(t); prev = t; }
+      else if (t === '(') { ops.push(t); prev = t; }
+      else if (t === ')') {
+        while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop());
+        if (!ops.length) throw new Error('paren'); ops.pop(); prev = t;
+      } else {
+        let op = t;
+        if (t === '-' && (prev === null || prev === '(' || ['+','-','*','/','%','u-'].includes(prev))) op = 'u-';
+        while (ops.length) {
+          const top = ops[ops.length - 1];
+          if (top === '(') break;
+          if (prec[top] > prec[op] || (prec[top] === prec[op] && op !== 'u-')) out.push(ops.pop());
+          else break;
+        }
+        ops.push(op); prev = op;
+      }
+    }
+    while (ops.length) { const o = ops.pop(); if (o === '(') throw new Error('paren'); out.push(o); }
+    return out;
+  }
+  evalExpr(str, vars) {
+    vars = vars || this.varMap();
+    const toks = this.tokenizeExpr(str);
+    if (!toks || !toks.length) throw new Error('empty');
+    const rpn = this.toRPN(toks);
+    const st = [];
+    for (const t of rpn) {
+      if (t === 'u-') { st.push(-st.pop()); }
+      else if (t.length === 1 && '+-*/%'.includes(t)) {
+        const b = st.pop(), a = st.pop();
+        st.push(t === '+' ? a + b : t === '-' ? a - b : t === '*' ? a * b : t === '/' ? a / b : a % b);
+      } else if (/^[0-9.]/.test(t)) { st.push(parseFloat(t)); }
+      else { if (!(t in vars)) throw new Error('unknown:' + t); st.push(vars[t]); }
+    }
+    if (st.length !== 1 || !isFinite(st[0])) throw new Error('eval');
+    return st[0];
+  }
+  isSingleVar(str) {
+    const t = (str || '').trim();
+    return (/^[A-Za-z_]\w*$/.test(t) && this.vars.some(v => v.name === t)) ? t : null;
+  }
+  varsInExpr(str) { const m = (str || '').match(/[A-Za-z_]\w*/g) || []; return [...new Set(m)]; }
+
+  // --- resolve expression bindings into numeric dims/pos ---
+  resolveShape(s, vars) {
+    vars = vars || this.varMap();
+    if (!s.expr) return false;
+    let hadDim = false;
+    for (const [k, e] of Object.entries(s.expr)) {
+      let v; try { v = this.evalExpr(e, vars); } catch (_) { continue; }
+      if (k === 'x' || k === 'y' || k === 'z') { s.dims[k] = Math.max(0.1, v); hadDim = true; }
+      else if (k === 'd') { s.dims.r = Math.max(0.05, v / 2); hadDim = true; }
+      else if (k === 'h') { s.dims.h = Math.max(0.1, v); hadDim = true; }
+      else if (k === 'px') s.pos[0] = v;
+      else if (k === 'py') s.pos[1] = v;
+      else if (k === 'pz') s.pos[2] = v;
+    }
+    return hadDim;
+  }
+  clampTreatments(s) {
+    for (const [n, t] of Object.entries(s.treatments || {})) { const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
+  }
+  resolveAll() {
+    const vars = this.varMap();
+    for (const s of this.shapes) {
+      if (!s.expr || !Object.keys(s.expr).length) continue;
+      this.resolveShape(s, vars);
+    }
+    this.clampAllTreatments();
+    this.rebuildScene();          // re-runs every group's CSG + repositions primitives
+    this.syncShapesState(); this.regenCode(); this.forceUpdate();
+  }
+  afterVarsChanged() { this.syncVarsState(); this.resolveAll(); }
+
+  // --- parameter CRUD ---
+  // ---- draggable floating panels (drag by header) ----
+  startPanelDrag = (key) => (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, input, select, textarea, a')) return;  // let controls work
+    const panel = e.currentTarget.parentElement;
+    if (!panel) return;
+    e.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    const host = (panel.offsetParent || document.body).getBoundingClientRect();
+    let left = rect.left - host.left, top = rect.top - host.top;
+    const sx = e.clientX, sy = e.clientY, w = rect.width, h = rect.height;
+    const hostW = host.width || window.innerWidth, hostH = host.height || window.innerHeight;
+    // pin position immediately (removes any translate centering)
+    this.setState({ panelPos: { ...this.state.panelPos, [key]: { left, top } } });
+    const move = (ev) => {
+      const nl = Math.max(4, Math.min(left + (ev.clientX - sx), hostW - w - 4));
+      const nt = Math.max(4, Math.min(top + (ev.clientY - sy), hostH - 36));
+      this.setState({ panelPos: { ...this.state.panelPos, [key]: { left: nl, top: nt } } });
+    };
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); document.body.style.cursor = ''; };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    document.body.style.cursor = 'grabbing';
+  };
+  panelStyle(key, base) {
+    const p = (this.state.panelPos || {})[key];
+    return p ? `${base};left:${p.left}px;top:${p.top}px;right:auto;bottom:auto;transform:none;` : base;
+  }
+
+  toggleParams = () => this.setState({ paramsOpen: !this.state.paramsOpen });
+  setParamScroll = (el) => { this._paramScroll = el; };
+  addVar = () => {
+    let i = 1; const names = new Set(this.vars.map(v => v.name));
+    while (names.has('p' + i)) i++;
+    this.vars.push({ name: 'p' + i, value: 10 });
+    this.setState({ paramsOpen: true }); this.syncVarsState(); this.regenCode();
+  };
+  onVarValue = (i, val) => {
+    const n = parseFloat(val); if (isNaN(n)) return;
+    if (!this.vars[i]) return;
+    this.vars[i].value = n; this.afterVarsChanged();
+  };
+  setVarValue(name, n) { const v = this.vars.find(x => x.name === name); if (!v) return; v.value = +(+n); this.afterVarsChanged(); }
+  setVarValueRaw(name, n) { const v = this.vars.find(x => x.name === name); if (v) v.value = +(+n); }
+  deleteVar = (i) => {
+    if (!this.vars[i]) return;
+    this.vars.splice(i, 1);
+    if (this.state.varDraft && this.state.varDraft.idx === i) this.setState({ varDraft: null });
+    this.afterVarsChanged();
+  };
+  commitRename(i) {
+    const d = this.state.varDraft;
+    if (!d || d.idx !== i || !this.vars[i]) { this.setState({ varDraft: null }); return; }
+    const nn = (d.text || '').trim(); const old = this.vars[i].name;
+    this.setState({ varDraft: null });
+    if (nn === old) return;
+    if (!/^[A-Za-z_]\w*$/.test(nn) || this.reserved(nn) || this.vars.some((v, j) => j !== i && v.name === nn)) {
+      this.flashStatus('Invalid or duplicate parameter name'); this.forceUpdate(); return;
+    }
+    const re = new RegExp('\\b' + old + '\\b', 'g');
+    for (const s of this.shapes) { if (!s.expr) continue; for (const k of Object.keys(s.expr)) s.expr[k] = s.expr[k].replace(re, nn); }
+    this.vars[i].name = nn;
+    this.afterVarsChanged();
+  }
+  focusVar(name) {
+    this.setState({ paramsOpen: true, highlightVar: name });
+    clearTimeout(this._hv); this._hv = setTimeout(() => this.setState({ highlightVar: null }), 1700);
+    setTimeout(() => {
+      const c = this._paramScroll; if (!c) return;
+      const sel = (window.CSS && CSS.escape) ? CSS.escape(name) : name;
+      const el = c.querySelector('[data-var="' + sel + '"]');
+      if (el) c.scrollTop = Math.max(0, el.offsetTop - 8);
+    }, 70);
+  }
+
+  // --- per-field binding helpers ---
+  fieldNumber(s, key) {
+    if (key === 'x' || key === 'y' || key === 'z') return s.dims[key];
+    if (key === 'd') return s.dims.r * 2;
+    if (key === 'h') return s.dims.h;
+    if (key === 'px') return s.pos[0];
+    if (key === 'py') return s.pos[1];
+    if (key === 'pz') return s.pos[2];
+    return 0;
+  }
+  applyFieldNumber(s, key, n) {
+    if (key === 'x' || key === 'y' || key === 'z') s.dims[key] = Math.max(1, n);
+    else if (key === 'd') s.dims.r = Math.max(0.5, n / 2);
+    else if (key === 'h') s.dims.h = Math.max(1, n);
+    else if (key === 'px') s.pos[0] = n;
+    else if (key === 'py') s.pos[1] = n;
+    else if (key === 'pz') s.pos[2] = n;
+  }
+  clearExpr(s, key) { if (s.expr) { delete s.expr[key]; if (!Object.keys(s.expr).length) delete s.expr; } }
+  rebuildField(s) {
+    this.clampTreatments(s);
+    if (this.isTopLevel(s.id)) {            // fast path: solo primitive, rebuild just it
+      this.buildGroup(s);
+      const se = this.state.selectedEdge;
+      if (se && se.shapeId === s.id) this.selectEdgeAfterRebuild(se);
+    } else {
+      this.rebuildScene();                  // nested member: re-run ancestor CSG
+    }
+    this.updateGizmo();
+    this.syncShapesState(); this.regenCode(); this.forceUpdate();
+  }
+  onFieldNum = (key, val) => {
+    const s = this.selShape(); if (!s) return;
+    const n = parseFloat(val); if (isNaN(n)) return;
+    const expr = s.expr && s.expr[key];
+    const vn = expr && this.isSingleVar(expr);
+    if (vn) { this.setVarValue(vn, n); }
+    else { this.clearExpr(s, key); this.applyFieldNumber(s, key, n); this.rebuildField(s); }
+  };
+  toggleFx(key) {
+    const s = this.selShape(); if (!s) return;
+    const id = s.id + ':' + key;
+    if (this.state.fxEdit === id) { this.setState({ fxEdit: null }); return; }
+    const cur = (s.expr && s.expr[key]) ? s.expr[key] : this.fmt(this.fieldNumber(s, key));
+    this.setState({ fxEdit: id, fxText: cur });
+  }
+  cancelFx() { this.setState({ fxEdit: null }); }
+  commitFx(key) {
+    const s = this.selShape();
+    if (!s || this.state.fxEdit !== s.id + ':' + key) { this.setState({ fxEdit: null }); return; }
+    const t = (this.state.fxText || '').trim();
+    const prevExpr = s.expr && s.expr[key];
+    const wasVar = prevExpr ? this.isSingleVar(prevExpr) : null;
+    this.setState({ fxEdit: null });
+    // empty -> unbind, keep current numeric value
+    if (t === '') { if (prevExpr) { this.clearExpr(s, key); this.rebuildField(s); } return; }
+    // pure number
+    if (/^-?[0-9]*\.?[0-9]+$/.test(t)) {
+      const n = parseFloat(t);
+      if (wasVar) { this.setVarValue(wasVar, n); }            // two-way: editing a var-bound field updates the variable
+      else { this.clearExpr(s, key); this.applyFieldNumber(s, key, n); this.rebuildField(s); }
+      return;
+    }
+    // expression / variable name
+    if (!/^[\sA-Za-z0-9_+\-*/%().]+$/.test(t)) { this.flashStatus('Invalid characters in expression'); this.forceUpdate(); return; }
+    let val; try { val = this.evalExpr(t, this.varMap()); } catch (e) {
+      const unknown = (e.message || '').startsWith('unknown:') ? e.message.slice(8) : null;
+      this.flashStatus(unknown ? ('Unknown parameter \u201c' + unknown + '\u201d \u2014 add it first') : 'Could not parse expression'); this.forceUpdate(); return;
+    }
+    s.expr = s.expr || {}; s.expr[key] = t;
+    this.resolveShape(s); this.rebuildField(s);
+  }
+  setFieldValueRespectingBinding(s, key, n) {
+    const expr = s.expr && s.expr[key];
+    if (expr) {
+      const vn = this.isSingleVar(expr);
+      if (vn) { this.setVarValue(vn, n); return; }
+      this.flashStatus('Field is locked to an equation'); return;
+    }
+    this.clearExpr(s, key); this.applyFieldNumber(s, key, n); this.rebuildField(s);
+  }
+
+  // --- field view-model for the inspector ---
+  fxBtnStyle(active) {
+    return `display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;line-height:1;padding:3px 5px;border-radius:5px;cursor:pointer;border:1px solid ${active ? '#2C4D78' : '#2C3037'};background:${active ? '#17283f' : 'transparent'};color:${active ? '#9CC2F5' : '#6B7280'};`;
+  }
+  chipStyle(exists) {
+    if (exists) return `font-family:'IBM Plex Mono',monospace;font-size:10px;color:#9CC2F5;background:#17283f;border:1px solid #2C4D78;border-radius:5px;padding:2px 7px;cursor:pointer;`;
+    return `font-family:'IBM Plex Mono',monospace;font-size:10px;color:#E0736B;background:#2B1D1F;border:1px solid #5A2E2E;border-radius:5px;padding:2px 7px;cursor:pointer;`;
+  }
+  buildField(s, key, label) {
+    const vars = this.varMap();
+    const expr = s.expr && s.expr[key];
+    const id = s.id + ':' + key;
+    const editing = this.state.fxEdit === id;
+    let varName = null, computed = '', err = false, chips = [], locked = false;
+    if (expr) {
+      varName = this.isSingleVar(expr);
+      locked = !varName;                                   // multi-var / equation => locked from direct nudging
+      let val; try { val = this.evalExpr(expr, vars); } catch (_) { err = true; }
+      computed = err ? '\u26a0 unknown parameter' : '= ' + this.fmt(val) + ' mm';
+      chips = this.varsInExpr(expr).map(n => ({
+        label: n, onClick: () => this.focusVar(n), style: this.chipStyle(n in vars),
+      }));
+    }
+    const resting = expr ? expr : this.fmt(this.fieldNumber(s, key));
+    const bound = !!expr;
+    const border = err ? '#5A2E2E' : (bound ? '#2C4D78' : '#2C3037');
+    const txtColor = err ? '#E0736B' : (bound ? '#9CC2F5' : '#E6E9EE');
+    return {
+      key, label,
+      inputValue: editing ? this.state.fxText : resting,
+      inputStyle: `width:100%;background:#0F1114;border:1px solid ${border};border-radius:7px;color:${txtColor};font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;box-sizing:border-box;outline:none;`,
+      placeholder: 'value or var',
+      hasSub: bound && !editing,
+      locked, computed, computedColor: err ? '#E0736B' : '#5E8C6A', chips,
+      onFocus: (e) => { if (this.state.fxEdit !== id) this.setState({ fxEdit: id, fxText: resting }); try { e.target.select(); } catch (_) {} },
+      onInput: (e) => this.setState({ fxText: e.target.value }),
+      onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } else if (e.key === 'Escape') { e.preventDefault(); this.setState({ fxEdit: null }); e.target.blur(); } },
+      onBlur: () => this.commitFx(key),
+    };
+  }
+
   // ============ ADD / SELECT / DELETE SHAPES ============
   nextPos() {
-    const n = this.shapes.length;
+    const n = this.tree.length;
     const ring = [[0, 0], [55, 0], [-55, 0], [0, 55], [0, -55], [55, 55], [-55, -55]];
     const p = ring[n % ring.length];
     return [p[0], p[1], 0];
   }
 
+  addPrimitive(shape) {
+    this.tree.push(shape); this.reindex();
+    this.setState({ tool: 'select', selectedShapeId: shape.id, selectedIds: [shape.id] }, () => {
+      this.rebuildScene(); this.syncShapesState(); this.regenCode();
+    });
+  }
   addCuboid = () => {
     if (!this.scene) return;
     this.seq.cuboid++;
     const dims = { x: 40, y: 40, z: 40 };
     const pos = this.nextPos(); pos[2] = dims.z / 2;
-    const shape = { id: 'cb' + Date.now() + this.seq.cuboid, type: 'cuboid', label: 'Cuboid ' + this.seq.cuboid, dims, pos, treatments: {} };
-    this.shapes.push(shape);
-    this.buildGroup(shape);
-    this.selectShape(shape.id);
-    this.setState({ tool: 'select' });
-    this.syncShapesState(); this.regenCode();
+    this.addPrimitive({ id: 'cb' + Date.now() + this.seq.cuboid, type: 'cuboid', label: 'Cuboid ' + this.seq.cuboid, dims, pos, treatments: {} });
   };
   addCylinder = () => {
     if (!this.scene) return;
     this.seq.cylinder++;
     const dims = { r: 20, h: 50 };
     const pos = this.nextPos(); pos[2] = dims.h / 2;
-    const shape = { id: 'cy' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cylinder ' + this.seq.cylinder, dims, pos, treatments: {} };
-    this.shapes.push(shape);
-    this.buildGroup(shape);
-    this.selectShape(shape.id);
-    this.setState({ tool: 'select' });
-    this.syncShapesState(); this.regenCode();
+    this.addPrimitive({ id: 'cy' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cylinder ' + this.seq.cylinder, dims, pos, treatments: {} });
+  };
+  addSphere = () => {
+    if (!this.scene) return;
+    this.seq.sphere++;
+    const dims = { r: 22 };
+    const pos = this.nextPos(); pos[2] = dims.r;
+    this.addPrimitive({ id: 'sp' + Date.now() + this.seq.sphere, type: 'sphere', label: 'Sphere ' + this.seq.sphere, dims, pos, treatments: {} });
   };
 
   selectShape = (id) => {
-    this.setState({ selectedShapeId: id }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
+    this.setState({ selectedShapeId: id, selectedIds: id ? [id] : [] }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
+  };
+  toggleSelect = (id) => {
+    let ids = (this.state.selectedIds || []).slice();
+    const k = ids.indexOf(id);
+    if (k >= 0) ids.splice(k, 1); else ids.push(id);
+    const primary = ids.length ? ids[ids.length - 1] : null;
+    this.setState({ selectedShapeId: primary, selectedIds: ids, selectedEdge: null }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
   };
   refreshSelectionMat() {
-    for (const s of this.shapes) {
-      if (s.solid) s.solid.material = this.matFor(s);
+    for (const n of this.tree) {
+      if (!n.solid) continue;
+      if (n.solid.isMesh) n.solid.material = this.matFor(n);
+      else n.solid.traverse(o => { if (o.isMesh) o.material = this.matFor(n); });
     }
     this.syncShapesState();
   }
   deleteShapeById = (id) => {
-    const i = this.shapes.findIndex(s => s.id === id); if (i < 0) return;
-    const s = this.shapes[i];
-    if (this.tc && this.tc.object === s.group) this.tc.detach();
-    this.scene.remove(s.group); this.disposeGroup(s.group);
-    this.shapes.splice(i, 1);
-    if (this.state.selectedShapeId === id) this.setState({ selectedShapeId: null }, () => this.updateGizmo());
-    if (this.state.selectedEdge && this.state.selectedEdge.shapeId === id) this.clearEdge();
-    this.syncShapesState(); this.regenCode();
+    const node = this.findNode(id); if (!node) return;
+    const arr = this.parentArrayOf(id); if (!arr) return;
+    const idx = arr.indexOf(node); if (idx < 0) return;
+    if (this.tc && node.group && this.tc.object === node.group) this.tc.detach();
+    arr.splice(idx, 1);
+    this.reindex();
+    const clearEdge = this.state.selectedEdge && !this.findNode(this.state.selectedEdge.shapeId);
+    this.setState({
+      selectedShapeId: this.findNode(this.state.selectedShapeId) ? this.state.selectedShapeId : null,
+      selectedIds: (this.state.selectedIds || []).filter(x => this.findNode(x)),
+      selectedEdge: clearEdge ? null : this.state.selectedEdge,
+      ctxMenu: null,
+    }, () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
   };
   deleteSelected = () => { if (this.state.selectedShapeId) this.deleteShapeById(this.state.selectedShapeId); };
 
-  // ============ STATE MIRROR ============
+  // ============ BOOLEAN GROUPS ============
+  sameParent(ids) {
+    if (!ids.length) return false;
+    const a = this.parentArrayOf(ids[0]);
+    return !!a && ids.every(id => this.parentArrayOf(id) === a);
+  }
+  canGroupSelection() { const ids = this.state.selectedIds || []; return ids.length >= 2 && this.sameParent(ids); }
+  groupSelection = (op) => {
+    const ids = (this.state.selectedIds || []).slice();
+    if (ids.length < 2 || !this.sameParent(ids)) { this.flashStatus('Select 2+ shapes at the same level to group'); this.setState({ ctxMenu: null }); return; }
+    const arr = this.parentArrayOf(ids[0]);
+    const nodes = ids.map(id => this.findNode(id));          // selection order = base first
+    const firstIdx = Math.min(...nodes.map(n => arr.indexOf(n)));
+    for (const n of nodes) { const k = arr.indexOf(n); if (k >= 0) arr.splice(k, 1); }
+    this.seq.group++;
+    const label = (op === 'union' ? 'Union ' : op === 'difference' ? 'Difference ' : 'Intersection ') + this.seq.group;
+    const gnode = { id: 'gp' + Date.now() + this.seq.group, op, label, children: nodes };
+    arr.splice(Math.min(firstIdx, arr.length), 0, gnode);
+    this.reindex();
+    this.setState({ selectedShapeId: gnode.id, selectedIds: [gnode.id], expanded: { ...this.state.expanded, [gnode.id]: true }, ctxMenu: null },
+      () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  };
+  ungroupById = (id) => {
+    const node = this.findNode(id); if (!this.isGroup(node)) return;
+    const arr = this.parentArrayOf(id); const idx = arr.indexOf(node);
+    if (node.group) { this.scene.remove(node.group); this.disposeGroup(node.group); }
+    arr.splice(idx, 1, ...node.children);
+    this.reindex();
+    this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null },
+      () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  };
+  changeOp = (id, op) => {
+    const node = this.findNode(id); if (!this.isGroup(node) || node.op === op) { this.setState({ ctxMenu: null }); return; }
+    node.op = op;
+    this.setState({ ctxMenu: null }, () => { this.rebuildScene(); this.syncShapesState(); this.regenCode(); });
+  };
+  toggleExpand = (id) => { const e = { ...this.state.expanded }; e[id] = !(e[id] !== false); this.setState({ expanded: e }); };
+  openCtx = (id, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const sel = this.state.selectedIds || [];
+    if (!sel.includes(id)) this.setState({ selectedShapeId: id, selectedIds: [id] }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
+    this.setState({ ctxMenu: { x: e.clientX, y: e.clientY, id } });
+  };
+  closeCtx = () => { if (this.state.ctxMenu) this.setState({ ctxMenu: null }); };
+
+  // ============ STATE MIRROR (nested) ============
   syncShapesState() {
-    const list = this.shapes.map(s => ({
-      id: s.id, type: s.type, label: s.label,
-      treated: Object.keys(s.treatments || {}).length,
-      meta: s.type === 'cuboid'
-        ? `${s.dims.x}\u00d7${s.dims.y}\u00d7${s.dims.z}`
-        : `\u2300${s.dims.r * 2} \u00d7 ${s.dims.h}`,
-    }));
-    this.setState({ shapes: list });
+    const ser = (n, depth) => {
+      if (this.isGroup(n)) return {
+        id: n.id, kind: 'group', op: n.op, label: n.label, depth,
+        count: this.collectPrimitives([n]).length,
+        children: n.children.map(c => ser(c, depth + 1)),
+      };
+      return {
+        id: n.id, kind: 'prim', type: n.type, label: n.label, depth,
+        treated: Object.keys(n.treatments || {}).length,
+        meta: n.type === 'cuboid' ? `${this.fmt(n.dims.x)}\u00d7${this.fmt(n.dims.y)}\u00d7${this.fmt(n.dims.z)}`
+          : n.type === 'cylinder' ? `\u2300${this.fmt(n.dims.r * 2)} \u00d7 ${this.fmt(n.dims.h)}`
+            : `\u2300${this.fmt(n.dims.r * 2)}`,
+      };
+    };
+    this.setState({ tree: this.tree.map(n => ser(n, 0)) });
   }
 
   // ============ OPENSCAD CODE GEN ============
@@ -975,6 +1616,11 @@ class Component extends DCLogic {
     out.push('// Generated by SCAD Studio');
     out.push('$fn = ' + this.state.fn + ';');
     out.push('');
+    if (this.vars.length) {
+      out.push('// --- parameters ---');
+      for (const v of this.vars) out.push(`${v.name} = ${F(v.value)};`);
+      out.push('');
+    }
     let usesMask = false;
     for (const s of this.shapes) if (Object.keys(s.treatments || {}).length && s.type === 'cuboid') usesMask = true;
     if (usesMask) {
@@ -983,109 +1629,655 @@ class Component extends DCLogic {
       out.push('module edge_chamfer(L, r) { linear_extrude(height = L, center = true) polygon([[r,0],[r,r],[0,r]]); }');
       out.push('');
     }
-    for (const s of this.shapes) {
-      out.push('// ' + s.label);
-      const treats = Object.entries(s.treatments || {});
-      const pos = `[${F(s.pos[0])}, ${F(s.pos[1])}, ${F(s.pos[2])}]`;
-      if (s.type === 'cylinder') {
-        if (treats.length) out.push('// rims: ' + treats.map(([k, t]) => k.toLowerCase() + ' ' + t.type + ' r=' + F(t.size)).join(', '));
-        out.push(`translate(${pos})`);
-        out.push('  ' + this.cylinderScad(s) + ';');
-      } else if (!treats.length) {
-        out.push(`translate(${pos})`);
-        out.push('  ' + this.baseCall(s) + ';');
-      } else {
-        out.push(`translate(${pos})`);
-        out.push('difference() {');
-        out.push('  ' + this.baseCall(s) + ';');
-        for (const [name, t] of treats) {
-          const e = s.edges.find(x => x.name === name);
-          if (!e) continue;
-          const M = this.edgeMatrix(e, t.size);
-          const mod = t.type === 'fillet' ? 'edge_fillet' : 'edge_chamfer';
-          out.push(`  // ${name} (${t.type} r=${F(t.size)})`);
-          out.push(`  multmatrix(${this.matStr(M)})`);
-          out.push(`    ${mod}(${F(e.length + 0.02)}, ${F(t.size)});`);
-        }
-        out.push('}');
-      }
-      out.push('');
-    }
+    for (const node of this.tree) { this.emitNode(node, 0, out); out.push(''); }
     const code = out.join('\n');
     this.setState({ code, dirty: false });
     if (this._codeArea && document.activeElement !== this._codeArea) this._codeArea.value = code;
   }
 
+  ind(level) { return '  '.repeat(level); }
+  emitNode(node, level, out) {
+    const pad = this.ind(level);
+    if (this.isGroup(node)) {
+      out.push(pad + node.op + '() {');
+      for (const c of node.children) this.emitNode(c, level + 1, out);
+      out.push(pad + '}');
+      return;
+    }
+    this.emitPrimitive(node, level, out);
+  }
+  emitPrimitive(s, level, out) {
+    const F = (n) => this.fmt(n);
+    const pad = this.ind(level);
+    const treats = Object.entries(s.treatments || {});
+    const pos = `[${this.posTok(s, 'px')}, ${this.posTok(s, 'py')}, ${this.posTok(s, 'pz')}]`;
+    out.push(pad + '// ' + s.label);
+    if (s.type === 'cylinder' && treats.length) {
+      out.push(pad + '// rims: ' + treats.map(([k, t]) => k.toLowerCase() + ' ' + t.type + ' r=' + F(t.size)).join(', '));
+      out.push(pad + `translate(${pos})`);
+      out.push(pad + '  ' + this.cylinderScad(s).replace(/\n/g, '\n' + pad) + ';');
+    } else if (!treats.length) {
+      out.push(pad + `translate(${pos})`);
+      out.push(pad + '  ' + this.baseCall(s) + ';');
+    } else {
+      out.push(pad + `translate(${pos})`);
+      out.push(pad + 'difference() {');
+      out.push(pad + '  ' + this.baseCall(s) + ';');
+      for (const [name, t] of treats) {
+        const e = s.edges.find(x => x.name === name);
+        if (!e) continue;
+        const M = this.edgeMatrix(e, t.size);
+        const mod = t.type === 'fillet' ? 'edge_fillet' : 'edge_chamfer';
+        out.push(pad + `  // ${name} (${t.type} r=${F(t.size)})`);
+        out.push(pad + `  multmatrix(${this.matStr(M)})`);
+        out.push(pad + `    ${mod}(${F(e.length + 0.02)}, ${F(t.size)});`);
+      }
+      out.push(pad + '}');
+    }
+  }
+
+  dimTok(s, key) {
+    const e = s.expr && s.expr[key];
+    if (e) return e;
+    if (key === 'x' || key === 'y' || key === 'z') return this.fmt(s.dims[key]);
+    if (key === 'h') return this.fmt(s.dims.h);
+    if (key === 'd') return this.fmt(s.dims.r * 2);
+    return '0';
+  }
+  posTok(s, key) {
+    const e = s.expr && s.expr[key];
+    if (e) return e;
+    const i = { px: 0, py: 1, pz: 2 }[key];
+    return this.fmt(s.pos[i]);
+  }
   baseCall(s) {
-    if (s.type === 'cuboid') return `cube([${this.fmt(s.dims.x)}, ${this.fmt(s.dims.y)}, ${this.fmt(s.dims.z)}], center = true)`;
-    return `cylinder(h = ${this.fmt(s.dims.h)}, r = ${this.fmt(s.dims.r)}, center = true)`;
+    if (s.type === 'cuboid') return `cube([${this.dimTok(s, 'x')}, ${this.dimTok(s, 'y')}, ${this.dimTok(s, 'z')}], center = true)`;
+    if (s.type === 'sphere') return `sphere(d = ${this.dimTok(s, 'd')})`;
+    return `cylinder(h = ${this.dimTok(s, 'h')}, d = ${this.dimTok(s, 'd')}, center = true)`;
   }
   cylinderScad(s) {
     const pts = this.cylProfile(s.dims.r, s.dims.h, s.treatments || {});
     const poly = pts.map(p => `[${this.fmt(p[0])}, ${this.fmt(p[1])}]`).join(', ');
-    return `rotate_extrude()\n    polygon([${poly}])`;
+    const note = (s.expr && (s.expr.d || s.expr.h)) ? '  // note: treated cylinder \u2014 dimensions baked numerically\n    ' : '';
+    return `${note}rotate_extrude()\n    polygon([${poly}])`;
   }
 
   // ============ CODE -> MODEL (base solids; tolerant of our own format) ============
   runCode = () => {
     const txt = (this._codeArea ? this._codeArea.value : this.state.code) || '';
-    const parsed = this.parseScad(txt);
-    if (!parsed.length) { this.flashStatus('No cube()/cylinder() found'); return; }
-    // wipe and rebuild
-    for (const s of this.shapes) { this.scene.remove(s.group); this.disposeGroup(s.group); }
-    this.shapes = []; this.seq = { cuboid: 0, cylinder: 0 };
-    this.clearEdge(); this.setState({ selectedShapeId: null });
-    for (const p of parsed) {
-      if (p.type === 'cuboid') { this.seq.cuboid++; }
-      else this.seq.cylinder++;
-      const shape = { id: p.type + Date.now() + Math.random().toString(36).slice(2, 6), type: p.type,
-        label: (p.type === 'cuboid' ? 'Cuboid ' : 'Cylinder ') + (p.type === 'cuboid' ? this.seq.cuboid : this.seq.cylinder),
-        dims: p.dims, pos: p.pos, treatments: {} };
-      this.shapes.push(shape); this.buildGroup(shape);
+    // --- decide: simple GUI-editable program, or advanced -> evaluate & render read-only ---
+    let advanced = false, ast = null;
+    if (window.ScadEngine) {
+      try { const pp = window.ScadEngine.parse(txt); ast = pp.ast; advanced = pp.errors.length ? true : this.isAdvanced(ast); }
+      catch (e) { advanced = true; }
     }
-    this.syncShapesState(); this.regenCode();
+    if (advanced && window.ScadEngine) { this.runAdvanced(txt); return; }
+
+    const parsed = this.parseScad(txt);
+    const count = this.collectPrimitives(parsed.tree || []).length;
+    if (!count && !parsed.vars.length) { this.flashStatus('No shapes or parameters found'); return; }
+    this.clearEngineRender();
+    // wipe and rebuild
+    for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
+    this._rendered = [];
+    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, group: 0 };
+    this.vars = parsed.vars.map(v => ({ name: v.name, value: v.value }));
+    this.tree = (parsed.tree || []).map(p => this.buildNodeFromParsed(p));
+    this.reindex();
+    const vmap = this.varMap();
+    for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
+    this.clearEdge();
+    this.setState({ selectedShapeId: null, selectedIds: [], readOnly: false }, () => {
+      this.rebuildScene(); this.updateGizmo();
+      this.syncVarsState(); this.syncShapesState(); this.regenCode();
+    });
     this.flashStatus('Model rebuilt from code');
   };
 
-  parseScad(txt) {
-    const shapes = [];
-    const clean = txt.replace(/\/\/[^\n]*/g, '');
-    const re = /translate\(\s*\[([^\]]*)\]\s*\)[\s\S]*?(cube\(\s*\[([^\]]*)\]|cylinder\(([^)]*)\))/g;
-    let m;
-    while ((m = re.exec(clean)) !== null) {
-      const pos = m[1].split(',').map(x => parseFloat(x.trim()) || 0);
-      while (pos.length < 3) pos.push(0);
-      if (m[3] !== undefined) {
-        const d = m[3].split(',').map(x => parseFloat(x.trim()) || 0);
-        shapes.push({ type: 'cuboid', dims: { x: d[0] || 10, y: d[1] || 10, z: d[2] || 10 }, pos });
-      } else {
-        const args = m[4];
-        const h = this.argVal(args, 'h') ?? 10;
-        let r = this.argVal(args, 'r');
-        if (r == null) { const dd = this.argVal(args, 'd'); r = dd != null ? dd / 2 : 10; }
-        shapes.push({ type: 'cylinder', dims: { r, h }, pos });
+  // ============ ADVANCED PATH: full SCAD evaluator -> read-only render ============
+  // a program is "simple" (GUI-editable) only if it is numeric assigns + translate-wrapped or
+  // bare cube/cylinder/sphere + union/difference/intersection. Everything else evaluates.
+  isAdvanced(ast) {
+    const SIMPLE = new Set(['translate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection']);
+    const exprSimple = (e) => {
+      if (!e) return true;
+      switch (e.e) {
+        case 'num': case 'ident': case 'bool': return true;
+        case 'unary': return (e.op === '-' || e.op === '+') && exprSimple(e.x);
+        case 'binary': return ['+', '-', '*', '/', '%'].includes(e.op) && exprSimple(e.a) && exprSimple(e.b);
+        default: return false;
       }
-    }
-    // also catch bare cube/cylinder without translate
-    const bare = clean.replace(re, '');
-    const reB = /(cube\(\s*\[([^\]]*)\]|cylinder\(([^)]*)\))/g;
-    while ((m = reB.exec(bare)) !== null) {
-      if (m[2] !== undefined) {
-        const d = m[2].split(',').map(x => parseFloat(x.trim()) || 0);
-        shapes.push({ type: 'cuboid', dims: { x: d[0] || 10, y: d[1] || 10, z: d[2] || 10 }, pos: [0, 0, (d[2] || 10) / 2] });
-      } else {
-        const args = m[3];
-        const h = this.argVal(args, 'h') ?? 10;
-        let r = this.argVal(args, 'r');
-        if (r == null) { const dd = this.argVal(args, 'd'); r = dd != null ? dd / 2 : 10; }
-        shapes.push({ type: 'cylinder', dims: { r, h }, pos: [0, 0, h / 2] });
-      }
-    }
-    return shapes;
+    };
+    const argSimple = (e) => e && e.e === 'vector' ? e.items.every(argSimple) : exprSimple(e);
+    const callSimple = (s) => {
+      if (!SIMPLE.has(s.name)) return false;
+      if (s.name === 'cylinder' && s.args.some(a => ['r1', 'r2', 'd1', 'd2'].includes(a.name))) return false;
+      if (s.args.some(a => !argSimple(a.expr))) return false;
+      if (s.children) for (const c of s.children.stmts) if (!stmtSimple(c)) return false;
+      return true;
+    };
+    const stmtSimple = (s) => {
+      switch (s.t) { case 'assign': return exprSimple(s.expr); case 'call': return callSimple(s); default: return false; }
+    };
+    return !(ast.stmts || []).every(stmtSimple);
   }
-  argVal(args, key) {
-    const m = new RegExp(key + '\\s*=\\s*(-?[0-9.]+)').exec(args);
-    return m ? parseFloat(m[1]) : null;
+
+  runAdvanced(txt) {
+    const res = window.ScadEngine.run(txt, { $fn: this.state.fn && this.state.fn < 100 ? 0 : 0 });
+    // wipe GUI tree
+    for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
+    this._rendered = []; this.tree = []; this.shapes = []; this.clearEdge();
+    if (this.tc) { this.tc.detach(); this.tc.visible = false; }
+    this.clearEngineRender();
+    // render
+    const into = [];
+    const root = (res.geom || []).find(n => n && n.__root); // '!' modifier: render only that subtree
+    const nodes = root ? [root] : (res.geom || []);
+    const grp = new this.THREE.Group();
+    try { for (const n of nodes) this.realizeNode(n, this.IDENTITY(), null, grp); }
+    catch (e) { res.errors = res.errors.concat([{ msg: 'render: ' + (e.message || e) }]); }
+    this._engineGroup = grp; this.scene.add(grp);
+    // console
+    const log = [];
+    for (const e of res.echos) log.push({ type: 'echo', msg: e.msg });
+    for (const w of res.warnings) log.push({ type: 'warn', msg: w.msg });
+    for (const er of res.errors) log.push({ type: 'error', msg: er.msg });
+    const meshCount = (() => { let c = 0; grp.traverse(o => { if (o.isMesh) c++; }); return c; })();
+    this.setState({
+      readOnly: true, selectedShapeId: null, selectedIds: [], code: txt,
+      tree: (root ? [root] : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0)),
+      consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
+    });
+    this.flashStatus(meshCount ? ('Rendered ' + meshCount + ' object' + (meshCount !== 1 ? 's' : '') + ' \u2014 read-only') : (res.errors.length ? 'Render error \u2014 see console' : 'Nothing to render'));
+  }
+
+  clearEngineRender() {
+    if (this._engineGroup) { this.scene.remove(this._engineGroup); this.disposeGroup(this._engineGroup); this._engineGroup = null; }
+  }
+  IDENTITY() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
+  toM4(flat) { return new this.THREE.Matrix4().fromArray(flat); }
+  mul(a, b) { return window.ScadEngine.Mat.multiply(a, b); }
+
+  // material for an evaluated node
+  engineMat(color, mod) {
+    const THREE = this.THREE;
+    let r = 0.82, g = 0.83, b = 0.86, a = 1;
+    if (color) { r = color[0]; g = color[1]; b = color[2]; a = color[3] != null ? color[3] : 1; }
+    const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(r, g, b), metalness: 0.0, roughness: 0.62 });
+    if (mod === 'background') { m.transparent = true; m.opacity = 0.22; }
+    else if (mod === 'highlight') { m.color = new THREE.Color(0.95, 0.35, 0.32); m.transparent = true; m.opacity = 0.7; }
+    else if (a < 1) { m.transparent = true; m.opacity = a; }
+    return m;
+  }
+
+  // recursively realize a GeomNode into meshes added to `parent`
+  realizeNode(node, pm, color, parent) {
+    if (!node) return;
+    const m = this.mul(pm, node.matrix || this.IDENTITY());
+    const col = node.color || color;
+    if (node.dim === 2) { const mesh = this.flat2DMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
+    if (node.kind === 'extrude') { const mesh = this.extrudeMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
+    if (node.kind === 'op') {
+      const mesh = this.opMesh(node, pm, col);
+      if (mesh) parent.add(mesh);
+      return;
+    }
+    if (node.kind === 'group') { for (const c of (node.children || [])) this.realizeNode(c, m, col, parent); return; }
+    if (node.kind === 'primitive') {
+      const geo = this.primGeometry(node);
+      if (!geo) return;
+      geo.applyMatrix4(this.toM4(m));
+      const mesh = new this.THREE.Mesh(geo, this.engineMat(col, node.mod));
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      parent.add(mesh);
+    }
+  }
+
+  // CSG over a boolean subtree -> single mesh
+  opMesh(node, pm, color) {
+    const brush = this.geomBrush(node, pm);
+    if (!brush || !brush.geometry) return null;
+    const mesh = new this.THREE.Mesh(brush.geometry, this.engineMat(node.color || color, node.mod));
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    return mesh;
+  }
+  geomBrush(node, pm) {
+    if (!this.CSG || !node) return null;
+    const { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } = this.CSG;
+    if (!this._ev) this._ev = new Evaluator();
+    const m = this.mul(pm, node.matrix || this.IDENTITY());
+    if (node.kind === 'primitive') {
+      const geo = this.primGeometry(node); if (!geo) return null;
+      geo.applyMatrix4(this.toM4(m));
+      const b = new Brush(geo); b.updateMatrixWorld(); return b;
+    }
+    if (node.kind === 'extrude') return this.extrudeBrush(node, m);
+    const kids = (node.children || []).map(c => this.geomBrush(c, m)).filter(Boolean);
+    if (!kids.length) return null;
+    if (node.kind === 'op' && (node.op === 'hull' || node.op === 'minkowski')) return this.hullMinkBrush(kids, node.op);
+    if (kids.length === 1 && node.kind === 'group') return kids[0];
+    const mode = node.kind === 'group' ? ADDITION
+      : node.op === 'union' ? ADDITION : node.op === 'intersection' ? INTERSECTION : SUBTRACTION;
+    let acc = kids[0];
+    for (let i = 1; i < kids.length; i++) acc = this._ev.evaluate(acc, kids[i], mode);
+    acc.updateMatrixWorld();
+    return acc;
+  }
+
+  primGeometry(node) {
+    const THREE = this.THREE, p = node.params || {};
+    if (node.type === 'cube') {
+      const s = p.size || [1,1,1];
+      const g = new THREE.BoxGeometry(Math.max(1e-4, s[0]), Math.max(1e-4, s[1]), Math.max(1e-4, s[2]));
+      if (!p.center) g.translate(s[0]/2, s[1]/2, s[2]/2);
+      return g;
+    }
+    if (node.type === 'sphere') {
+      const fn = Math.max(3, p.$fn || 24);
+      return new THREE.SphereGeometry(Math.max(1e-4, p.r), fn, Math.max(2, Math.round(fn/2)));
+    }
+    if (node.type === 'cylinder') {
+      const fn = Math.max(3, p.$fn || 24);
+      const g = new THREE.CylinderGeometry(Math.max(0, p.r2), Math.max(0, p.r1), Math.max(1e-4, p.h), fn);
+      g.rotateX(Math.PI / 2);                 // Y-up -> Z-up
+      g.translate(0, 0, p.center ? 0 : p.h / 2);
+      return g;
+    }
+    if (node.type === 'polyhedron') {
+      const pts = p.points || [], faces = p.faces || [];
+      const verts = [];
+      for (const f of faces) {
+        if (!f || f.length < 3) continue;
+        for (let i = 1; i < f.length - 1; i++) {  // fan triangulation
+          const a = pts[f[0]], b = pts[f[i]], c = pts[f[i+1]];
+          if (!a || !b || !c) continue;
+          // OpenSCAD faces are clockwise when viewed from outside -> reverse for CCW/outward normals
+          verts.push(a[0],a[1],a[2], c[0],c[1],c[2], b[0],b[1],b[2]);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      g.computeVertexNormals();
+      return g;
+    }
+    return null;
+  }
+
+  // ===================== Phase 9: 2D primitives + extrusions =====================
+  apply2(m, p) { return [m[0]*p[0] + m[4]*p[1] + m[12], m[1]*p[0] + m[5]*p[1] + m[13]]; }
+
+  // Walk an in-extrude 2D subtree, baking the in-extrude transforms into each leaf's ring
+  // points. Returns an op-tree:  {leaf:true,rings} | {op,children} | {offset,child} | null
+  collect2D(node, mat) {
+    if (!node) return null;
+    const m = this.mul(mat, node.matrix || this.IDENTITY());
+    if (node.kind === 'primitive2d') return { leaf: true, rings: (node.rings || []).map(r => r.map(p => this.apply2(m, p))) };
+    if (node.kind === 'offset2d') { const ch = this.collect2DChildren(node.children, m); return ch ? { offset: node.params || {}, child: ch } : null; }
+    if (node.kind === 'projection') return null; // 3D->2D not supported in the extrude path
+    if (node.kind === 'op') { const kids = (node.children || []).map(c => this.collect2D(c, m)).filter(Boolean); return kids.length ? { op: node.op, children: kids } : null; }
+    if (node.kind === 'group') return this.collect2DChildren(node.children, m);
+    return null;
+  }
+  collect2DChildren(children, m) {
+    const kids = (children || []).map(c => this.collect2D(c, m)).filter(Boolean);
+    if (!kids.length) return null;
+    if (kids.length === 1) return kids[0];
+    return { op: 'union', children: kids };
+  }
+
+  // op-tree -> single Brush: each 2D leaf is extruded to a 3D prism, combined via CSG.
+  // (linear/rotate extrude commute with in-plane booleans, so we never need a 2D clipper.)
+  brushFrom2D(t, mode, params) {
+    if (!t || !this.CSG) return null;
+    const { Brush, ADDITION, SUBTRACTION, INTERSECTION } = this.CSG;
+    if (t.leaf) { const geo = this.ringsToSolid(t.rings, mode, params); if (!geo) return null; const b = new Brush(geo); b.updateMatrixWorld(); return b; }
+    if (t.offset) { const child = this.applyOffsetTree(t); return child ? this.brushFrom2D(child, mode, params) : null; }
+    const kids = (t.children || []).map(c => this.brushFrom2D(c, mode, params)).filter(Boolean);
+    if (!kids.length) return null;
+    if (t.op === 'hull' || t.op === 'minkowski') return this.hullMinkBrush(kids, t.op);
+    if (kids.length === 1) return kids[0];
+    if (!this._ev) this._ev = new this.CSG.Evaluator();
+    const md = t.op === 'difference' ? SUBTRACTION : t.op === 'intersection' ? INTERSECTION : ADDITION;
+    let acc = kids[0]; for (let i = 1; i < kids.length; i++) acc = this._ev.evaluate(acc, kids[i], md);
+    acc.updateMatrixWorld(); return acc;
+  }
+  applyOffsetTree(t) {
+    if (t.child && t.child.leaf) return { leaf: true, rings: this.offsetRings(t.child.rings, t.offset) };
+    return t.child; // offset of a boolean region needs a 2D clipper - passed through (warned by engine)
+  }
+
+  // largest |area| ring -> Shape outline; remaining rings -> holes
+  ringsToShape(rings) {
+    const THREE = this.THREE;
+    if (!rings || !rings.length) return null;
+    const area = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const j = (i + 1) % r.length; a += r[i][0]*r[j][1] - r[j][0]*r[i][1]; } return a / 2; };
+    let oi = 0, best = Math.abs(area(rings[0]));
+    for (let i = 1; i < rings.length; i++) { const a = Math.abs(area(rings[i])); if (a > best) { best = a; oi = i; } }
+    const outer = rings[oi];
+    const shape = new THREE.Shape(outer.map(p => new THREE.Vector2(p[0], p[1])));
+    for (let i = 0; i < rings.length; i++) { if (i === oi || rings[i].length < 3) continue; shape.holes.push(new THREE.Path(rings[i].map(p => new THREE.Vector2(p[0], p[1])))); }
+    return shape;
+  }
+  ringsToSolid(rings, mode, params) { return mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params); }
+
+  linearSolid(rings, params) {
+    const THREE = this.THREE; const shape = this.ringsToShape(rings); if (!shape) return null;
+    const h = params.height || 1, twist = params.twist || 0, scale = params.scale || [1, 1], slices = Math.max(1, params.slices || 1);
+    let geo;
+    if (twist === 0 && scale[0] === 1 && scale[1] === 1) geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, steps: 1, curveSegments: 24 });
+    else geo = this.loftSolid(shape, h, twist, scale, slices);
+    if (params.center) geo.translate(0, 0, -h / 2);
+    geo.computeVertexNormals();
+    return geo;
+  }
+  loftSolid(shape, h, twist, scale, slices) {
+    const THREE = this.THREE;
+    const pts = shape.extractPoints(24);
+    const contours = [pts.shape].concat(pts.holes);
+    const faces = THREE.ShapeUtils.triangulateShape(pts.shape, pts.holes);
+    let base = []; const ranges = [];
+    for (const c of contours) { ranges.push([base.length, base.length + c.length]); base = base.concat(c.map(v => [v.x, v.y])); }
+    const layerAt = (s) => { const ang = -twist * Math.PI / 180 * s, sx = 1 + (scale[0]-1)*s, sy = 1 + (scale[1]-1)*s, ca = Math.cos(ang), sa = Math.sin(ang), z = h*s;
+      return base.map(([x, y]) => { const X = x*sx, Y = y*sy; return [X*ca - Y*sa, X*sa + Y*ca, z]; }); };
+    const layers = []; for (let i = 0; i <= slices; i++) layers.push(layerAt(i / slices));
+    const verts = []; const tri = (a, b, c) => verts.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+    for (let s = 0; s < slices; s++) { const L0 = layers[s], L1 = layers[s+1];
+      for (const [st, en] of ranges) { const len = en - st;
+        for (let k = 0; k < len; k++) { const i0 = st + k, i1 = st + ((k+1)%len); tri(L0[i0], L0[i1], L1[i1]); tri(L0[i0], L1[i1], L1[i0]); } } }
+    const bot = layers[0], top = layers[slices];
+    for (const f of faces) { tri(bot[f[0]], bot[f[2]], bot[f[1]]); tri(top[f[0]], top[f[1]], top[f[2]]); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); g.computeVertexNormals(); return g;
+  }
+  revolveSolid(rings, params) {
+    const THREE = this.THREE; const shape = this.ringsToShape(rings); if (!shape) return null;
+    const angle = (params.angle == null ? 360 : params.angle), full = Math.abs(angle) >= 359.999;
+    const segs = Math.max(3, Math.floor(params.$fn || 48));
+    const profile = shape.extractPoints(24).shape.map(v => [Math.max(0, v.x), v.y]);
+    const len = profile.length;
+    const steps = full ? segs : Math.max(2, Math.ceil(segs * Math.abs(angle) / 360));
+    const span = full ? Math.PI*2 : angle*Math.PI/180;
+    const at = (p, th) => [p[0]*Math.cos(th), p[0]*Math.sin(th), p[1]];
+    const nL = full ? steps : steps + 1;
+    const layers = []; for (let i = 0; i < nL; i++) { const th = span*(i/steps); layers.push(profile.map(p => at(p, th))); }
+    const verts = []; const tri = (a, b, c) => verts.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+    for (let i = 0; i < steps; i++) { const L0 = layers[i], L1 = layers[full ? (i+1)%steps : i+1];
+      for (let k = 0; k < len; k++) { const k1 = (k+1)%len; tri(L0[k], L0[k1], L1[k1]); tri(L0[k], L1[k1], L1[k]); } }
+    if (!full) { const faces = THREE.ShapeUtils.triangulateShape(profile.map(p => new THREE.Vector2(p[0], p[1])), []);
+      const c0 = layers[0], c1 = layers[steps];
+      for (const f of faces) { tri(c0[f[0]], c0[f[2]], c0[f[1]]); tri(c1[f[0]], c1[f[1]], c1[f[2]]); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); g.computeVertexNormals(); return g;
+  }
+
+  // basic miter offset (positive grows). Approximate: no self-intersection cleanup.
+  offsetRings(rings, params) {
+    const d = params.r != null ? params.r : (params.delta != null ? params.delta : 0);
+    if (!d) return rings;
+    return rings.map(r => this.offsetRing(r, d));
+  }
+  offsetRing(ring, d) {
+    const n = ring.length; if (n < 3) return ring;
+    let area = 0; for (let i = 0; i < n; i++) { const j = (i+1)%n; area += ring[i][0]*ring[j][1] - ring[j][0]*ring[i][1]; }
+    const ccw = area > 0;
+    const on = (e) => { const L = Math.hypot(e[0], e[1]) || 1, ex = e[0]/L, ey = e[1]/L; return ccw ? [ey, -ex] : [-ey, ex]; };
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const p0 = ring[(i-1+n)%n], p1 = ring[i], p2 = ring[(i+1)%n];
+      const n0 = on([p1[0]-p0[0], p1[1]-p0[1]]), n1 = on([p2[0]-p1[0], p2[1]-p1[1]]);
+      const a0 = [p0[0]+n0[0]*d, p0[1]+n0[1]*d], a1 = [p1[0]+n0[0]*d, p1[1]+n0[1]*d];
+      const b0 = [p1[0]+n1[0]*d, p1[1]+n1[1]*d], b1 = [p2[0]+n1[0]*d, p2[1]+n1[1]*d];
+      out.push(this.lineX(a0, a1, b0, b1) || a1);
+    }
+    return out;
+  }
+  lineX(a, b, c, d) { const r = [b[0]-a[0], b[1]-a[1]], s = [d[0]-c[0], d[1]-c[1]]; const den = r[0]*s[1] - r[1]*s[0]; if (Math.abs(den) < 1e-9) return [(a[0]+d[0])/2, (a[1]+d[1])/2]; const t = ((c[0]-a[0])*s[1] - (c[1]-a[1])*s[0]) / den; return [a[0]+t*r[0], a[1]+t*r[1]]; }
+
+  // hull / minkowski via ConvexGeometry (ConvexHull). Exact for convex operands.
+  hullMinkBrush(brushes, op) {
+    const THREE = this.THREE, CG = window.__ConvexGeometry;
+    const vertsOf = (b) => { const out = [], pos = b.geometry.attributes.position; for (let i = 0; i < pos.count; i++) out.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i))); return out; };
+    if (!CG || !brushes.length) return this.unionBrushes(brushes);
+    try {
+      if (op === 'hull') {
+        let pts = []; for (const b of brushes) pts = pts.concat(vertsOf(b));
+        if (pts.length < 4) return this.unionBrushes(brushes);
+        const br = new this.CSG.Brush(new CG(pts)); br.updateMatrixWorld(); return br;
+      }
+      let acc = vertsOf(brushes[0]);
+      for (let i = 1; i < brushes.length; i++) {
+        const bp = vertsOf(brushes[i]); const A = this.decimate(acc, 220), B = this.decimate(bp, 220); const sum = []; const cap = 60000;
+        for (const a of A) { for (const b of B) { sum.push(new THREE.Vector3(a.x+b.x, a.y+b.y, a.z+b.z)); } if (sum.length > cap) break; }
+        acc = sum;
+      }
+      const br = new this.CSG.Brush(new CG(acc)); br.updateMatrixWorld(); return br;
+    } catch (e) { return this.unionBrushes(brushes); }
+  }
+  unionBrushes(brushes) { brushes = (brushes||[]).filter(Boolean); if (!brushes.length) return null; if (brushes.length === 1) return brushes[0]; if (!this._ev) this._ev = new this.CSG.Evaluator(); let acc = brushes[0]; for (let i = 1; i < brushes.length; i++) acc = this._ev.evaluate(acc, brushes[i], this.CSG.ADDITION); acc.updateMatrixWorld(); return acc; }
+  decimate(arr, n) { if (arr.length <= n) return arr; const step = arr.length / n, out = []; for (let i = 0; i < n; i++) out.push(arr[Math.floor(i*step)]); return out; }
+
+  extrudeBrush(node, worldM) {
+    if (!this.CSG) return null;
+    const tree = this.collect2DChildren(node.children, this.IDENTITY());
+    if (!tree) return null;
+    const brush = this.brushFrom2D(tree, node.mode, node.params || {});
+    if (!brush || !brush.geometry) return null;
+    brush.geometry.applyMatrix4(this.toM4(worldM));
+    brush.geometry.computeVertexNormals(); brush.updateMatrixWorld();
+    return brush;
+  }
+  extrudeMesh(node, pm, col) {
+    const m = this.mul(pm, node.matrix || this.IDENTITY());
+    const brush = this.extrudeBrush(node, m);
+    if (!brush || !brush.geometry) return null;
+    const mesh = new this.THREE.Mesh(brush.geometry, this.engineMat(node.color || col, node.mod));
+    mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+  }
+  // bare 2D renders as a thin filled slab so 2D booleans/offset/hull display correctly
+  flat2DMesh(node, pm, col) {
+    const synthetic = { kind: 'extrude', mode: 'linear', params: { height: 0.12, center: true, twist: 0, scale: [1,1], slices: 1 }, children: [node], matrix: this.IDENTITY(), color: node.color, mod: node.mod };
+    return this.extrudeMesh(synthetic, pm, col);
+  }
+
+  // read-only model-tree serialization from the evaluated geom
+  serializeGeom(node, idx, depth) {
+    if (!node) return null;
+    const id = 'g' + depth + '_' + idx;
+    if (node.kind === 'extrude' || node.kind === 'offset2d' || node.kind === 'projection') {
+      const kids = (node.children || []).map((c, i) => this.serializeGeom(c, i, depth + 1)).filter(Boolean);
+      const label = node.kind === 'extrude' ? (node.mode === 'rotate' ? 'Rotate extrude' : 'Linear extrude') : node.kind === 'offset2d' ? 'Offset' : 'Projection';
+      return { id, kind: 'group', op: 'group', label, depth, count: kids.length, children: kids, readOnly: true };
+    }
+    if (node.kind === 'primitive2d') {
+      return { id, kind: 'prim', type: node.shape === 'circle' ? 'sphere' : 'cuboid', label: node.shape, depth, meta: '2D', treated: 0, readOnly: true };
+    }
+    if (node.kind === 'op' || node.kind === 'group') {
+      const op = node.kind === 'op' ? node.op : 'group';
+      const kids = (node.children || []).map((c, i) => this.serializeGeom(c, i, depth + 1)).filter(Boolean);
+      return { id, kind: 'group', op, label: op === 'group' ? 'Group' : (op[0].toUpperCase() + op.slice(1)), depth, count: kids.length, children: kids, readOnly: true };
+    }
+    const typeMap = { cube: 'cuboid', sphere: 'sphere', cylinder: 'cylinder', polyhedron: 'cylinder' };
+    const p = node.params || {};
+    const meta = node.type === 'cube' ? 'cube' : node.type === 'sphere' ? ('\u2300' + this.fmt((p.r||0)*2)) : node.type === 'cylinder' ? ('h' + this.fmt(p.h||0)) : 'polyhedron';
+    return { id, kind: 'prim', type: typeMap[node.type] || 'cuboid', label: node.type, depth, meta, treated: 0, readOnly: true };
+  }
+  exitReadOnly = () => {
+    this.clearEngineRender();
+    this.setState({ readOnly: false, tree: [], consoleLog: [] }, () => { this.syncShapesState(); this.flashStatus('Cleared'); });
+  };
+  toggleConsole = () => this.setState({ consoleOpen: !this.state.consoleOpen });
+  buildNodeFromParsed(p) {
+    if (p.type === 'group') {
+      this.seq.group++;
+      return {
+        id: 'gp' + Date.now() + Math.random().toString(36).slice(2, 6), op: p.op,
+        label: (p.op === 'union' ? 'Union ' : p.op === 'difference' ? 'Difference ' : 'Intersection ') + this.seq.group,
+        children: (p.children || []).map(c => this.buildNodeFromParsed(c)),
+      };
+    }
+    this.seq[p.type] = (this.seq[p.type] || 0) + 1;
+    const label = (p.type === 'cuboid' ? 'Cuboid ' : p.type === 'sphere' ? 'Sphere ' : 'Cylinder ') + this.seq[p.type];
+    return {
+      id: p.type + Date.now() + Math.random().toString(36).slice(2, 6), type: p.type, label,
+      dims: p.dims, pos: p.pos, treatments: {},
+      expr: (p.expr && Object.keys(p.expr).length) ? p.expr : undefined,
+    };
+  }
+
+  // split a comma list respecting parens; returns trimmed tokens
+  splitArgs(str) {
+    const res = []; let depth = 0, cur = '';
+    for (const ch of str) {
+      if (ch === '(') { depth++; cur += ch; }
+      else if (ch === ')') { depth--; cur += ch; }
+      else if (ch === ',' && depth === 0) { res.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    res.push(cur);
+    return res.map(s => s.trim());
+  }
+  // raw value token of a named arg (key = …), paren-aware, stops at top-level comma
+  argRaw(args, key) {
+    const re = new RegExp('(^|[,(\\s])' + key + '\\s*=\\s*');
+    const m = re.exec(args); if (!m) return null;
+    let i = m.index + m[0].length, depth = 0, out = '';
+    for (; i < args.length; i++) {
+      const ch = args[i];
+      if (ch === '(') { depth++; out += ch; }
+      else if (ch === ')') { if (depth === 0) break; depth--; out += ch; }
+      else if (ch === ',' && depth === 0) break;
+      else out += ch;
+    }
+    return out.trim();
+  }
+  // a token -> { value, expr|null }: pure number = literal, else expression (resolved with vmap)
+  tokOrNum(tk, vmap) {
+    const t = (tk || '').trim();
+    if (t === '') return { value: 0, expr: null };
+    if (/^-?[0-9]*\.?[0-9]+$/.test(t)) return { value: parseFloat(t), expr: null };
+    let v = 0; try { v = this.evalExpr(t, vmap); } catch (_) {}
+    return { value: v, expr: t };
+  }
+  // ---- recursive, brace-aware parser ----
+  matchParen(src, i) { let d = 0; for (let j = i; j < src.length; j++) { if (src[j] === '(') d++; else if (src[j] === ')') { d--; if (d === 0) return j + 1; } } return src.length; }
+  matchBrace(src, i) { let d = 0; for (let j = i; j < src.length; j++) { if (src[j] === '{') d++; else if (src[j] === '}') { d--; if (d === 0) return j + 1; } } return src.length; }
+  stripModules(src) {
+    let out = '', i = 0;
+    while (i < src.length) {
+      const m = /module\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/.exec(src.slice(i));
+      if (!m) { out += src.slice(i); break; }
+      const start = i + m.index;
+      out += src.slice(i, start);
+      const braceAt = start + m[0].length - 1;
+      i = this.matchBrace(src, braceAt);
+    }
+    return out;
+  }
+  argVector(args) { const m = /\[([^\]]*)\]/.exec(args); return m ? m[1] : args; }
+  readPosTokens(inner) {
+    const toks = this.splitArgs(inner); const pos = [0, 0, 0], pexpr = {};
+    ['px', 'py', 'pz'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); pos[i] = r.value; if (r.expr) pexpr[k] = r.expr; });
+    return { pos, pexpr };
+  }
+  readPrimitive(name, args) {
+    if (name === 'cube') {
+      const toks = this.splitArgs(this.argVector(args)); const dims = { x: 10, y: 10, z: 10 }, ex = {};
+      ['x', 'y', 'z'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); dims[k] = r.value || dims[k]; if (r.expr) ex[k] = r.expr; });
+      return { type: 'cuboid', dims, expr: ex };
+    }
+    if (name === 'sphere') {
+      const dims = { r: 10 }, ex = {};
+      const dT = this.argRaw(args, 'd');
+      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
+      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } else { const f = this.splitArgs(args)[0]; if (f) { const r = this.tokOrNum(f, this._vmap); dims.r = r.value || 10; } } }
+      return { type: 'sphere', dims, expr: ex };
+    }
+    const dims = { r: 10, h: 10 }, ex = {};
+    const hT = this.argRaw(args, 'h'); if (hT != null) { const r = this.tokOrNum(hT, this._vmap); dims.h = r.value || 10; if (r.expr) ex.h = r.expr; }
+    const dT = this.argRaw(args, 'd');
+    if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
+    else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } }
+    return { type: 'cylinder', dims, expr: ex };
+  }
+  restingPos(node) {
+    if (node.type === 'cuboid') return [0, 0, node.dims.z / 2];
+    if (node.type === 'cylinder') return [0, 0, node.dims.h / 2];
+    return [0, 0, node.dims.r];
+  }
+  parseBlock(src) {
+    const nodes = []; let i = 0; const n = src.length;
+    const TRANSFORMS = ['rotate', 'scale', 'mirror', 'color', 'multmatrix', 'resize', 'offset'];
+    const GROUPS = ['union', 'difference', 'intersection'];
+    const PRIMS = ['cube', 'cylinder', 'sphere'];
+    while (i < n) {
+      while (i < n && /[\s;]/.test(src[i])) i++;
+      if (i >= n) break;
+      // consume transform prefixes; remember a translate as the node's position
+      let pos = null, pexpr = null, guard = 0;
+      while (guard++ < 50) {
+        const mm = /^([A-Za-z_]\w*)\s*\(/.exec(src.slice(i));
+        if (!mm) break;
+        const nm = mm[1];
+        if (nm === 'translate') {
+          const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart);
+          const r = this.readPosTokens(this.argVector(src.slice(pStart + 1, pEnd - 1)));
+          pos = r.pos; pexpr = r.pexpr; i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue;
+        }
+        if (TRANSFORMS.includes(nm)) { const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart); i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue; }
+        break;
+      }
+      const pm = /^([A-Za-z_]\w*)\s*\(/.exec(src.slice(i));
+      if (!pm) { i++; continue; }
+      const name = pm[1];
+      const pStart = i + pm[0].length - 1, pEnd = this.matchParen(src, pStart);
+      const args = src.slice(pStart + 1, pEnd - 1);
+      i = pEnd; while (i < n && /\s/.test(src[i])) i++;
+      if (GROUPS.includes(name)) {
+        if (src[i] === '{') {
+          const bEnd = this.matchBrace(src, i); const inner = src.slice(i + 1, bEnd - 1); i = bEnd;
+          const isEdgeTreat = /edge_fillet|edge_chamfer/.test(inner);
+          const children = this.parseBlock(inner);
+          if (isEdgeTreat) {                       // our own edge-treatment wrapper, not a user boolean
+            const prim = children.find(c => c.type !== 'group');
+            if (prim) { if (pos) { prim.pos = pos; if (pexpr && Object.keys(pexpr).length) prim.expr = { ...pexpr, ...(prim.expr || {}) }; } else prim.pos = this.restingPos(prim); nodes.push(prim); }
+          } else if (children.length) {
+            nodes.push({ type: 'group', op: name, children });
+          }
+        }
+        continue;
+      }
+      if (PRIMS.includes(name)) {
+        const node = this.readPrimitive(name, args);
+        if (pos) { node.pos = pos; if (pexpr && Object.keys(pexpr).length) node.expr = { ...pexpr, ...(node.expr || {}) }; }
+        else node.pos = this.restingPos(node);
+        while (i < n && /[\s;]/.test(src[i])) i++;
+        nodes.push(node);
+        continue;
+      }
+      // unknown call -> skip its block or statement
+      if (src[i] === '{') i = this.matchBrace(src, i);
+      else { while (i < n && src[i] !== ';' && src[i] !== '{') i++; if (src[i] === ';') i++; }
+    }
+    return nodes;
+  }
+  parseScad(txt) {
+    const clean = txt.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const noMods = this.stripModules(clean);
+    // 1) parameter assignments: NAME = <arithmetic> ;  (skip module-call RHS)
+    const vars = []; const vmap = {};
+    const varRe = /(?:^|\n)\s*([A-Za-z_]\w*)\s*=\s*([^;{}]+);/g;
+    let vm;
+    while ((vm = varRe.exec(noMods)) !== null) {
+      const name = vm[1], rhs = vm[2].trim();
+      if (this.reserved(name)) continue;
+      if (/[A-Za-z_]\w*\s*\(/.test(rhs)) continue;       // RHS is a call, not a parameter
+      if (vars.some(v => v.name === name)) continue;
+      let val; try { val = this.evalExpr(rhs, vmap); } catch (_) { val = parseFloat(rhs); }
+      if (val == null || isNaN(val)) continue;
+      vmap[name] = val; vars.push({ name, value: +(+val).toFixed(6) });
+    }
+    // 2) body -> node tree
+    this._vmap = vmap;
+    const tree = this.parseBlock(noMods);
+    return { vars, tree };
   }
 
   onCodeChange = (e) => { this.setState({ code: e.target.value, dirty: true }); };
@@ -1129,6 +2321,7 @@ class Component extends DCLogic {
     if (k === 'v') this.pickSelect();
     else if (k === 'b') this.addCuboid();
     else if (k === 'c') this.addCylinder();
+    else if (k === 's') this.addSphere();
     else if (k === 'm') this.pickMove();
     else if (k === 'delete' || k === 'backspace') this.deleteSelected();
     else if (k === 'escape') { this.clearEdge(); this.selectShape(null); }
@@ -1145,21 +2338,116 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state;
     const sel = st.selectedEdge;
-    const shapesList = st.shapes.map(s => ({
-      label: s.label,
-      meta: s.meta + (s.treated ? '  \u00b7  ' + s.treated + ' edge' + (s.treated > 1 ? 's' : '') : ''),
-      onSelect: () => { this.clearEdge(); this.selectShape(s.id); },
-      onDelete: (ev) => { ev.stopPropagation(); this.deleteShapeById(s.id); },
-      rowStyle: `display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;cursor:pointer;margin-bottom:2px;border:1px solid ${s.id === st.selectedShapeId ? '#2C4D78' : 'transparent'};background:${s.id === st.selectedShapeId ? '#17283f' : 'transparent'};`,
-      dotStyle: `width:9px;height:9px;border-radius:${s.type === 'cylinder' ? '50%' : '2px'};background:${s.id === st.selectedShapeId ? '#3B82F6' : '#6B7280'};`,
-    }));
+    // ---- flatten the nested tree into rows (respecting expand/collapse) ----
+    const expanded = st.expanded || {};
+    const selIds = st.selectedIds || [];
+    const flat = [];
+    const walk = (rows) => { for (const r of rows) { flat.push(r); if (r.kind === 'group' && expanded[r.id] !== false) walk(r.children); } };
+    walk(st.tree || []);
+    const opGlyph = (op) => op === 'union' ? '\u222a' : op === 'difference' ? '\u2212' : op === 'hull' ? '\u2b22' : op === 'minkowski' ? '\u2295' : op === 'group' ? '\u25a1' : '\u2229';
+    const treeRows = flat.map(r => {
+      const isGroup = r.kind === 'group';
+      const isSel = r.id === st.selectedShapeId || selIds.includes(r.id);
+      const isOpen = expanded[r.id] !== false;
+      const ord = selIds.length > 1 ? selIds.indexOf(r.id) : -1;
+      const meta = isGroup ? (r.op + ' \u00b7 ' + r.count + ' shape' + (r.count !== 1 ? 's' : '')) : (r.meta + (r.treated ? '  \u00b7  ' + r.treated + ' edge' + (r.treated > 1 ? 's' : '') : ''));
+      return {
+        id: r.id, label: r.label, meta,
+        hasCaret: isGroup, noCaret: !isGroup,
+        caretStyle: `display:flex;align-items:center;justify-content:center;width:14px;height:14px;flex:none;background:transparent;border:none;color:#7B828C;cursor:pointer;padding:0;transform:rotate(${isOpen ? 90 : 0}deg);transition:transform .15s;`,
+        onCaret: (e) => { e.stopPropagation(); this.toggleExpand(r.id); },
+        iconBg: isGroup ? '#1C2530' : '#23272E',
+        glyph: isGroup ? opGlyph(r.op) : '',
+        dotStyle: isGroup
+          ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
+          : `width:9px;height:9px;border-radius:${r.type === 'cuboid' ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
+        rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:pointer;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};`,
+        onSelect: (e) => { if (st.readOnly) return; this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
+        onCtx: (e) => { if (st.readOnly) { e.preventDefault(); return; } this.openCtx(r.id, e); },
+        onDelete: (e) => { e.stopPropagation(); this.deleteShapeById(r.id); },
+        showDelete: !st.readOnly,
+        hasOrder: ord >= 0,
+        order: ord >= 0 ? String(ord + 1) : '',
+        orderStyle: `display:flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:5px;background:${ord === 0 ? '#2563EB' : '#2C4D78'};color:#DCE8FB;font-family:'IBM Plex Mono',monospace;font-size:10px;flex:none;`,
+      };
+    });
+    const canGroup = this.canGroupSelection();
+    const comboBtn = `flex:1;display:flex;align-items:center;justify-content:center;gap:3px;padding:6px 4px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:${canGroup ? 'pointer' : 'not-allowed'};border:1px solid ${canGroup ? '#2C4D78' : '#2A2E34'};background:${canGroup ? '#17283f' : '#1A1D22'};color:${canGroup ? '#9CC2F5' : '#5B616B'};`;
+
+    // ---- right-click context menu ----
+    const ctx = st.ctxMenu;
+    let ctxItems = [], ctxStyle = '';
+    if (ctx) {
+      const node = this.findNode(ctx.id);
+      const nIsGroup = this.isGroup(node);
+      const inSel = selIds.includes(ctx.id) ? selIds : [ctx.id];
+      const canG = inSel.length >= 2 && this.sameParent(inSel);
+      const mk = (glyph, label, onClick, opts = {}) => ({
+        isItem: true, isSep: false, glyph, glyphColor: opts.color || '#8A9099', label, checked: !!opts.checked,
+        onClick: () => onClick(),
+        style: `display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:none;color:${opts.danger ? '#E0736B' : '#D5DAE1'};font:inherit;font-size:12px;padding:7px 9px;border-radius:6px;cursor:pointer;`,
+      });
+      const sep = { isItem: false, isSep: true };
+      const items = [];
+      if (canG) { items.push(mk('\u222a', 'Group as Union', () => this.groupSelection('union'))); items.push(mk('\u2212', 'Group as Difference', () => this.groupSelection('difference'))); items.push(mk('\u2229', 'Group as Intersection', () => this.groupSelection('intersection'))); }
+      if (nIsGroup) {
+        if (items.length) items.push(sep);
+        items.push(mk('\u222a', 'Union', () => this.changeOp(ctx.id, 'union'), { checked: node.op === 'union' }));
+        items.push(mk('\u2212', 'Difference', () => this.changeOp(ctx.id, 'difference'), { checked: node.op === 'difference' }));
+        items.push(mk('\u2229', 'Intersection', () => this.changeOp(ctx.id, 'intersection'), { checked: node.op === 'intersection' }));
+        items.push(sep);
+        items.push(mk('\u2922', 'Ungroup', () => this.ungroupById(ctx.id)));
+      }
+      if (items.length) items.push(sep);
+      items.push(mk('\u2715', 'Delete', () => this.deleteShapeById(ctx.id), { danger: true, color: '#E0736B' }));
+      ctxItems = items;
+      const mx = Math.min(ctx.x, window.innerWidth - 200);
+      const my = Math.min(ctx.y, window.innerHeight - (items.length * 32 + 24));
+      ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:49;min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;`;
+    }
 
     let radiusMax = 20;
-    const selShapeObj = sel ? this.shapes.find(x => x.id === sel.shapeId) : null;
+    const selShapeObj = sel ? this.findNode(sel.shapeId) : null;
     if (selShapeObj) radiusMax = this.edgeMaxRadius(selShapeObj, sel.edgeName);
     const applied = (sel && selShapeObj && selShapeObj.treatments) ? selShapeObj.treatments[sel.edgeName] : null;
-    const ssh = st.selectedShapeId ? this.shapes.find(x => x.id === st.selectedShapeId) : null;
+    const ssh = st.selectedShapeId ? this.findNode(st.selectedShapeId) : null;
+    const sshIsGroup = this.isGroup(ssh);
     const sshIsCyl = !!ssh && ssh.type === 'cylinder';
+    const sshNested = !!ssh && !sshIsGroup && !this.isTopLevel(ssh.id);
+
+    const dimFields = (!ssh || sshIsGroup) ? [] : (
+      ssh.type === 'cuboid' ? [this.buildField(ssh, 'x', 'X'), this.buildField(ssh, 'y', 'Y'), this.buildField(ssh, 'z', 'Z (height)')]
+        : ssh.type === 'sphere' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
+          : [this.buildField(ssh, 'd', '\u2300 diameter'), this.buildField(ssh, 'h', 'Z (height)')]);
+    const posFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'px', 'X'), this.buildField(ssh, 'py', 'Y'), this.buildField(ssh, 'pz', 'Z (plane)')];
+    const showGizmoTabs = !!ssh && !sshIsGroup && this.isTopLevel(ssh.id);
+
+    // ---- group inspector ----
+    const grpMembers = sshIsGroup ? ssh.children.map((c, idx) => {
+      const cg = this.isGroup(c);
+      return {
+        label: c.label, badge: cg ? opGlyph(c.op) : (c.type === 'cuboid' ? '\u25a2' : c.type === 'sphere' ? '\u25cf' : '\u2b2d'),
+        isBase: ssh.op === 'difference' && idx === 0,
+        baseTag: (ssh.op === 'difference' && idx === 0) ? 'base' : (ssh.op === 'difference' ? 'cut' : ''),
+        onSelect: () => this.selectShape(c.id),
+        rowStyle: `display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;margin-bottom:3px;background:#14161A;border:1px solid #23272E;`,
+        badgeStyle: `display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:#23272E;color:#9AA3AE;font-family:'IBM Plex Mono',monospace;font-size:12px;flex:none;`,
+        tagStyle: `font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:1px 6px;border-radius:4px;flex:none;background:${(ssh.op === 'difference' && idx === 0) ? '#17283f' : '#23272E'};color:${(ssh.op === 'difference' && idx === 0) ? '#9CC2F5' : '#6B7280'};border:1px solid ${(ssh.op === 'difference' && idx === 0) ? '#2C4D78' : '#2C3037'};`,
+      };
+    }) : [];
+
+    const vmapR = this.varMap();
+    const varsList = st.vars.map((v, i) => ({
+      name: v.name,
+      nameValue: (st.varDraft && st.varDraft.idx === i) ? st.varDraft.text : v.name,
+      value: v.value,
+      rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;margin-bottom:5px;border:1px solid ${st.highlightVar === v.name ? '#3B82F6' : '#23272E'};background:${st.highlightVar === v.name ? '#17283f' : '#14161A'};transition:border-color .35s,background .35s;`,
+      onNameInput: (e) => this.setState({ varDraft: { idx: i, text: e.target.value } }),
+      onNameKey: (e) => { if (e.key === 'Enter') { e.target.blur(); } else if (e.key === 'Escape') { this.setState({ varDraft: null }); } },
+      onNameBlur: () => this.commitRename(i),
+      onValue: (e) => this.onVarValue(i, e.target.value),
+      onDelete: () => this.deleteVar(i),
+    }));
 
     const drawerW = 420;
     const drawerStyle = `position:absolute;top:0;bottom:0;right:0;width:${drawerW}px;z-index:28;display:flex;flex-direction:column;background:rgba(18,20,24,.94);backdrop-filter:blur(16px);border-left:1px solid #23272E;box-shadow:-12px 0 40px rgba(0,0,0,.4);transform:translateX(${st.drawerOpen ? '0' : drawerW + 'px'});transition:transform .28s cubic-bezier(.4,0,.2,1);`;
@@ -1174,10 +2462,28 @@ class Component extends DCLogic {
       btnSelect: this.toolBtn(st.tool === 'select'),
       btnCuboid: this.toolBtn(false),
       btnCylinder: this.toolBtn(false),
+      btnSphere: this.toolBtn(false),
       btnMove: this.toolBtn(st.gizmoMode === 'translate' && !!st.selectedShapeId && !sel),
       btnDelete: this.toolBtn(false),
-      pickSelect: this.pickSelect, addCuboid: this.addCuboid, addCylinder: this.addCylinder,
+      btnParams: this.toolBtn(st.paramsOpen),
+      pickSelect: this.pickSelect, addCuboid: this.addCuboid, addCylinder: this.addCylinder, addSphere: this.addSphere,
       pickMove: this.pickMove, deleteSelected: this.deleteSelected,
+      toggleParams: this.toggleParams,
+
+      paramsOpen: st.paramsOpen,
+      dragParams: this.startPanelDrag('params'),
+      dragEdge: this.startPanelDrag('edge'),
+      dragShape: this.startPanelDrag('shape'),
+      dragGroup: this.startPanelDrag('group'),
+      paramsPanelStyle: this.panelStyle('params', 'position:absolute;left:84px;top:72px;z-index:33;width:256px;background:rgba(24,27,31,.94);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);overflow:hidden;'),
+      edgePanelStyle: this.panelStyle('edge', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #34495F;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;min-width:330px;'),
+      shapePanelStyle: this.panelStyle('shape', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:344px;'),
+      groupPanelStyle: this.panelStyle('group', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:312px;'),
+      varsList,
+      varsEmpty: varsList.length === 0,
+      varCount: varsList.length,
+      addVar: this.addVar,
+      setParamScroll: this.setParamScroll,
 
       hasEdge: !!sel,
       edgeLabel: sel ? sel.label : '',
@@ -1192,37 +2498,48 @@ class Component extends DCLogic {
       removeTreatmentBtn: this.removeTreatmentBtn,
       clearEdge: () => this.clearEdge(),
 
-      hasShapePanel: !!st.selectedShapeId && !sel,
+      hasShapePanel: !!st.selectedShapeId && !sel && !sshIsGroup,
       shapePanelLabel: ssh ? ssh.label : '',
-      shapeDotStyle: `width:10px;height:10px;border-radius:${sshIsCyl ? '50%' : '2px'};background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,.6);`,
+      shapeDotStyle: `width:10px;height:10px;border-radius:${sshIsCyl || (ssh && ssh.type === 'sphere') ? '50%' : '2px'};background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,.6);`,
+      showGizmoTabs, sshNested,
       moveTab: this.tab(st.gizmoMode !== 'scale'),
       scaleTab: this.tab(st.gizmoMode === 'scale'),
       setGizmoMove: this.setGizmoMove,
       setGizmoScale: this.setGizmoScale,
+
+      hasGroupPanel: sshIsGroup,
+      groupGlyph: sshIsGroup ? opGlyph(ssh.op) : '',
+      groupPanelLabel: sshIsGroup ? ssh.label : '',
+      groupOpLabel: sshIsGroup ? ssh.op : '',
+      groupUnionTab: this.tab(sshIsGroup && ssh.op === 'union'),
+      groupDiffTab: this.tab(sshIsGroup && ssh.op === 'difference'),
+      groupIntTab: this.tab(sshIsGroup && ssh.op === 'intersection'),
+      setGroupUnion: () => sshIsGroup && this.changeOp(ssh.id, 'union'),
+      setGroupDiff: () => sshIsGroup && this.changeOp(ssh.id, 'difference'),
+      setGroupInt: () => sshIsGroup && this.changeOp(ssh.id, 'intersection'),
+      grpMembers,
+      grpIsDiff: sshIsGroup && ssh.op === 'difference',
+      ungroupCurrent: () => sshIsGroup && this.ungroupById(ssh.id),
+      deselectGroup: () => this.selectShape(null),
       isCuboidSel: !!ssh && ssh.type === 'cuboid',
       isCylinderSel: sshIsCyl,
-      dimX: ssh && ssh.type === 'cuboid' ? ssh.dims.x : 0,
-      dimY: ssh && ssh.type === 'cuboid' ? ssh.dims.y : 0,
-      dimZ: ssh && ssh.type === 'cuboid' ? ssh.dims.z : 0,
-      cylDia: sshIsCyl ? ssh.dims.r * 2 : 0,
-      cylH: sshIsCyl ? ssh.dims.h : 0,
-      posX: ssh ? ssh.pos[0] : 0,
-      posY: ssh ? ssh.pos[1] : 0,
-      posZ: ssh ? ssh.pos[2] : 0,
-      onDimX: (e) => this.setDim('x', e.target.value),
-      onDimY: (e) => this.setDim('y', e.target.value),
-      onDimZ: (e) => this.setDim('z', e.target.value),
-      onCylDia: (e) => this.setDim('d', e.target.value),
-      onCylH: (e) => this.setDim('h', e.target.value),
-      onPosX: (e) => this.setPos(0, e.target.value),
-      onPosY: (e) => this.setPos(1, e.target.value),
-      onPosZ: (e) => this.setPos(2, e.target.value),
+      dimFields,
+      posFields,
       placeOnFloor: this.placeOnFloor,
       deselectShape: () => this.selectShape(null),
 
-      shapesList,
-      isEmpty: shapesList.length === 0,
-      shapeCount: shapesList.length,
+      treeRows,
+      isEmpty: treeRows.length === 0,
+      readOnlyTree: st.readOnly,
+      exitReadOnly: this.exitReadOnly,
+      shapeCount: this.shapes.length,
+      hasMultiSel: !st.readOnly && selIds.length >= 2,
+      multiSelHint: canGroup ? (selIds.length + ' selected \u2014 first row is the difference base') : 'Select shapes at the same level to combine',
+      comboBtn,
+      groupUnion: () => this.groupSelection('union'),
+      groupDifference: () => this.groupSelection('difference'),
+      groupIntersection: () => this.groupSelection('intersection'),
+      ctxOpen: !!ctx, ctxItems, ctxStyle, closeCtx: this.closeCtx,
 
       statusHint: st.statusMsg || (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it')),
       fnVal: st.fn,
@@ -1239,6 +2556,17 @@ class Component extends DCLogic {
         : 'color:#C58A3B;',
       csgText: st.csgOk ? '\u25cf live CSG preview' : '\u25cf code-only (CSG offline)',
       codeMeta: (st.code ? st.code.split('\n').length : 0) + ' lines',
+      readOnly: st.readOnly,
+      toggleConsole: this.toggleConsole,
+      consoleVisible: st.consoleOpen && (st.consoleLog || []).length > 0,
+      consoleBtnText: (() => { const n = (st.consoleLog || []).length; const e = (st.consoleLog || []).filter(l => l.type === 'error').length; const w = (st.consoleLog || []).filter(l => l.type === 'warn').length; return n ? ('\u25b8 console ' + (e ? e + '\u2715 ' : '') + (w ? w + '\u26a0 ' : '') + (!e && !w ? n : '')).trim() : 'console'; })(),
+      consoleBtnStyle: (() => { const has = (st.consoleLog || []).length; const err = (st.consoleLog || []).some(l => l.type === 'error'); const warn = (st.consoleLog || []).some(l => l.type === 'warn'); const col = err ? '#E0736B' : warn ? '#D8A24A' : has ? '#7E96B8' : '#5B616B'; return `background:transparent;border:1px solid #2C3037;color:${col};font:inherit;font-size:10px;padding:2px 8px;border-radius:6px;cursor:${has ? 'pointer' : 'default'};`; })(),
+      consoleRows: (st.consoleLog || []).map(l => ({
+        msg: l.msg,
+        tag: l.type === 'error' ? 'ERROR' : l.type === 'warn' ? 'WARN' : 'echo',
+        style: `display:flex;gap:8px;padding:3px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:${l.type === 'error' ? '#E0736B' : l.type === 'warn' ? '#D8A24A' : '#9AA3AE'};`,
+        tagStyle: `flex:none;width:42px;color:${l.type === 'error' ? '#E0736B' : l.type === 'warn' ? '#C9923B' : '#5B616B'};text-transform:uppercase;font-size:9px;letter-spacing:.05em;padding-top:1px;`,
+      })),
     };
   }
 }
