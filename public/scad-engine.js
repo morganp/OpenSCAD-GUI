@@ -576,8 +576,20 @@
         warn(ctx, 'projection() is approximate (silhouette of children)');
         return { kind:'projection', params:{ cut }, children: kids, matrix: Mat.identity(), dim:2 };
       }
-      case 'text': case 'import': case 'surface':
-        warn(ctx, name + '() not yet supported — Phase 9 (text) / Phase 10 (import/surface)'); return null;
+      case 'text': {
+        const t = arg(0,'text', named['text']);
+        const tv = (t === undefined || t === null) ? '' : (typeof t === 'string' ? t : echoStr(t));
+        const size = num(named['size'] !== undefined ? named['size'] : (pos[1] !== undefined ? pos[1] : 10), 10);
+        const font = named['font'] !== undefined ? String(named['font']) : '';
+        const halign = named['halign'] !== undefined ? String(named['halign']) : 'left';
+        const valign = named['valign'] !== undefined ? String(named['valign']) : 'baseline';
+        const spacing = num(named['spacing'], 1);
+        const direction = named['direction'] !== undefined ? String(named['direction']) : 'ltr';
+        // rings are shaped by the editor (font loading is async + THREE-side); engine just carries params
+        return { kind:'primitive2d', shape:'text', rings: [], params:{ text:tv, size, font, halign, valign, spacing, direction }, matrix: Mat.identity(), dim:2 };
+      }
+      case 'import': case 'surface':
+        warn(ctx, name + '() not yet supported — Phase 10 (import/surface)'); return null;
       case 'echo': { ctx.echos.push({ msg: s.args.map(a => echoStr(evalExpr(a.expr, scope, ctx))).join(', ') }); return null; }
       case 'assert': { const cond = truthy(arg(0)); if (!cond) { const m = s.args[1] ? echoStr(arg(1)) : 'assertion failed'; ctx.errors.push({ msg:'assert: '+m }); } return null; }
       case 'children': {

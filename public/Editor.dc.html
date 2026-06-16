@@ -43,6 +43,7 @@
   }
 </script>
 <script src="scad-engine.js"></script>
+<script src="https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js"></script>
 </helmet>
 <div style="position:fixed;inset:0;background:#15171B;color:#C7CCD4;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased;user-select:none;">
 
@@ -1764,7 +1765,76 @@ class Component extends DCLogic {
 
   runAdvanced(txt) {
     const res = window.ScadEngine.run(txt, { $fn: this.state.fn && this.state.fn < 100 ? 0 : 0 });
-    // wipe GUI tree
+    const texts = []; this.collectTextNodes(res.geom, texts);
+    if (texts.length) {
+      this.flashStatus('Shaping text\u2026');
+      this.ensureFont().then(font => {
+        if (font) { for (const n of texts) { try { n.rings = this.textToRings(n.params, font); } catch (e) { console.warn('text shape', e); } } }
+        else res.warnings = res.warnings.concat([{ msg: 'text(): font failed to load \u2014 nothing rendered' }]);
+        this.finishAdvanced(txt, res);
+      });
+      return;
+    }
+    this.finishAdvanced(txt, res);
+  }
+
+  // ---- text() font shaping (Phase 9 tail) ----
+  collectTextNodes(arr, out) {
+    for (const n of (arr || [])) { if (!n) continue;
+      if (n.kind === 'primitive2d' && n.shape === 'text') out.push(n);
+      if (n.children) this.collectTextNodes(n.children, out);
+    }
+  }
+  ensureFont() {
+    if (this._fontPromise) return this._fontPromise;
+    this._fontPromise = new Promise(resolve => {
+      if (!window.opentype) { console.warn('opentype.js not loaded'); resolve(null); return; }
+      try {
+        window.opentype.load('./Roboto-Regular.ttf', (err, font) => {
+          if (err) { console.warn('font load failed', err); this._fontPromise = null; resolve(null); }
+          else { this._font = font; resolve(font); }
+        });
+      } catch (e) { console.warn('font load threw', e); this._fontPromise = null; resolve(null); }
+    });
+    return this._fontPromise;
+  }
+  // text params -> array of closed 2D contours (rings), y-up, OpenSCAD-style alignment
+  textToRings(p, font) {
+    font = font || this._font; if (!font) return [];
+    const text = p.text != null ? String(p.text) : ''; if (!text) return [];
+    const size = p.size || 10;
+    const upm = font.unitsPerEm || 1000;
+    const scale = size / upm;
+    const spacing = p.spacing == null ? 1 : p.spacing;
+    let x = 0; const cmds = [];
+    const glyphs = font.stringToGlyphs(text);
+    for (const g of glyphs) {
+      const path = g.getPath(x, 0, size); // baseline at y=0, opentype y-down
+      for (const c of path.commands) cmds.push(c);
+      x += (g.advanceWidth || 0) * scale * spacing;
+    }
+    const totalW = x;
+    let dx = 0;
+    if (p.halign === 'center') dx = -totalW / 2; else if (p.halign === 'right') dx = -totalW;
+    const ascent = (font.ascender != null ? font.ascender : upm * 0.8) * scale;
+    const descent = (font.descender != null ? font.descender : -upm * 0.2) * scale; // negative
+    let dyUp = 0;
+    if (p.valign === 'top') dyUp = -ascent; else if (p.valign === 'bottom') dyUp = -descent; else if (p.valign === 'center') dyUp = -(ascent + descent) / 2;
+    const P = (X, Y) => [X + dx, -Y + dyUp]; // flip y-down -> y-up
+    const STEPS = 8;
+    const rings = []; let cur = null, cx = 0, cy = 0;
+    for (const c of cmds) {
+      if (c.type === 'M') { if (cur && cur.length >= 3) rings.push(cur); cur = [P(c.x, c.y)]; cx = c.x; cy = c.y; }
+      else if (c.type === 'L') { if (cur) cur.push(P(c.x, c.y)); cx = c.x; cy = c.y; }
+      else if (c.type === 'Q') { for (let i = 1; i <= STEPS; i++) { const t = i / STEPS, mt = 1 - t; const X = mt*mt*cx + 2*mt*t*c.x1 + t*t*c.x; const Y = mt*mt*cy + 2*mt*t*c.y1 + t*t*c.y; if (cur) cur.push(P(X, Y)); } cx = c.x; cy = c.y; }
+      else if (c.type === 'C') { for (let i = 1; i <= STEPS; i++) { const t = i / STEPS, mt = 1 - t; const X = mt*mt*mt*cx + 3*mt*mt*t*c.x1 + 3*mt*t*t*c.x2 + t*t*t*c.x; const Y = mt*mt*mt*cy + 3*mt*mt*t*c.y1 + 3*mt*t*t*c.y2 + t*t*t*c.y; if (cur) cur.push(P(X, Y)); } cx = c.x; cy = c.y; }
+      else if (c.type === 'Z') { if (cur && cur.length >= 3) rings.push(cur); cur = null; }
+    }
+    if (cur && cur.length >= 3) rings.push(cur);
+    return rings;
+  }
+
+  finishAdvanced(txt, res) {
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
     this._rendered = []; this.tree = []; this.shapes = []; this.clearEdge();
     if (this.tc) { this.tc.detach(); this.tc.visible = false; }
@@ -1946,26 +2016,54 @@ class Component extends DCLogic {
     return t.child; // offset of a boolean region needs a 2D clipper - passed through (warned by engine)
   }
 
-  // largest |area| ring -> Shape outline; remaining rings -> holes
+  // largest |area| ring -> Shape outline; remaining rings -> holes (single-region)
   ringsToShape(rings) {
+    const shapes = this.ringsToShapes(rings);
+    return shapes.length ? shapes[0] : null;
+  }
+  // even-odd containment -> array of THREE.Shape (each outer ring + its holes).
+  // Handles disjoint regions (multi-glyph text, multi-outline polygons) and nested holes.
+  ringsToShapes(rings) {
     const THREE = this.THREE;
-    if (!rings || !rings.length) return null;
+    if (!rings || !rings.length) return [];
     const area = (r) => { let a = 0; for (let i = 0; i < r.length; i++) { const j = (i + 1) % r.length; a += r[i][0]*r[j][1] - r[j][0]*r[i][1]; } return a / 2; };
-    let oi = 0, best = Math.abs(area(rings[0]));
-    for (let i = 1; i < rings.length; i++) { const a = Math.abs(area(rings[i])); if (a > best) { best = a; oi = i; } }
-    const outer = rings[oi];
-    const shape = new THREE.Shape(outer.map(p => new THREE.Vector2(p[0], p[1])));
-    for (let i = 0; i < rings.length; i++) { if (i === oi || rings[i].length < 3) continue; shape.holes.push(new THREE.Path(rings[i].map(p => new THREE.Vector2(p[0], p[1])))); }
-    return shape;
+    const ptIn = (pt, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1]; if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) inside = !inside; } return inside; };
+    const info = rings.filter(r => r && r.length >= 3).map(r => ({ r, a: Math.abs(area(r)) }));
+    if (!info.length) return [];
+    // nesting depth = how many other rings contain this ring's first point
+    const depth = info.map(o => { let d = 0; const pt = o.r[0]; for (const o2 of info) { if (o2 === o) continue; if (o2.a > o.a && ptIn(pt, o2.r)) d++; } return d; });
+    const outers = [];
+    info.forEach((o, i) => { if (depth[i] % 2 === 0) { o.shape = new THREE.Shape(o.r.map(p => new THREE.Vector2(p[0], p[1]))); o.depth = depth[i]; outers.push(o); } });
+    info.forEach((o, i) => {
+      if (depth[i] % 2 === 1) { // hole -> nearest enclosing outer (depth-1, smallest area)
+        const pt = o.r[0]; let best = null;
+        for (const so of outers) { if (so.depth !== depth[i] - 1) continue; if (ptIn(pt, so.r)) { if (!best || so.a < best.a) best = so; } }
+        if (best) best.shape.holes.push(new THREE.Path(o.r.map(p => new THREE.Vector2(p[0], p[1]))));
+      }
+    });
+    return outers.map(o => o.shape);
+  }
+  // merge several BufferGeometries (position-only) into one
+  mergeGeos(geos) {
+    const THREE = this.THREE;
+    geos = geos.filter(Boolean);
+    if (geos.length === 1) return geos[0];
+    const plain = geos.map(g => g.index ? g.toNonIndexed() : g);
+    let total = 0; for (const g of plain) total += g.attributes.position.array.length;
+    const out = new Float32Array(total); let o = 0;
+    for (const g of plain) { const a = g.attributes.position.array; out.set(a, o); o += a.length; }
+    const merged = new THREE.BufferGeometry(); merged.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); return merged;
   }
   ringsToSolid(rings, mode, params) { return mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params); }
 
   linearSolid(rings, params) {
-    const THREE = this.THREE; const shape = this.ringsToShape(rings); if (!shape) return null;
+    const THREE = this.THREE; const shapes = this.ringsToShapes(rings); if (!shapes.length) return null;
     const h = params.height || 1, twist = params.twist || 0, scale = params.scale || [1, 1], slices = Math.max(1, params.slices || 1);
-    let geo;
-    if (twist === 0 && scale[0] === 1 && scale[1] === 1) geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, steps: 1, curveSegments: 24 });
-    else geo = this.loftSolid(shape, h, twist, scale, slices);
+    const straight = (twist === 0 && scale[0] === 1 && scale[1] === 1);
+    const geos = shapes.map(shape => straight
+      ? new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, steps: 1, curveSegments: 24 })
+      : this.loftSolid(shape, h, twist, scale, slices));
+    let geo = this.mergeGeos(geos);
     if (params.center) geo.translate(0, 0, -h / 2);
     geo.computeVertexNormals();
     return geo;
