@@ -1,3 +1,37 @@
+# HANDOFF — STL/OFF `import()` (Phase 10 start)
+
+**Status: ✅ SHIPPED (this session).** `import("…stl"|"…off")` now renders. Verified via `eval_js`
+with synthetic meshes: binary + ASCII STL and OFF all parse; a tetra renders (4 tris), transforms
+(`translate`/`rotate`), feeds booleans (`difference` w/ cylinder → 275 tris, `union` w/ sphere →
+228 tris), `center=true` re-centers; an unknown filename logs "file not loaded"; the drag-drop/
+file-input flow loads a `File`, stores it, auto-inserts `import("Name.stl");`, shows a chip, and
+renders. No console errors.
+
+### How it works (Editor.dc.html + one engine case)
+- **Engine** (`scad-engine.js`): `import` now emits `{kind:'import', params:{file,center,ext,
+  convexity}, dim:2|3}` (2D for svg/dxf) instead of warning. `surface` still warns.
+- **File provider** (editor): "Import mesh" toolbar button + a hidden `.stl,.off` file input +
+  drag-and-drop on the viewport (`attachMeshDrop`). `loadImportFiles` reads each as an
+  ArrayBuffer, parses, and stores `{name,positions,tris}` in `this._imports` (Map, **lowercased
+  filename key**). `afterImport` appends `import("name");` to the code if not already referenced,
+  then re-runs. A chip strip (top-left) lists loaded meshes with a remove ×.
+- **Parsers** (pure JS, no libs): `parseSTL` (binary detected by `84 + 50·tris === byteLength`,
+  else ASCII `vertex` regex), `parseOFF` (header → verts → fan-triangulated faces). All produce a
+  flat `Float32Array` of triangle-soup positions.
+- **Realize**: `importGeometry(node)` builds a `BufferGeometry` from the stored positions,
+  optionally re-centers (`center=true`), computes normals, **and adds a zeroed `uv`** — required
+  so three-bvh-csg can match attributes against the primitives (without it, CSG throws
+  `aAttr.array`). Wired into `realizeNode` (`importMesh`) and `geomBrush` (Brush for booleans).
+  `collectImportNodes` in `runAdvanced` adds a console warning for missing / unsupported files.
+  Model-tree shows imports as a `mesh` leaf.
+
+### Not done (deferred)
+3MF/AMF (zip/xml meshes), SVG/DXF (2D import), `surface()` heightmaps, and `include`/`use` file
+loading. Imported triangle soup isn't welded — fine for render + CSG, but very large meshes are
+unoptimized. A persistence story (imports live only in memory for the session) is open.
+
+---
+
 # HANDOFF — `projection(cut)` render (Phase 9 tail)
 
 **Status: ✅ SHIPPED (this session).** `projection()` and `projection(cut=true)` now render and

@@ -158,8 +158,13 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] 2D booleans/transforms feed `hull`/`minkowski` (resolved in 3D); `offset` basic (single contour).
 (Holes in `rotate_extrude` profiles are ignored for now; offset of boolean regions passes through.)
 
-## Phase 10 — Import, surface, includes  `[ ]`
-- [ ] `import("file.stl|off|3mf|amf")` / `import("file.svg|dxf")`.
+## Phase 10 — Import, surface, includes  `[~]`
+- [~] `import("file.stl|off|3mf|amf")` / `import("file.svg|dxf")` — **STL (binary + ASCII) and
+      OFF** import via a drag-and-drop / "Import mesh" file provider: uploaded files are parsed
+      (pure JS) into a filename-keyed store, and `import("name")` resolves against it at realize
+      (sync, like `text()`). Imported meshes render, transform, and feed booleans (a zeroed `uv`
+      is added so three-bvh-csg can match attributes against primitives); `center=true` honored;
+      missing/unsupported files log a console warning. **3MF/AMF and SVG/DXF (2D) not parsed yet.**
 - [ ] `surface(file="file.dat|png", center, convexity)`.
 - [~] `include <file.scad>` / `use <file.scad>` — **parsed** (tokenized path) but treated as no-op;
       needs a file provider (project files / uploads).
@@ -201,10 +206,11 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** `import`/`surface`/`include`
-file loading (Phase 10), C-style list comprehensions, `parent_module`, `assign()`, live
+**Not yet rendered:** `surface`/`include`
+file loading, 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`, live
 `$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
-`projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes).
+`projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
+**STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 92–94%** (by cheat-sheet feature count). The remaining
-~6–8% is dominated by `import`/`surface` (binary-mesh loading) and polish items.
+**Estimated true language coverage ≈ 93–95%** (by cheat-sheet feature count). The remaining
+~5–7% is `surface`, the rest of `import` (3MF/AMF/SVG/DXF), `include`/`use` file loading, and polish items.

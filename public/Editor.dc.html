@@ -71,6 +71,11 @@
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 11.5v1A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5v-1" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Save .scad
       </button>
+      <div style="width:1px;height:18px;background:#2C3037;margin:0 1px;"></div>
+      <button onClick="{{ openImport }}" title="Import a mesh (STL / OFF) — or drag a file onto the viewport" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.6 11 5.6M8 2.6 5 5.6M8 2.6V10" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5v1.8A1.2 1.2 0 0 0 4.2 13.5h7.6a1.2 1.2 0 0 0 1.2-1.2v-1.8" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Import mesh
+      </button>
     </div>
   </div>
 
@@ -406,7 +411,21 @@
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 4 2.5 8 6 12M10 4l3.5 4L10 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
 
+  <sc-if value="{{ hasImports }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:64px;left:16px;z-index:29;display:flex;flex-direction:column;gap:4px;max-width:260px;">
+      <sc-for list="{{ importsList }}" as="im" hint-placeholder-count="0">
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(27,30,35,.86);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:8px;padding:5px 8px 5px 10px;box-shadow:0 6px 20px rgba(0,0,0,.4);">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2 14 5v6l-6 3-6-3V5l6-3Z" stroke="#6FA8F5" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#C7CCD4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ im.name }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;">{{ im.meta }}</span>
+          <button onClick="{{ im.remove }}" title="Remove" style="margin-left:auto;background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;" style-hover="color:#E06C6C;">×</button>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
   <input ref="{{ setFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onFileChosen }}" style="display:none;" />
+  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off" multiple onChange="{{ onImportChosen }}" style="display:none;" />
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -464,9 +483,10 @@ class Component extends DCLogic {
     if (this._raf) cancelAnimationFrame(this._raf);
   }
 
-  setViewport = (el) => { if (el && !this._vp) { this._vp = el; if (window.__threeReady && !this._inited) this.initThree(); } };
+  setViewport = (el) => { if (el && !this._vp) { this._vp = el; this.attachMeshDrop(el); if (window.__threeReady && !this._inited) this.initThree(); } };
   setCodeArea = (el) => { this._codeArea = el; };
   setFileInput = (el) => { this._fileInput = el; };
+  setImportInput = (el) => { this._importInput = el; };
 
   // ============ THREE INIT ============
   initThree() {
@@ -1765,6 +1785,12 @@ class Component extends DCLogic {
 
   runAdvanced(txt) {
     const res = window.ScadEngine.run(txt, { $fn: this.state.fn && this.state.fn < 100 ? 0 : 0 });
+    const imports = []; this.collectImportNodes(res.geom, imports);
+    for (const n of imports) {
+      const f = n.params.file || '', ext = n.params.ext;
+      if (ext !== 'stl' && ext !== 'off') res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): only STL and OFF are supported so far' }]);
+      else if (!(this._imports && this._imports.has(f.toLowerCase()))) res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): file not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
+    }
     const texts = []; this.collectTextNodes(res.geom, texts);
     if (texts.length) {
       this.flashStatus('Shaping text\u2026');
@@ -1886,6 +1912,7 @@ class Component extends DCLogic {
     const m = this.mul(pm, node.matrix || this.IDENTITY());
     const col = node.color || color;
     if (node.dim === 2) { const mesh = this.flat2DMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
+    if (node.kind === 'import') { const mesh = this.importMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'extrude') { const mesh = this.extrudeMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'op') {
       const mesh = this.opMesh(node, pm, col);
@@ -1922,6 +1949,7 @@ class Component extends DCLogic {
       const b = new Brush(geo); b.updateMatrixWorld(); return b;
     }
     if (node.kind === 'extrude') return this.extrudeBrush(node, m);
+    if (node.kind === 'import') { const geo = this.importGeometry(node); if (!geo) return null; geo.applyMatrix4(this.toM4(m)); const b = new Brush(geo); b.updateMatrixWorld(); return b; }
     const kids = (node.children || []).map(c => this.geomBrush(c, m)).filter(Boolean);
     if (!kids.length) return null;
     if (node.kind === 'op' && (node.op === 'hull' || node.op === 'minkowski')) return this.hullMinkBrush(kids, node.op);
@@ -2294,6 +2322,9 @@ class Component extends DCLogic {
       const label = node.kind === 'extrude' ? (node.mode === 'rotate' ? 'Rotate extrude' : 'Linear extrude') : node.kind === 'offset2d' ? 'Offset' : 'Projection';
       return { id, kind: 'group', op: 'group', label, depth, count: kids.length, children: kids, readOnly: true };
     }
+    if (node.kind === 'import') {
+      return { id, kind: 'prim', type: 'cuboid', label: node.params.file || 'import', depth, meta: 'mesh', treated: 0, readOnly: true };
+    }
     if (node.kind === 'primitive2d') {
       return { id, kind: 'prim', type: node.shape === 'circle' ? 'sphere' : 'cuboid', label: node.shape, depth, meta: '2D', treated: 0, readOnly: true };
     }
@@ -2518,6 +2549,112 @@ class Component extends DCLogic {
     this.flashStatus('Saved model.scad');
   };
 
+  // ============ MESH IMPORT (Phase 10: import STL / OFF) ============
+  openImport = () => { if (this._importInput) this._importInput.click(); };
+  onImportChosen = (e) => { this.loadImportFiles(Array.from(e.target.files || [])); e.target.value = ''; };
+  attachMeshDrop(el) {
+    const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+    el.addEventListener('dragover', (ev) => { stop(ev); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'; });
+    el.addEventListener('drop', (ev) => { stop(ev);
+      const files = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []).filter(f => /\.(stl|off)$/i.test(f.name));
+      if (files.length) this.loadImportFiles(files);
+    });
+  }
+  loadImportFiles(files) {
+    files = (files || []).filter(Boolean); if (!files.length) return;
+    if (!this._imports) this._imports = new Map();
+    let pending = files.length; const loaded = [];
+    files.forEach(f => {
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          const parsed = ext === 'off' ? this.parseOFF(new TextDecoder().decode(rd.result)) : this.parseSTL(rd.result);
+          if (parsed && parsed.positions && parsed.positions.length >= 9) {
+            this._imports.set(f.name.toLowerCase(), { name: f.name, positions: parsed.positions, tris: Math.floor(parsed.positions.length / 9) });
+            loaded.push(f.name);
+          } else { this.flashStatus('Could not parse ' + f.name); }
+        } catch (err) { console.warn('import parse', err); this.flashStatus('Failed to parse ' + f.name); }
+        if (--pending === 0) this.afterImport(loaded);
+      };
+      rd.readAsArrayBuffer(f);
+    });
+  }
+  afterImport(loaded) {
+    if (!loaded.length) { this.forceUpdate(); return; }
+    let code = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const appended = [];
+    for (const name of loaded) {
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('import\\s*\\(\\s*["\\\']' + esc + '["\\\']', 'i');
+      if (!re.test(code)) { code += (code.trim() ? '\n' : '') + 'import("' + name + '");'; appended.push(name); }
+    }
+    if (appended.length) { if (this._codeArea) this._codeArea.value = code; this.setState({ code }, () => this.runCode()); }
+    else this.runCode();
+    this.flashStatus('Imported ' + loaded.join(', '));
+  }
+  removeImport(nameLower) { if (this._imports) this._imports.delete(nameLower); this.forceUpdate(); this.runCode(); }
+
+  // --- mesh parsers (pure JS, no external libs) ---
+  parseSTL(buffer) {
+    const dv = new DataView(buffer), n = buffer.byteLength;
+    if (n >= 84) { const tris = dv.getUint32(80, true); if (84 + tris * 50 === n) return this.parseBinarySTL(dv, tris); }
+    const text = new TextDecoder().decode(buffer);
+    if (/^\s*solid/i.test(text) && /facet/i.test(text)) return this.parseAsciiSTL(text);
+    if (n >= 84) { const tris = dv.getUint32(80, true); if (84 + tris * 50 <= n && tris > 0) return this.parseBinarySTL(dv, tris); }
+    return null;
+  }
+  parseBinarySTL(dv, tris) {
+    const pos = new Float32Array(tris * 9); let o = 84, p = 0;
+    for (let i = 0; i < tris; i++) {
+      o += 12; // skip per-facet normal
+      for (let v = 0; v < 3; v++) { pos[p++] = dv.getFloat32(o, true); pos[p++] = dv.getFloat32(o + 4, true); pos[p++] = dv.getFloat32(o + 8, true); o += 12; }
+      o += 2; // attribute byte count
+    }
+    return { positions: pos };
+  }
+  parseAsciiSTL(text) {
+    const verts = []; const re = /vertex\s+(-?[\d.eE+]+)\s+(-?[\d.eE+]+)\s+(-?[\d.eE+]+)/g; let m;
+    while ((m = re.exec(text))) verts.push(+m[1], +m[2], +m[3]);
+    return { positions: new Float32Array(verts) };
+  }
+  parseOFF(text) {
+    const toks = text.replace(/#.*$/gm, '').trim().split(/\s+/);
+    let idx = 0;
+    if (toks[0]) { const h = toks[0].toUpperCase(); if (h === 'OFF' || h.endsWith('OFF')) idx = 1; }
+    const nV = parseInt(toks[idx++], 10), nF = parseInt(toks[idx++], 10); parseInt(toks[idx++], 10);
+    if (!(nV > 0) || !(nF >= 0)) return null;
+    const verts = [];
+    for (let i = 0; i < nV; i++) { const x = +toks[idx++], y = +toks[idx++], z = +toks[idx++]; verts.push([x, y, z]); }
+    const out = [];
+    for (let i = 0; i < nF; i++) {
+      const k = parseInt(toks[idx++], 10); if (!(k >= 3)) { idx += Math.max(0, k); continue; }
+      const f = []; for (let j = 0; j < k; j++) f.push(parseInt(toks[idx++], 10));
+      for (let t = 1; t < k - 1; t++) { const a = verts[f[0]], b = verts[f[t]], c = verts[f[t + 1]]; if (a && b && c) out.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); }
+    }
+    return { positions: new Float32Array(out) };
+  }
+  collectImportNodes(arr, out) { for (const n of (arr || [])) { if (!n) continue; if (n.kind === 'import') out.push(n); if (n.children) this.collectImportNodes(n.children, out); } }
+  importGeometry(node) {
+    const store = this._imports && this._imports.get((node.params.file || '').toLowerCase());
+    if (!store) return null;
+    const g = new this.THREE.BufferGeometry();
+    g.setAttribute('position', new this.THREE.Float32BufferAttribute(store.positions.slice(), 3));
+    if (node.params.center) { g.computeBoundingBox(); const c = new this.THREE.Vector3(); g.boundingBox.getCenter(c); g.translate(-c.x, -c.y, -c.z); }
+    g.computeVertexNormals();
+    // three-bvh-csg matches attributes across operands -> give imported meshes a uv like the primitives
+    const vCount = g.attributes.position.count;
+    g.setAttribute('uv', new this.THREE.Float32BufferAttribute(new Float32Array(vCount * 2), 2));
+    return g;
+  }
+  importMesh(node, pm, col) {
+    const m = this.mul(pm, node.matrix || this.IDENTITY());
+    const geo = this.importGeometry(node); if (!geo) return null;
+    geo.applyMatrix4(this.toM4(m));
+    const mesh = new this.THREE.Mesh(geo, this.engineMat(node.color || col, node.mod));
+    mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+  }
+
   // ============ TOOLS / UI ============
   pickSelect = () => this.setState({ tool: 'select' });
   pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => this.updateGizmo());
@@ -2665,6 +2802,7 @@ class Component extends DCLogic {
       setViewport: this.setViewport,
       setCodeArea: this.setCodeArea,
       setFileInput: this.setFileInput,
+      setImportInput: this.setImportInput,
       notReady: !st.ready,
 
       btnSelect: this.toolBtn(st.tool === 'select'),
@@ -2758,6 +2896,13 @@ class Component extends DCLogic {
       onCodeChange: this.onCodeChange,
       runCode: this.runCode, copyCode: this.copyCode,
       openFile: this.openFile, saveFile: this.saveFile, onFileChosen: this.onFileChosen,
+      openImport: this.openImport, onImportChosen: this.onImportChosen,
+      hasImports: !!(this._imports && this._imports.size),
+      importsList: (this._imports ? Array.from(this._imports.values()) : []).map(im => ({
+        name: im.name,
+        meta: (im.tris >= 1000 ? (im.tris / 1000).toFixed(1) + 'k' : String(im.tris)) + ' \u25b3',
+        remove: () => this.removeImport(im.name.toLowerCase()),
+      })),
       dirtyDot: st.dirty ? 'width:7px;height:7px;border-radius:50%;background:#E0A33B;box-shadow:0 0 8px #E0A33B;' : 'width:0;height:0;',
       csgBadge: st.csgOk
         ? 'color:#5E8C6A;'

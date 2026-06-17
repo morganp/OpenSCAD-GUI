@@ -588,8 +588,19 @@
         // rings are shaped by the editor (font loading is async + THREE-side); engine just carries params
         return { kind:'primitive2d', shape:'text', rings: [], params:{ text:tv, size, font, halign, valign, spacing, direction }, matrix: Mat.identity(), dim:2 };
       }
-      case 'import': case 'surface':
-        warn(ctx, name + '() not yet supported — Phase 10 (import/surface)'); return null;
+      case 'import': {
+        const file = arg(0, 'file', named['file']);
+        const fn = (typeof file === 'string') ? file : '';
+        const center = truthy(named['center']);
+        const convexity = named['convexity'];
+        const ext = (fn.split('.').pop() || '').toLowerCase();
+        const is2d = ext === 'svg' || ext === 'dxf';
+        if (!fn) { warn(ctx, 'import(): missing file name'); return null; }
+        // geometry is supplied editor-side from the uploaded-file store (sync at realize)
+        return { kind:'import', params:{ file: fn, center, ext, convexity }, matrix: Mat.identity(), dim: is2d ? 2 : 3 };
+      }
+      case 'surface':
+        warn(ctx, 'surface() not yet supported — Phase 10 (heightmap import)'); return null;
       case 'echo': { ctx.echos.push({ msg: s.args.map(a => echoStr(evalExpr(a.expr, scope, ctx))).join(', ') }); return null; }
       case 'assert': { const cond = truthy(arg(0)); if (!cond) { const m = s.args[1] ? echoStr(arg(1)) : 'assertion failed'; ctx.errors.push({ msg:'assert: '+m }); } return null; }
       case 'children': {
