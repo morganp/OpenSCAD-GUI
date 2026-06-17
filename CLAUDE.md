@@ -3,6 +3,21 @@
 ## File naming
 - Files must not contain spaces.
 - The main file must be named `index.html`.
+- **Semantic versioning on zips.** When offering a download zip, label it with a version number (e.g. `v0.1.0`, `v0.1.1`). Increment the patch for fixes, minor for new features, major for breaking changes.
+
+## Project layout (applies to ALL sites in this project, current and future)
+- **All servable site code lives in `public/`** — the deployable entrypoint is
+  `public/index.html`, alongside its imported `.dc.html` components, engine/helper `.js`,
+  the `support.js` DC runtime, and any assets the site loads. `public/` must be fully
+  self-contained: use only **relative** references (`./support.js`, `scad-engine.js`,
+  sibling `<dc-import>`s) so the folder can be copied to any static host and served from
+  any path.
+- **Project meta stays at the root, never inside `public/`:** `CLAUDE.md`, `HANDOFF.md`
+  (and other plan files), `README.md`, and `screenshots/`. These must not ship with the site.
+- When you create a new site or add files to one, place them under `public/` and keep this
+  split. `support.js` lives **only** in `public/`. If the platform regenerates a copy at the
+  project root during in-platform editing, delete it — the canonical runtime is `public/support.js`.
+- Preview/deliver sites via their `public/index.html`.
 
 ## Planning new features
 - Before executing any new feature, write a plan to a plan file (e.g. `HANDOFF.md`) first:
@@ -132,7 +147,11 @@ the editor pushes each extrude down to the 2D leaves (extrude each to a 3D prism
 booleans resolve through the existing three-bvh-csg pipeline. `collect2D` bakes in-extrude
 transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] `circle(r | d=)` (tessellated by `$fn/$fa/$fs`), `square(size|[w,h], center)`, `polygon(points, [paths])`.
-- [ ] `text(...)` — font shaping (opentype.js / canvas path extraction) — still warns.
+- [x] `text(...)` — font shaping via **opentype.js** + a vendored **Roboto** TTF (`public/Roboto-Regular.ttf`).
+      Glyph outlines → flattened contours → 2D rings (even-odd containment → multi-region shapes with
+      holes), shaped editor-side before realize so it flows through the existing 2D→sheet/extrude
+      pipeline. Supports `size`, `halign`, `valign`, `spacing`; `font=` falls back to Roboto (single
+      bundled face).
 - [x] `linear_extrude(height, center, convexity, twist, slices, scale)` — plain via `ExtrudeGeometry`, twist/scale via a custom loft.
 - [x] `rotate_extrude(angle, convexity)` — custom revolve about Z (full + partial w/ end caps), `$fn` segments.
 - [~] `projection(cut)` (3D→2D) — parsed + node emitted, render approximate (warns; not yet realized).
@@ -177,13 +196,14 @@ cones & polyhedron), **all affine transforms** (translate/rotate/scale/mirror/mu
 `color`, booleans, flow control (`for`/`intersection_for`/`if`/`let`), **user modules &
 functions** (recursion, `children()`, defaults), list comprehensions, and modifier characters
 `* ! # %`. **2D subsystem + extrudes** (`circle/square/polygon`, `linear_extrude` incl.
-twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `offset`) and real
+twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `offset`), **`text`
+(opentype.js glyph shaping → multi-region 2D rings, bundled Roboto)**, and real
 `hull`/`minkowski` (via `ConvexGeometry`) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** `text` (font shaping), `projection` (3D→2D), `import`/`surface`/`include`
+**Not yet rendered:** `projection` (3D→2D), `import`/`surface`/`include`
 file loading (Phase 10), C-style list comprehensions, `parent_module`, `assign()`, live
 `$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
 
-**Estimated true language coverage ≈ 88–92%** (by cheat-sheet feature count). The remaining
-~10% is dominated by `import`/`surface`/`text` (font + binary-mesh loading) and polish items.
+**Estimated true language coverage ≈ 90–93%** (by cheat-sheet feature count). The remaining
+~8% is dominated by `import`/`surface` (binary-mesh loading) and polish items.
