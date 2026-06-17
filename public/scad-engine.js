@@ -573,7 +573,7 @@
       case 'projection': {
         const cut = truthy(named['cut']);
         const kids = evalChildren();
-        warn(ctx, 'projection() is approximate (silhouette of children)');
+        warn(ctx, cut ? 'projection(cut=true): cross-section traced from the z=0 slab' : 'projection(): silhouette traced from the top-down footprint');
         return { kind:'projection', params:{ cut }, children: kids, matrix: Mat.identity(), dim:2 };
       }
       case 'text': {

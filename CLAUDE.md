@@ -154,7 +154,7 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       bundled face).
 - [x] `linear_extrude(height, center, convexity, twist, slices, scale)` — plain via `ExtrudeGeometry`, twist/scale via a custom loft.
 - [x] `rotate_extrude(angle, convexity)` — custom revolve about Z (full + partial w/ end caps), `$fn` segments.
-- [~] `projection(cut)` (3D→2D) — parsed + node emitted, render approximate (warns; not yet realized).
+- [x] `projection(cut)` (3D→2D) — realized: child solid rasterized to a top-down coverage grid, boundary traced via marching squares → simplified 2D rings (multi-region + holes via even-odd). `cut=true` first intersects a thin z=0 slab (CSG) for the cross-section; `cut=false` is the full silhouette. Rings flow through the flat-sheet render and the extrude push-down, so `linear_extrude(h) projection() …` works.
 - [x] 2D booleans/transforms feed `hull`/`minkowski` (resolved in 3D); `offset` basic (single contour).
 (Holes in `rotate_extrude` profiles are ignored for now; offset of boolean regions passes through.)
 
@@ -198,12 +198,13 @@ functions** (recursion, `children()`, defaults), list comprehensions, and modifi
 `* ! # %`. **2D subsystem + extrudes** (`circle/square/polygon`, `linear_extrude` incl.
 twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `offset`), **`text`
 (opentype.js glyph shaping → multi-region 2D rings, bundled Roboto)**, and real
-`hull`/`minkowski` (via `ConvexGeometry`) now render. Simple programs stay GUI-editable;
+`hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** `projection` (3D→2D), `import`/`surface`/`include`
+**Not yet rendered:** `import`/`surface`/`include`
 file loading (Phase 10), C-style list comprehensions, `parent_module`, `assign()`, live
 `$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
+`projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes).
 
-**Estimated true language coverage ≈ 90–93%** (by cheat-sheet feature count). The remaining
-~8% is dominated by `import`/`surface` (binary-mesh loading) and polish items.
+**Estimated true language coverage ≈ 92–94%** (by cheat-sheet feature count). The remaining
+~6–8% is dominated by `import`/`surface` (binary-mesh loading) and polish items.

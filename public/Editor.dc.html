@@ -1983,7 +1983,7 @@ class Component extends DCLogic {
     const m = this.mul(mat, node.matrix || this.IDENTITY());
     if (node.kind === 'primitive2d') return { leaf: true, rings: (node.rings || []).map(r => r.map(p => this.apply2(m, p))) };
     if (node.kind === 'offset2d') { const ch = this.collect2DChildren(node.children, m); return ch ? { offset: node.params || {}, child: ch } : null; }
-    if (node.kind === 'projection') return null; // 3D->2D not supported in the extrude path
+    if (node.kind === 'projection') { const rings = this.projectionRings(node).map(r => r.map(p => this.apply2(m, p))); return rings.length ? { leaf: true, rings } : null; }
     if (node.kind === 'op') { const kids = (node.children || []).map(c => this.collect2D(c, m)).filter(Boolean); return kids.length ? { op: node.op, children: kids } : null; }
     if (node.kind === 'group') return this.collect2DChildren(node.children, m);
     return null;
@@ -2173,6 +2173,116 @@ class Component extends DCLogic {
   flat2DMesh(node, pm, col) {
     const synthetic = { kind: 'extrude', mode: 'linear', params: { height: 0.12, center: true, twist: 0, scale: [1,1], slices: 1 }, children: [node], matrix: this.IDENTITY(), color: node.color, mod: node.mod };
     return this.extrudeMesh(synthetic, pm, col);
+  }
+
+  // projection(cut): flatten a 3D subtree to 2D rings in the projection-local XY plane.
+  //  cut=false -> top-down silhouette of the whole solid; cut=true -> cross-section at z=0.
+  // Children are evaluated relative to the projection (identity base); the enclosing 2D
+  // pipeline bakes the projection's own matrix + world transform afterward.
+  projectionRings(node) {
+    if (!this.CSG) return [];
+    let brush;
+    try { brush = this.geomBrush({ kind: 'group', children: node.children || [], matrix: this.IDENTITY() }, this.IDENTITY()); }
+    catch (e) { return []; }
+    if (!brush || !brush.geometry || !brush.geometry.attributes.position) return [];
+    let geo = brush.geometry;
+    if (node.params && node.params.cut) {
+      try {
+        geo.computeBoundingBox(); const bb = geo.boundingBox;
+        const w = (bb.max.x - bb.min.x) || 1, h = (bb.max.y - bb.min.y) || 1;
+        const cx = (bb.max.x + bb.min.x) / 2, cy = (bb.max.y + bb.min.y) / 2;
+        const eps = Math.max(w, h) * 0.004 + 1e-3;
+        const slabG = new this.THREE.BoxGeometry(w * 2 + 2, h * 2 + 2, eps); slabG.translate(cx, cy, 0);
+        if (!this._ev) this._ev = new this.CSG.Evaluator();
+        const sb = new this.CSG.Brush(slabG); sb.updateMatrixWorld();
+        const r = this._ev.evaluate(brush, sb, this.CSG.INTERSECTION); r.updateMatrixWorld();
+        if (r && r.geometry && r.geometry.attributes.position && r.geometry.attributes.position.count) geo = r.geometry;
+      } catch (e) { /* fall back to full silhouette */ }
+    }
+    return this.silhouetteRings(geo);
+  }
+
+  // CPU-rasterize a geometry's triangles' XY footprint into a coverage grid, then trace the
+  // boundary with marching squares -> array of closed rings (world XY). Even-odd nesting is
+  // resolved downstream by ringsToShapes, so ring orientation is irrelevant here.
+  silhouetteRings(geo) {
+    const pos = geo.attributes.position; if (!pos || !pos.count) return [];
+    const idx = geo.index;
+    const triCount = idx ? (idx.count / 3) : (pos.count / 3);
+    const vi = (t, k) => idx ? idx.getX(t * 3 + k) : (t * 3 + k);
+    const gx = i => pos.getX(i), gy = i => pos.getY(i);
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (let t = 0; t < triCount; t++) for (let k = 0; k < 3; k++) { const i = vi(t, k); const x = gx(i), y = gy(i); if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    if (!isFinite(minx) || maxx <= minx || maxy <= miny) return [];
+    const W = maxx - minx, H = maxy - miny, maxRes = 320;
+    const cell = Math.max(W, H) / maxRes;
+    let nx = Math.ceil(W / cell) + 3, ny = Math.ceil(H / cell) + 3;       // +pad ring of empty cells
+    if (nx * ny > 200000) { const s = Math.sqrt(200000 / (nx * ny)); nx = Math.max(3, Math.floor(nx * s)); ny = Math.max(3, Math.floor(ny * s)); }
+    const ox = minx - cell, oy = miny - cell;
+    const cw = (W + 2 * cell) / nx, ch = (H + 2 * cell) / ny;
+    const grid = new Uint8Array(nx * ny);
+    const cross = (ax, ay, bx, by, px, py) => (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    for (let t = 0; t < triCount; t++) {
+      const i0 = vi(t, 0), i1 = vi(t, 1), i2 = vi(t, 2);
+      const x0 = gx(i0), y0 = gy(i0), x1 = gx(i1), y1 = gy(i1), x2 = gx(i2), y2 = gy(i2);
+      const area = cross(x0, y0, x1, y1, x2, y2); if (Math.abs(area) < 1e-12) continue;
+      const tminx = Math.min(x0, x1, x2), tmaxx = Math.max(x0, x1, x2), tminy = Math.min(y0, y1, y2), tmaxy = Math.max(y0, y1, y2);
+      const gi0 = Math.max(0, Math.floor((tminx - ox) / cw)), gi1 = Math.min(nx - 1, Math.floor((tmaxx - ox) / cw));
+      const gj0 = Math.max(0, Math.floor((tminy - oy) / ch)), gj1 = Math.min(ny - 1, Math.floor((tmaxy - oy) / ch));
+      for (let j = gj0; j <= gj1; j++) { const py = oy + (j + 0.5) * ch;
+        for (let i = gi0; i <= gi1; i++) { if (grid[j * nx + i]) continue; const px = ox + (i + 0.5) * cw;
+          const w0 = cross(x1, y1, x2, y2, px, py), w1 = cross(x2, y2, x0, y0, px, py), w2 = cross(x0, y0, x1, y1, px, py);
+          if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0)) grid[j * nx + i] = 1;
+        } }
+    }
+    return this.marchSquares(grid, nx, ny, ox, oy, cw, ch);
+  }
+
+  // marching squares over a binary cell grid -> stitched, simplified rings in world XY.
+  marchSquares(grid, nx, ny, ox, oy, cw, ch) {
+    const at = (i, j) => (i < 0 || j < 0 || i >= nx || j >= ny) ? 0 : grid[j * nx + i];
+    const wx = fi => ox + (fi + 0.5) * cw, wy = fj => oy + (fj + 0.5) * ch;
+    // edge index: 0=bottom,1=right,2=top,3=left ; fractional (fi,fj) of each crossing midpoint
+    const edgePt = (i, j, e) => e === 0 ? [i + 0.5, j] : e === 1 ? [i + 1, j + 0.5] : e === 2 ? [i + 0.5, j + 1] : [i, j + 0.5];
+    const TBL = { 1: [[0, 3]], 2: [[0, 1]], 3: [[1, 3]], 4: [[1, 2]], 5: [[0, 3], [1, 2]], 6: [[0, 2]], 7: [[2, 3]], 8: [[2, 3]], 9: [[0, 2]], 10: [[0, 1], [2, 3]], 11: [[1, 2]], 12: [[1, 3]], 13: [[0, 1]], 14: [[0, 3]] };
+    const key = p => Math.round(p[0] * 4) + ',' + Math.round(p[1] * 4);
+    const adj = new Map(); // ptKey -> array of {to, toKey}
+    const addSeg = (a, b) => { const ka = key(a), kb = key(b); if (ka === kb) return; if (!adj.has(ka)) adj.set(ka, []); if (!adj.has(kb)) adj.set(kb, []); adj.get(ka).push({ to: b, toKey: kb }); adj.get(kb).push({ to: a, toKey: ka }); };
+    for (let j = -1; j < ny; j++) for (let i = -1; i < nx; i++) {
+      const b = (at(i, j) ? 1 : 0) | (at(i + 1, j) ? 2 : 0) | (at(i + 1, j + 1) ? 4 : 0) | (at(i, j + 1) ? 8 : 0);
+      const segs = TBL[b]; if (!segs) continue;
+      for (const [e0, e1] of segs) addSeg(edgePt(i, j, e0), edgePt(i, j, e1));
+    }
+    // walk loops
+    const rings = []; const used = new Set();
+    const segId = (ka, kb) => ka < kb ? ka + '|' + kb : kb + '|' + ka;
+    for (const [startKey, links] of adj) {
+      for (const link of links) {
+        const sid = segId(startKey, link.toKey); if (used.has(sid)) continue;
+        const ring = []; let curKey = startKey, curPt = this.keyToPt(startKey, adj), prevKey = null, nextKey = link.toKey, nextPt = link.to;
+        used.add(sid); ring.push(curPt);
+        let guard = 0;
+        while (nextKey && nextKey !== startKey && guard++ < 100000) {
+          ring.push(nextPt); prevKey = curKey; curKey = nextKey;
+          const opts = adj.get(curKey) || []; let chosen = null;
+          for (const o of opts) { if (o.toKey === prevKey) continue; const id = segId(curKey, o.toKey); if (used.has(id)) continue; chosen = o; break; }
+          if (!chosen) { for (const o of opts) { if (o.toKey === prevKey) continue; chosen = o; break; } }
+          if (!chosen) break;
+          used.add(segId(curKey, chosen.toKey)); nextKey = chosen.toKey; nextPt = chosen.to;
+        }
+        if (ring.length >= 3) rings.push(this.simplifyRing(ring.map(p => [wx(p[0]), wy(p[1])]), Math.max(cw, ch) * 0.45));
+      }
+    }
+    return rings.filter(r => r && r.length >= 3);
+  }
+  keyToPt(k, adj) { const [a, b] = k.split(',').map(Number); return [a / 4, b / 4]; }
+  // Douglas-Peucker simplify a closed ring
+  simplifyRing(pts, eps) {
+    if (pts.length < 4) return pts;
+    const d2 = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy; if (L < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]); let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L; t = Math.max(0, Math.min(1, t)); return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)); };
+    const dp = (lo, hi, arr) => { let idx = -1, mx = eps; for (let i = lo + 1; i < hi; i++) { const d = d2(arr[i], arr[lo], arr[hi]); if (d > mx) { mx = d; idx = i; } } if (idx === -1) return [arr[lo]]; return dp(lo, idx, arr).concat(dp(idx, hi, arr)); };
+    const out = dp(0, pts.length - 1, pts).concat([pts[pts.length - 1]]);
+    return out.length >= 3 ? out : pts;
   }
 
   // read-only model-tree serialization from the evaluated geom

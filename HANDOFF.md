@@ -1,3 +1,32 @@
+# HANDOFF — `projection(cut)` render (Phase 9 tail)
+
+**Status: ✅ SHIPPED (this session).** `projection()` and `projection(cut=true)` now render and
+feed `linear_extrude`. Verified via `eval_js`: `projection() cube(10,center=true)` → 10×10 flat
+slab; `projection(cut=true) sphere(10)` → Ø20 disc; washer `difference(){cube([20,20,4],c);
+cylinder(r=4,c)}` → 2 rings (outer area 400 + hole ≈48), square edges simplified to 9 verts;
+`linear_extrude(4) projection() sphere(8)` → solid disc prism. No console errors.
+
+### How it works (Editor.dc.html, no engine change beyond a clearer warn)
+- `projectionRings(node)`: unions the projection's 3D children into one CSG brush in the
+  projection-local frame. For `cut=true`, intersects it with a thin box slab at z=0 (CSG
+  INTERSECTION) so the footprint = the cross-section; otherwise uses the whole solid.
+- `silhouetteRings(geo)`: CPU-rasterizes every triangle's XY footprint (point-in-tri at cell
+  centers) into a binary coverage grid (≤320 cells on the long axis, capped ~200k cells).
+- `marchSquares(...)`: marching squares over the grid (14-case edge-pair table, saddle cases
+  split), stitches segments into closed loops by exact midpoint-key adjacency, then
+  Douglas-Peucker simplifies each ring. Returns world-XY rings; even-odd nesting (outer vs
+  hole, multi-region) is resolved downstream by the existing `ringsToShapes`.
+- Wired into `collect2D` (the projection branch returned `null` before): it now bakes the
+  accumulated matrix into the rings and returns a `{leaf,rings}`, so projection works both
+  standalone (flat slab via `flat2DMesh`) and under an extrude (push-down prism).
+
+### Not done (deferred)
+Rings are raster-traced so curved outlines are polyline approximations (resolution-bounded, not
+exact polygons); `projection` of `import`ed meshes waits on Phase 10. Offset of boolean regions
+and the conformance harness (Phase 13) still open.
+
+---
+
 # HANDOFF — `text()` font shaping (Phase 9 tail)
 
 **Status: ✅ SHIPPED (this session).** `text(...)` now renders (bare 2D slab + under
