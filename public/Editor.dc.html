@@ -295,7 +295,7 @@
         <div style="padding:14px 10px;text-align:center;color:#5B616B;font-size:11.5px;line-height:1.5;">No solids yet.<br/>Add a cuboid to begin.</div>
       </sc-if>
       <sc-for list="{{ treeRows }}" as="s" hint-placeholder-count="0">
-        <div onClick="{{ s.onSelect }}" onContextMenu="{{ s.onCtx }}" style="{{ s.rowStyle }}">
+        <div onClick="{{ s.onSelect }}" onContextMenu="{{ s.onCtx }}" draggable="{{ s.draggable }}" onDragStart="{{ s.onDragStart }}" onDragOver="{{ s.onDragOver }}" onDrop="{{ s.onDrop }}" onDragEnd="{{ s.onDragEnd }}" style="{{ s.rowStyle }}">
           <sc-if value="{{ s.hasCaret }}" hint-placeholder-val="{{ false }}">
             <button onClick="{{ s.onCaret }}" style="{{ s.caretStyle }}">
               <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M4 2.5 8 6l-4 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1683,6 +1683,57 @@ class Component extends DCLogic {
   };
   closeCtx = () => { if (this.state.ctxMenu) this.setState({ ctxMenu: null }); };
 
+  // ============ MODEL-TREE REORDER (drag + context menu) ============
+  // Reorder a node within its parent array (siblings only). Order matters — esp. a
+  // difference's first child is the base everything else is subtracted from.
+  commitReorder() {
+    this.reindex();
+    this.setState({ ctxMenu: null, dragOver: null }, () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  }
+  reorderNode(dragId, targetId, after) {
+    if (dragId === targetId) return;
+    const arr = this.parentArrayOf(dragId);
+    if (!arr || arr !== this.parentArrayOf(targetId)) { this.flashStatus('Drop onto a sibling to reorder'); return; }
+    const dn = this.findNode(dragId), tn = this.findNode(targetId);
+    const from = arr.indexOf(dn); if (from < 0) return;
+    arr.splice(from, 1);
+    let to = arr.indexOf(tn); if (to < 0) { arr.splice(from, 0, dn); return; }
+    if (after) to += 1;
+    arr.splice(to, 0, dn);
+    this.commitReorder();
+  }
+  moveNodeBy(id, dir) {
+    const arr = this.parentArrayOf(id);
+    const n = this.findNode(id), i = arr ? arr.indexOf(n) : -1, j = i + dir;
+    if (i < 0 || j < 0 || j >= arr.length) { this.setState({ ctxMenu: null }); return; }
+    arr.splice(i, 1); arr.splice(j, 0, n);
+    this.commitReorder();
+  }
+  onTreeDragStart = (id, e) => {
+    if (this.state.readOnly) { e.preventDefault(); return; }
+    this._dragId = id;
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); } catch (_) {} }
+  };
+  onTreeDragOver = (id, e) => {
+    if (!this._dragId || this._dragId === id) return;
+    if (this.parentArrayOf(this._dragId) !== this.parentArrayOf(id)) return;  // siblings only
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    const key = id + (after ? ':after' : ':before');
+    if (this.state.dragOver !== key) this.setState({ dragOver: key });
+  };
+  onTreeDrop = (id, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const dragId = this._dragId; this._dragId = null;
+    const after = this.state.dragOver ? this.state.dragOver.endsWith(':after') : false;
+    if (dragId) this.reorderNode(dragId, id, after);
+    else if (this.state.dragOver) this.setState({ dragOver: null });
+  };
+  onTreeDragEnd = () => { this._dragId = null; if (this.state.dragOver) this.setState({ dragOver: null }); };
+
+
   // ============ STATE MIRROR (nested) ============
   syncShapesState() {
     const ser = (n, depth) => {
@@ -2831,9 +2882,14 @@ class Component extends DCLogic {
         dotStyle: isGroup
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
           : `width:9px;height:9px;border-radius:${r.type === 'cuboid' ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
-        rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:pointer;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};`,
+        rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
         onSelect: (e) => { if (st.readOnly) return; this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
         onCtx: (e) => { if (st.readOnly) { e.preventDefault(); return; } this.openCtx(r.id, e); },
+        draggable: !st.readOnly,
+        onDragStart: (e) => this.onTreeDragStart(r.id, e),
+        onDragOver: (e) => this.onTreeDragOver(r.id, e),
+        onDrop: (e) => this.onTreeDrop(r.id, e),
+        onDragEnd: this.onTreeDragEnd,
         onDelete: (e) => { e.stopPropagation(); this.deleteShapeById(r.id); },
         showDelete: !st.readOnly,
         hasOrder: ord >= 0,
@@ -2869,6 +2925,13 @@ class Component extends DCLogic {
         items.push(mk('\u2922', 'Ungroup', () => this.ungroupById(ctx.id)));
       }
       if (items.length) items.push(sep);
+      const parr = this.parentArrayOf(ctx.id);
+      const pidx = parr ? parr.indexOf(node) : -1;
+      if (parr && parr.length > 1) {
+        if (pidx > 0) items.push(mk('\u2191', 'Move up', () => this.moveNodeBy(ctx.id, -1)));
+        if (pidx < parr.length - 1) items.push(mk('\u2193', 'Move down', () => this.moveNodeBy(ctx.id, 1)));
+        items.push(sep);
+      }
       items.push(mk('\u2715', 'Delete', () => this.deleteShapeById(ctx.id), { danger: true, color: '#E0736B' }));
       ctxItems = items;
       const mx = Math.min(ctx.x, window.innerWidth - 200);
