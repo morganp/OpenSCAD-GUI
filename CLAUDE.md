@@ -5,6 +5,18 @@
 - The main file must be named `index.html`.
 - **Semantic versioning on zips.** When offering a download zip, label it with a version number (e.g. `v0.1.0`, `v0.1.1`). Increment the patch for fixes, minor for new features, major for breaking changes.
 
+## Release after every feature (REQUIRED)
+- **Version source of truth: the root `VERSION` file.** It holds the current semver (e.g. `0.4.0`)
+  and nothing else. Read it to know the current version; it is the only place the number is tracked.
+- **After every shipped feature, cut a semantic-versioned release zip.** Steps, in order:
+  1. Bump `VERSION` (patch = fix, minor = new feature, major = breaking).
+  2. Snapshot the project into `releases/OpenSCAD-GUI-v<version>/` (the servable `public/` plus
+     `CLAUDE.md`, `HANDOFF.md`, `README.md` — mirror the existing release folders). The folder
+     basename MUST be `OpenSCAD-GUI-v<version>`.
+  3. Present **that version-named folder** to the user for download — the zip filename is derived
+     from the folder basename, so it comes out as `OpenSCAD-GUI-v<version>.zip` (never a bare
+     `OpenSCAD-GUI.zip`). Never present `public/` or the project root for a release.
+
 ## Project layout (applies to ALL sites in this project, current and future)
 - **All servable site code lives in `public/`** — the deployable entrypoint is
   `public/index.html`, alongside its imported `.dc.html` components, engine/helper `.js`,
@@ -166,8 +178,10 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       is added so three-bvh-csg can match attributes against primitives); `center=true` honored;
       missing/unsupported files log a console warning. **3MF/AMF and SVG/DXF (2D) not parsed yet.**
 - [ ] `surface(file="file.dat|png", center, convexity)`.
-- [~] `include <file.scad>` / `use <file.scad>` — **parsed** (tokenized path) but treated as no-op;
-      needs a file provider (project files / uploads).
+- [x] `include <file.scad>` / `use <file.scad>` — **resolved against a drag-drop .scad file provider.**
+      `include` splices the file's full statement list inline (vars + defs + geometry); `use` imports
+      only its module/function definitions. Recursive (nested include/use), cycle-guarded, warns on a
+      missing/unloaded file. Files keyed by lowercased basename.
 - [ ] *(Fallback: route binary-mesh import + font shaping through openscad-wasm if needed.)*
 
 ## Phase 11 — Modifier characters  `[x]`
@@ -206,11 +220,11 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** `surface`/`include`
+**Not yet rendered:** `surface`
 file loading, 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`, live
 `$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
 `projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
 
 **Estimated true language coverage ≈ 93–95%** (by cheat-sheet feature count). The remaining
-~5–7% is `surface`, the rest of `import` (3MF/AMF/SVG/DXF), `include`/`use` file loading, and polish items.
+~5–7% is `surface`, the rest of `import` (3MF/AMF/SVG/DXF), and polish items. `include`/`use` now load via the drag-drop .scad provider.

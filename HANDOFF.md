@@ -1,4 +1,36 @@
-# HANDOFF — STL/OFF `import()` (Phase 10 start)
+# HANDOFF — `include` / `use` file loading (Phase 10)
+
+**Status: ✅ SHIPPED (this session).** `include <f.scad>` and `use <f.scad>` now resolve against a
+drag-drop `.scad` file provider. Verified via `eval_js(window.ScadEngine.run(...,{files}))`:
+`use <lib.scad>` imports only the lib's `function`/`module` defs (3 ring geoms from a loop calling
+`ring()`/`add()`, the lib's own top-level `cube` NOT executed); `include <lib.scad>` splices the
+whole file inline (lib cube + sphere = 2 geoms, the lib's `WIDTH` var available downstream); a
+missing file warns ("file not loaded — drag the .scad file onto the viewport") and the rest still
+renders; a self-referencing file is cycle-guarded (no hang, "circular reference skipped").
+
+### How it works
+- **Engine** (`scad-engine.js`): new `resolveImports(stmts, files, ctx, stack)` runs in `run()` right
+  after parse, before `evalBlock`. `include` → splice the referenced file's full (recursively
+  resolved) statement list at that point; `use` → keep only `moduledef`/`functiondef` from it.
+  `files` = `{ "basename.scad" (lowercased): sourceText }` from `opts.files`. Recursive, cycle-guarded
+  (`stack`), and pushes a one-shot warning per missing/cyclic file. Parse errors in a sub-file are
+  prefixed `(file) …`. `isAdvanced` already routes any include/use program to `runAdvanced`.
+- **Editor** (`Editor.dc.html`): `this._scadFiles` Map (basename-lower → `{name,key,source,lines}`).
+  Drag-drop now splits files by extension — `.stl/.off` → `loadImportFiles`, `.scad` → `loadScadFiles`.
+  `runAdvanced` passes `files: this.scadFilesMap()` to `ScadEngine.run`. Dropping a `.scad` into an
+  **empty** editor opens it as the main document; otherwise it's registered as a library and the
+  model re-runs. Libs appear in the same top-left chip strip as meshes (green code-bracket icon,
+  "N lines" meta, × to remove). `removeScad` drops + re-runs.
+
+### Not done (deferred)
+A used file's own top-level *variables* aren't visible to its functions (only defs are imported — the
+common library case works; `use`d file-scope constants don't). No project-filesystem resolution
+(uploads/drag only, in-memory for the session). 3MF/AMF + SVG/DXF import, `surface()`, and the
+conformance harness (Phase 13) remain.
+
+---
+
+
 
 **Status: ✅ SHIPPED (this session).** `import("…stl"|"…off")` now renders. Verified via `eval_js`
 with synthetic meshes: binary + ASCII STL and OFF all parse; a tetra renders (4 tris), transforms
