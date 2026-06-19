@@ -1,3 +1,42 @@
+# HANDOFF — Code-editor line gutter + error markers (Phase 12) — ✅ SHIPPED (v0.11.0)
+
+The code drawer's `<textarea>` now has a **scroll-synced line-number gutter**; lines the engine
+reports an error on are marked red (bold red number + faint red row tint + a red bar on the gutter's
+inner edge). Editor-only change. Verified via `eval_js`: `cube(;` on line 4 → `errorLines:[4]`, gutter
+row 4 tinted/barred, console error `… (line 4)`; fixing the program clears all markers (`errorLines:[]`,
+0 tinted rows); numbers stay aligned (textarea soft-wrap disabled with `white-space:pre`, gutter
+shares font/line-height/top-padding and tracks `scrollTop` on the textarea's `onScroll`).
+
+- **State:** `errorLines: []`; `finishAdvanced` sets it from `res.errors` lines (>0) and carries `line`
+  on each console-log row; the simple-program path and `exitReadOnly` clear it.
+- **renderVals:** `gutterRows` = `state.code` line count → `{n, isError, style, barStyle}` via the
+  errorLines set (re-renders live as you type); `setGutter`, `onCodeScroll`.
+- **Deferred:** in-textarea squiggles/tooltips (gutter only); warnings aren't line-marked (most carry
+  no line); global `$fn` UI control is still the remaining Phase 12 box.
+
+---
+
+# HANDOFF — Code-editor line gutter + error markers (Phase 12) — IN PROGRESS (target v0.11.0)
+
+**Feature:** the code drawer's plain `<textarea>` gains a **scroll-synced line-number gutter**, and
+lines the engine reports an error on are **marked red** in the gutter (red bold number + faint red
+row tint + a red bar on the gutter's inner edge). The engine already attaches `line` to every parse
+and evaluate error (`e.line`, surfaced as `res.errors[i].line`); this just plumbs it to the UI.
+
+**Build order (Editor.dc.html only):**
+1. [ ] State `errorLines: []`. finishAdvanced sets it from `res.errors` (lines > 0); the simple-program
+       path and `exitReadOnly` clear it. Carry `line` on each console-log entry too.
+2. [ ] Template: wrap the textarea in a flex row — a `ref`'d gutter `<div>` (overflow hidden, matched
+       font/line-height/top-padding) + the textarea (now `white-space:pre; overflow:auto`, transparent
+       bg, `onScroll` syncs `gutter.scrollTop`). One gutter row per source line.
+3. [ ] renderVals: `gutterRows` = `state.code` lines → `{n, isError, style, barStyle}` using the
+       errorLines set; `setGutter`, `onCodeScroll`.
+4. [ ] Verify: a syntax error (`cube(;`) marks its line red in the gutter + console; fixing it clears
+       the marker; line numbers stay aligned while scrolling a long file; soft-wrap disabled so 1
+       source line = 1 gutter row.
+
+---
+
 # HANDOFF — DXF 2D import (Phase 10) — ✅ SHIPPED (v0.10.0)
 
 `import("file.dxf")` now renders, flowing through the **same pipeline as SVG** (`primitive2d`

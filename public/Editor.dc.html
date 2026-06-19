@@ -60,7 +60,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.10.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.11.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -392,7 +392,14 @@
         </button>
       </div>
     </div>
-    <textarea ref="{{ setCodeArea }}" class="scad cad-scroll" value="{{ code }}" onChange="{{ onCodeChange }}" spellcheck="false" style="flex:1;width:100%;background:#101216;border:none;color:#CBD2DA;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.62;padding:15px 16px;letter-spacing:.01em;tab-size:2;"></textarea>
+    <div style="flex:1;display:flex;min-height:0;overflow:hidden;background:#101216;">
+      <div ref="{{ setGutter }}" aria-hidden="true" style="flex:none;overflow:hidden;background:#0C0E11;border-right:1px solid #1B1E23;padding:15px 0;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.62;letter-spacing:.01em;user-select:none;">
+        <sc-for list="{{ gutterRows }}" as="g" hint-placeholder-count="1">
+          <div style="{{ g.style }}"><span>{{ g.n }}</span><span style="{{ g.barStyle }}"></span></div>
+        </sc-for>
+      </div>
+      <textarea ref="{{ setCodeArea }}" class="scad cad-scroll" value="{{ code }}" onChange="{{ onCodeChange }}" onScroll="{{ onCodeScroll }}" spellcheck="false" style="flex:1;min-width:0;background:transparent;border:none;color:#CBD2DA;font-family:'IBM Plex Mono',monospace;font-size:12.5px;line-height:1.62;padding:15px 16px;letter-spacing:.01em;tab-size:2;white-space:pre;overflow:auto;resize:none;"></textarea>
+    </div>
     <sc-if value="{{ consoleVisible }}" hint-placeholder-val="{{ false }}">
       <div class="cad-scroll" style="flex:none;max-height:168px;overflow-y:auto;border-top:1px solid #23272E;background:#0D0F12;padding:7px 0;">
         <sc-for list="{{ consoleRows }}" as="c" hint-placeholder-count="0">
@@ -462,7 +469,8 @@ class Component extends DCLogic {
     panelPos: {},          // { shape|group|params|edge: {left, top} } dragged panel positions
     readOnly: false,       // true when an advanced program is rendered from the SCAD evaluator
     consoleOpen: false,    // console panel visibility
-    consoleLog: [],        // [{type:'echo'|'warn'|'error', msg}]
+    consoleLog: [],        // [{type:'echo'|'warn'|'error', msg, line}]
+    errorLines: [],        // 1-based source lines the last run reported an error on (gutter markers)
   };
   _panels = {};            // live refs to draggable panel elements
 
@@ -490,6 +498,8 @@ class Component extends DCLogic {
 
   setViewport = (el) => { if (el && !this._vp) { this._vp = el; this.attachMeshDrop(el); if (window.__threeReady && !this._inited) this.initThree(); } };
   setCodeArea = (el) => { this._codeArea = el; };
+  setGutter = (el) => { this._gutter = el; };
+  onCodeScroll = (e) => { if (this._gutter) this._gutter.scrollTop = e.target.scrollTop; };
   setFileInput = (el) => { this._fileInput = el; };
   setImportInput = (el) => { this._importInput = el; };
 
@@ -1889,7 +1899,7 @@ class Component extends DCLogic {
     const vmap = this.varMap();
     for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
     this.clearEdge();
-    this.setState({ selectedShapeId: null, selectedIds: [], readOnly: false }, () => {
+    this.setState({ selectedShapeId: null, selectedIds: [], readOnly: false, errorLines: [] }, () => {
       this.rebuildScene(); this.updateGizmo();
       this.syncVarsState(); this.syncShapesState(); this.regenCode();
     });
@@ -2075,13 +2085,15 @@ class Component extends DCLogic {
     // console
     const log = [];
     for (const e of res.echos) log.push({ type: 'echo', msg: e.msg });
-    for (const w of res.warnings) log.push({ type: 'warn', msg: w.msg });
-    for (const er of res.errors) log.push({ type: 'error', msg: er.msg });
+    for (const w of res.warnings) log.push({ type: 'warn', msg: w.msg, line: w.line || 0 });
+    for (const er of res.errors) log.push({ type: 'error', msg: er.msg, line: er.line || 0 });
+    const errorLines = Array.from(new Set(res.errors.map(er => er.line || 0).filter(n => n > 0)));
     const meshCount = (() => { let c = 0; grp.traverse(o => { if (o.isMesh) c++; }); return c; })();
     this.setState({
       readOnly: true, selectedShapeId: null, selectedIds: [], code: txt,
       tree: (root ? [root] : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0)),
       consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
+      errorLines,
     });
     this.flashStatus(meshCount ? ('Rendered ' + meshCount + ' object' + (meshCount !== 1 ? 's' : '') + ' \u2014 read-only') : (res.errors.length ? 'Render error \u2014 see console' : 'Nothing to render'));
     // camera write-back: script-assigned $vp* drives the view
@@ -2544,7 +2556,7 @@ class Component extends DCLogic {
   }
   exitReadOnly = () => {
     this.clearEngineRender();
-    this.setState({ readOnly: false, tree: [], consoleLog: [] }, () => { this.syncShapesState(); this.flashStatus('Cleared'); });
+    this.setState({ readOnly: false, tree: [], consoleLog: [], errorLines: [] }, () => { this.syncShapesState(); this.flashStatus('Cleared'); });
   };
   toggleConsole = () => this.setState({ consoleOpen: !this.state.consoleOpen });
   buildNodeFromParsed(p) {
@@ -3660,6 +3672,22 @@ class Component extends DCLogic {
         : 'color:#C58A3B;',
       csgText: st.csgOk ? '\u25cf live CSG preview' : '\u25cf code-only (CSG offline)',
       codeMeta: (st.code ? st.code.split('\n').length : 0) + ' lines',
+      setGutter: this.setGutter,
+      onCodeScroll: this.onCodeScroll,
+      gutterRows: (() => {
+        const errs = new Set(st.errorLines || []);
+        const count = Math.max(1, st.code ? st.code.split('\n').length : 1);
+        const rows = [];
+        for (let n = 1; n <= count; n++) {
+          const bad = errs.has(n);
+          rows.push({
+            n,
+            style: 'position:relative;height:1.62em;padding:0 10px 0 12px;text-align:right;color:' + (bad ? '#E0736B' : '#454B54') + ';font-weight:' + (bad ? '600' : '400') + ';background:' + (bad ? 'rgba(224,115,107,.13)' : 'transparent') + ';',
+            barStyle: bad ? 'position:absolute;right:0;top:0;bottom:0;width:2px;background:#E0736B;' : 'display:none;',
+          });
+        }
+        return rows;
+      })(),
       readOnly: st.readOnly,
       toggleConsole: this.toggleConsole,
       consoleVisible: st.consoleOpen && (st.consoleLog || []).length > 0,
