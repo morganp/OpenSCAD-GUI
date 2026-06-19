@@ -171,11 +171,14 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 (Holes in `rotate_extrude` profiles are ignored for now; offset of boolean regions passes through.)
 
 ## Phase 10 — Import, surface, includes  `[~]`
-- [~] `import("file.stl|off|3mf|amf")` (3D meshes) / `import("file.svg")` (2D) — **STL (binary + ASCII),
-      OFF, and SVG** import via a drag-and-drop / "Import mesh" file provider. SVG (`path` with
+- [~] `import("file.stl|off|3mf|amf")` (3D meshes) / `import("file.svg|dxf")` (2D) — **STL (binary + ASCII),
+      OFF, SVG, and DXF** import via a drag-and-drop / "Import mesh" file provider. SVG (`path` with
       M/L/H/V/C/S/Q/T/A/Z + bezier/arc flattening, `rect`/`circle`/`ellipse`/`polygon`/`polyline`,
       nested `<g transform>` translate/scale/rotate/matrix/skew, Y-flipped to OpenSCAD space) parses
-      to 2D rings that flow through the extrude/2D-boolean pipeline. **3MF/AMF and DXF not parsed yet.**
+      to 2D rings that flow through the extrude/2D-boolean pipeline. **DXF** (ASCII `ENTITIES`: LINE,
+      LWPOLYLINE+bulge, old-style POLYLINE/VERTEX, CIRCLE, ARC, ELLIPSE, SPLINE; open segments chained
+      end-to-end into closed rings; no Y-flip — DXF is y-up) flows through the same SVG store/pipeline.
+      **3MF/AMF not parsed yet.**
 - [x] `surface(file="file.dat|png", center, invert, convexity)` — **DAT (whitespace float matrix,
       `#`/blank lines skipped) and PNG (sRGB luminance → 0..100, `invert`) via the drag-drop / "Import
       mesh" file provider.** Builds a watertight solid (heightmap top + 1-unit base below min + side
@@ -222,11 +225,11 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** 3MF/AMF + DXF import (Phase 10 tail),
+**Not yet rendered:** 3MF/AMF import (Phase 10 tail),
 offset of boolean regions, and the conformance harness (Phase 13).
 `surface()` heightmaps (DAT + PNG) now render (watertight solid via the drag-drop provider).
 `projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 98%** (by cheat-sheet feature count). The remaining
-~2% is 3MF/AMF/DXF import, offset of boolean regions, and polish items. `include`/`use` now load via the drag-drop .scad provider.
+**Estimated true language coverage ≈ 99%** (by cheat-sheet feature count). The remaining
+~1% is 3MF/AMF import, offset of boolean regions, and polish items. `include`/`use` now load via the drag-drop .scad provider.

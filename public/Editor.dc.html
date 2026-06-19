@@ -72,7 +72,7 @@
         Save .scad
       </button>
       <div style="width:1px;height:18px;background:#2C3037;margin:0 1px;"></div>
-      <button onClick="{{ openImport }}" title="Import a mesh (STL / OFF) or drop a .scad library onto the viewport — used by include &lt;…&gt; / use &lt;…&gt;" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
+      <button onClick="{{ openImport }}" title="Import a mesh (STL / OFF), 2D vector (SVG / DXF), heightmap (DAT / PNG), or drop a .scad library onto the viewport — used by include &lt;…&gt; / use &lt;…&gt;" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.6 11 5.6M8 2.6 5 5.6M8 2.6V10" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5v1.8A1.2 1.2 0 0 0 4.2 13.5h7.6a1.2 1.2 0 0 0 1.2-1.2v-1.8" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round"/></svg>
         Import mesh
       </button>
@@ -430,7 +430,7 @@
   </sc-if>
 
   <input ref="{{ setFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onFileChosen }}" style="display:none;" />
-  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.dat,.png,.svg" multiple onChange="{{ onImportChosen }}" style="display:none;" />
+  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.dat,.png,.svg,.dxf" multiple onChange="{{ onImportChosen }}" style="display:none;" />
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -1982,14 +1982,13 @@ class Component extends DCLogic {
       if (ext !== 'stl' && ext !== 'off') res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): only STL and OFF are supported so far' }]);
       else if (!(this._imports && this._imports.has(f.toLowerCase()))) res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): file not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
     }
-    // 2D vector imports (.svg) → attach parsed rings from the store (sync)
+    // 2D vector imports (.svg / .dxf) → attach parsed rings from the store (sync)
     const svgs = []; this.collectSvgImportNodes(res.geom, svgs);
     for (const n of svgs) {
       const f = n.params.file || '';
-      if (n.params.ext === 'dxf') { res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): DXF is not parsed yet \u2014 use SVG' }]); continue; }
       const store = this._svg && this._svg.get(f.toLowerCase());
       if (store) n.rings = store.rings;
-      else res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): SVG not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
+      else res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): vector file not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
     }
     const texts = []; this.collectTextNodes(res.geom, texts);
     if (texts.length) {
@@ -2756,7 +2755,7 @@ class Component extends DCLogic {
 
   // ============ MESH IMPORT (Phase 10: import STL / OFF) ============
   openImport = () => { if (this._importInput) this._importInput.click(); };
-  onImportChosen = (e) => { const all = Array.from(e.target.files || []); this.loadImportFiles(all.filter(f => /\.(stl|off)$/i.test(f.name))); this.loadSurfaceFiles(all.filter(f => /\.(dat|png)$/i.test(f.name))); this.loadSvgFiles(all.filter(f => /\.svg$/i.test(f.name))); e.target.value = ''; };
+  onImportChosen = (e) => { const all = Array.from(e.target.files || []); this.loadImportFiles(all.filter(f => /\.(stl|off)$/i.test(f.name))); this.loadSurfaceFiles(all.filter(f => /\.(dat|png)$/i.test(f.name))); this.loadSvgFiles(all.filter(f => /\.(svg|dxf)$/i.test(f.name))); e.target.value = ''; };
   attachMeshDrop(el) {
     const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
     el.addEventListener('dragover', (ev) => { stop(ev); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'; });
@@ -2764,7 +2763,7 @@ class Component extends DCLogic {
       const all = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []);
       const meshes = all.filter(f => /\.(stl|off)$/i.test(f.name));
       const heightmaps = all.filter(f => /\.(dat|png)$/i.test(f.name));
-      const vectors = all.filter(f => /\.svg$/i.test(f.name));
+      const vectors = all.filter(f => /\.(svg|dxf)$/i.test(f.name));
       const scads = all.filter(f => /\.scad$/i.test(f.name));
       if (meshes.length) this.loadImportFiles(meshes);
       if (heightmaps.length) this.loadSurfaceFiles(heightmaps);
@@ -2989,10 +2988,11 @@ class Component extends DCLogic {
       const rd = new FileReader();
       rd.onload = () => {
         try {
-          const rings = this.parseSVG(String(rd.result || ''));
+          const isDxf = /\.dxf$/i.test(f.name);
+          const rings = isDxf ? this.parseDXF(String(rd.result || '')) : this.parseSVG(String(rd.result || ''));
           if (rings && rings.length) { this._svg.set(f.name.toLowerCase(), { name: f.name, rings, contours: rings.length }); loaded.push(f.name); }
           else this.flashStatus('No drawable shapes in ' + f.name);
-        } catch (e) { console.warn('svg parse', e); this.flashStatus('Failed to parse ' + f.name); }
+        } catch (e) { console.warn('vector parse', e); this.flashStatus('Failed to parse ' + f.name); }
         if (--pending === 0) this.afterSvg(loaded);
       };
       rd.onerror = () => { if (--pending === 0) this.afterSvg(loaded); };
@@ -3132,6 +3132,185 @@ class Component extends DCLogic {
       const ey = cy + rx * Math.cos(th) * sp + ry * Math.sin(th) * cp;
       out.push([ex, ey]);
     }
+  }
+  // ============ DXF 2D IMPORT (Phase 10: import .dxf → rings → 2D pipeline) ============
+  // DXF coords are already y-up (CAD math orientation) — no flip needed (unlike SVG).
+  parseDXF(text) {
+    const s = String(text);
+    if (/AutoCAD Binary DXF/.test(s.slice(0, 64))) return [];   // binary DXF unsupported
+    const lines = s.split(/\r\n|\r|\n/);
+    // group-code/value pairs
+    const pairs = [];
+    for (let i = 0; i + 1 < lines.length; i += 2) {
+      const code = parseInt(lines[i].trim(), 10);
+      if (isNaN(code)) continue;
+      pairs.push([code, lines[i + 1].trim()]);
+    }
+    // collect ENTITIES section pairs
+    const ents = []; let inEnt = false;
+    for (let k = 0; k < pairs.length; k++) {
+      const c = pairs[k][0], v = pairs[k][1];
+      if (c === 0 && v === 'SECTION') { const nm = (pairs[k + 1] && pairs[k + 1][0] === 2) ? pairs[k + 1][1] : ''; inEnt = (nm === 'ENTITIES'); continue; }
+      if (c === 0 && v === 'ENDSEC') { inEnt = false; continue; }
+      if (inEnt) ents.push([c, v]);
+    }
+    // split into entity blocks (each begins at a code-0 type marker)
+    const blocks = []; let cur = null;
+    for (const [c, v] of ents) {
+      if (c === 0) { if (cur) blocks.push(cur); cur = (v === 'ENDSEC') ? null : { type: v, codes: [] }; }
+      else if (cur) cur.codes.push([c, v]);
+    }
+    if (cur) blocks.push(cur);
+
+    const closed = [];   // rings ready as-is (circles, closed polylines, full ellipses)
+    const segs = [];     // open polylines (lines, arcs, open polylines) → chained later
+    const TAU = Math.PI * 2;
+    const get = (b, code) => { for (const [c, v] of b.codes) if (c === code) return parseFloat(v); return undefined; };
+    const flag = (b, code) => { const v = get(b, code); return isNaN(v) ? 0 : (v | 0); };
+
+    // sample a center-arc from a0 to a1 (degrees, CCW) into points
+    const sampleArc = (cx, cy, r, a0deg, a1deg) => {
+      let a0 = a0deg * Math.PI / 180, a1 = a1deg * Math.PI / 180;
+      while (a1 <= a0) a1 += TAU;
+      const sweep = a1 - a0, n = Math.max(2, Math.ceil(sweep / (Math.PI / 24))), pts = [];
+      for (let i = 0; i <= n; i++) { const a = a0 + sweep * i / n; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+      return pts;
+    };
+
+    for (const b of blocks) {
+      const t = (b.type || '').toUpperCase();
+      if (t === 'LINE') {
+        const x1 = get(b, 10), y1 = get(b, 20), x2 = get(b, 11), y2 = get(b, 21);
+        if ([x1, y1, x2, y2].every(n => !isNaN(n))) segs.push([[x1, y1], [x2, y2]]);
+      } else if (t === 'CIRCLE') {
+        const cx = get(b, 10), cy = get(b, 20), r = get(b, 40);
+        if (!isNaN(cx) && !isNaN(cy) && r > 0) { const ring = sampleArc(cx, cy, r, 0, 360); ring.pop(); closed.push(ring); }
+      } else if (t === 'ARC') {
+        const cx = get(b, 10), cy = get(b, 20), r = get(b, 40), a0 = get(b, 50), a1 = get(b, 51);
+        if (!isNaN(cx) && !isNaN(cy) && r > 0) segs.push(sampleArc(cx, cy, r, a0 || 0, isNaN(a1) ? 360 : a1));
+      } else if (t === 'ELLIPSE') {
+        const cx = get(b, 10), cy = get(b, 20), mx = get(b, 11), my = get(b, 21);
+        const ratio = get(b, 40), p0 = get(b, 41), p1 = get(b, 42);
+        if (!isNaN(cx) && !isNaN(mx)) {
+          const major = Math.hypot(mx, my), rot = Math.atan2(my, mx), minor = major * (ratio || 1);
+          let s0 = isNaN(p0) ? 0 : p0, s1 = isNaN(p1) ? TAU : p1; while (s1 <= s0) s1 += TAU;
+          const full = (s1 - s0) >= TAU - 1e-6, sweep = s1 - s0, n = Math.max(8, Math.ceil(sweep / (Math.PI / 24))), pts = [];
+          for (let i = 0; i <= n; i++) {
+            const u = s0 + sweep * i / n, ca = Math.cos(u), sa = Math.sin(u);
+            pts.push([cx + major * ca * Math.cos(rot) - minor * sa * Math.sin(rot), cy + major * ca * Math.sin(rot) + minor * sa * Math.cos(rot)]);
+          }
+          if (full) { pts.pop(); closed.push(pts); } else segs.push(pts);
+        }
+      } else if (t === 'LWPOLYLINE') {
+        const verts = []; let v = null;
+        for (const [c, val] of b.codes) {
+          if (c === 10) { if (v) verts.push(v); v = { x: parseFloat(val), y: 0, bulge: 0 }; }
+          else if (c === 20 && v) v.y = parseFloat(val);
+          else if (c === 42 && v) v.bulge = parseFloat(val);
+        }
+        if (v) verts.push(v);
+        const ring = this.dxfPolyPoints(verts, (flag(b, 70) & 1) === 1);
+        if (ring) { if ((flag(b, 70) & 1) === 1) closed.push(ring); else segs.push(ring); }
+      }
+    }
+    // gather VERTEX runs for old-style POLYLINE (re-walk blocks, tracking the active polyline)
+    let active = null;
+    for (const b of blocks) {
+      const t = (b.type || '').toUpperCase();
+      if (t === 'POLYLINE') { active = { closed: (flag(b, 70) & 1) === 1, verts: [] }; }
+      else if (t === 'VERTEX' && active) { active.verts.push({ x: get(b, 10), y: get(b, 20), bulge: get(b, 42) || 0 }); }
+      else if (t === 'SEQEND' && active) {
+        const ring = this.dxfPolyPoints(active.verts.filter(p => !isNaN(p.x) && !isNaN(p.y)), active.closed);
+        if (ring) { if (active.closed) closed.push(ring); else segs.push(ring); }
+        active = null;
+      } else if (t !== 'VERTEX') { active = null; }
+    }
+    // SPLINE → polyline through fit points (11/21) else control points (10/20)
+    for (const b of blocks) {
+      if ((b.type || '').toUpperCase() !== 'SPLINE') continue;
+      const fit = [], ctrl = []; let fx = null, cxp = null;
+      for (const [c, val] of b.codes) {
+        if (c === 11) { fx = parseFloat(val); } else if (c === 21 && fx !== null) { fit.push([fx, parseFloat(val)]); fx = null; }
+        else if (c === 10) { cxp = parseFloat(val); } else if (c === 20 && cxp !== null) { ctrl.push([cxp, parseFloat(val)]); cxp = null; }
+      }
+      const pts = fit.length >= 2 ? fit : ctrl;
+      if (pts.length >= 2) { if ((flag(b, 70) & 1) === 1) { pts.push(pts[0]); closed.push(pts); } else segs.push(pts); }
+    }
+
+    const chained = this.chainDxfSegments(segs);
+    return closed.concat(chained).filter(r => r && r.length >= 3);
+  }
+  // vertices [{x,y,bulge}] → flattened polyline (bulge edges sampled as arcs); wraps if closed
+  dxfPolyPoints(verts, isClosed) {
+    verts = (verts || []).filter(v => !isNaN(v.x) && !isNaN(v.y));
+    if (verts.length < 2) return null;
+    const pts = [[verts[0].x, verts[0].y]];
+    const edges = isClosed ? verts.length : verts.length - 1;
+    for (let i = 0; i < edges; i++) {
+      const a = verts[i], b = verts[(i + 1) % verts.length];
+      const arc = this.arcFromBulge([a.x, a.y], [b.x, b.y], a.bulge || 0);
+      for (const p of arc) pts.push(p);
+    }
+    return pts;
+  }
+  // p1→p2 with a DXF bulge value → sampled arc points (excludes p1, includes p2)
+  arcFromBulge(p1, p2, bulge) {
+    const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1];
+    const dx = x2 - x1, dy = y2 - y1, chord = Math.hypot(dx, dy);
+    if (!bulge || chord < 1e-9) return [[x2, y2]];
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, nx = -dy / chord, ny = dx / chord;
+    const sag = (chord / 2) * bulge;                 // signed sagitta (bulge>0 → left of p1→p2)
+    const ax = mx + nx * sag, ay = my + ny * sag;    // apex on the arc
+    const c = this.circleFrom3([x1, y1], [ax, ay], [x2, y2]);
+    if (!c) return [[x2, y2]];
+    const TAU = Math.PI * 2, cx = c.cx, cy = c.cy, r = c.r;
+    const a0 = Math.atan2(y1 - cy, x1 - cx), aa = Math.atan2(ay - cy, ax - cx), a1 = Math.atan2(y2 - cy, x2 - cx);
+    const norm = (a) => { while (a < 0) a += TAU; return a % TAU; };
+    const ccwSpan = norm(a1 - a0), apexSpan = norm(aa - a0);
+    const ccw = apexSpan <= ccwSpan;
+    let s = a0, e = a1; if (ccw) { while (e < s) e += TAU; } else { while (e > s) e -= TAU; }
+    const sweep = Math.abs(e - s), n = Math.max(2, Math.ceil(sweep / (Math.PI / 24))), out = [];
+    for (let i = 1; i <= n; i++) { const a = s + (e - s) * i / n; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  circleFrom3(A, B, C) {
+    const ax = A[0], ay = A[1], bx = B[0], by = B[1], cx = C[0], cy = C[1];
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-9) return null;
+    const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    return { cx: ux, cy: uy, r: Math.hypot(ax - ux, ay - uy) };
+  }
+  // join open segments end-to-end (endpoint match) into closed rings
+  chainDxfSegments(segs) {
+    segs = (segs || []).map(s => s.slice()).filter(s => s && s.length >= 2);
+    if (!segs.length) return [];
+    // tolerance scaled to drawing size
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const s of segs) for (const p of s) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
+    const diag = Math.hypot(maxx - minx, maxy - miny) || 1;
+    const tol = Math.max(1e-6, diag * 1e-4);
+    const eq = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tol;
+    const out = [];
+    while (segs.length) {
+      let chain = segs.shift(), extended = true;
+      while (extended) {
+        extended = false;
+        if (eq(chain[0], chain[chain.length - 1]) && chain.length >= 4) break;
+        for (let i = 0; i < segs.length; i++) {
+          const s = segs[i], h = chain[0], t = chain[chain.length - 1], sh = s[0], st = s[s.length - 1];
+          if (eq(t, sh)) { chain = chain.concat(s.slice(1)); }
+          else if (eq(t, st)) { chain = chain.concat(s.slice(0, -1).reverse()); }
+          else if (eq(h, st)) { chain = s.slice(0, -1).concat(chain); }
+          else if (eq(h, sh)) { chain = s.slice(1).reverse().concat(chain); }
+          else continue;
+          segs.splice(i, 1); extended = true; break;
+        }
+      }
+      out.push(chain);
+    }
+    return out;
   }
   parseSTL(buffer) {
     const dv = new DataView(buffer), n = buffer.byteLength;

@@ -1,3 +1,66 @@
+# HANDOFF — DXF 2D import (Phase 10) — ✅ SHIPPED (v0.10.0)
+
+`import("file.dxf")` now renders, flowing through the **same pipeline as SVG** (`primitive2d`
+shape `import`, `dim:2`; rings parsed editor-side at load, stored in the shared `_svg` map,
+attached at run). Editor-only change — `parseDXF` + helpers, the `.dxf` warning short-circuit
+removed, drop/file-input/accept widened. Verified via `eval_js`: a 4-`LINE` square chains to one
+closed ring → `linear_extrude(3) import("plate.dxf")` renders an exact 20×20×3 solid; `CIRCLE`,
+closed `LWPOLYLINE`, `LWPOLYLINE` w/ bulge=1 (→ full circle, 49 pts), and full `ELLIPSE` each
+parse to one ring; no console errors.
+
+### How it works (Editor.dc.html only — engine already emitted the dxf node)
+- `parseDXF(text)`: reads the ASCII `ENTITIES` section as group-code/value pairs, splits into
+  entity blocks. `LINE`→2-pt open seg; `ARC`→open arc; open/closed `LWPOLYLINE` (10/20 verts,
+  42 bulge, 70&1 closed); old-style `POLYLINE`/`VERTEX`/`SEQEND` (second re-walk pass); `CIRCLE`
+  & full `ELLIPSE`→closed rings, partial→open seg; `SPLINE`→polyline through fit (11/21) else
+  control (10/20) points. **No Y-flip** (DXF is y-up). Binary DXF detected & skipped.
+- `chainDxfSegments`: joins open segments end-to-end by endpoint match (tol = bbox-diag·1e-4)
+  into closed rings — how separate LINE/ARC entities become a polygon outline.
+- `arcFromBulge` + `circleFrom3`: bulge → arc via circumcircle-through-apex (sign-robust).
+- `loadSvgFiles` dispatches `.dxf`→`parseDXF`, else `parseSVG`; both store into `_svg`. Drop,
+  file input `accept`, and the toolbar button title now include DXF.
+
+### Not done (deferred)
+Bulge on old-style `POLYLINE` arcs uses the same sampler (fine); `INSERT` block references and
+the `BLOCKS` section are skipped (only the `ENTITIES` section is read); `TEXT`/`DIMENSION`/`POINT`
+ignored. 3MF/AMF (zip/xml meshes), offset of boolean regions, and the conformance harness remain.
+
+---
+
+# HANDOFF — DXF 2D import (Phase 10) — IN PROGRESS (target v0.10.0)
+
+**Feature:** render `import("file.dxf")` — the last gap in the 2D import trio (SVG already ships).
+DXF flows through the **exact same pipeline as SVG**: the engine already emits a `primitive2d`
+(shape `import`, `dim:2`, `ext:'dxf'`); the editor parses the DXF at load into 2D rings, stores
+them in the shared `_svg` map, and attaches them at run (sync). No engine change needed — only
+the editor's DXF warning short-circuit is removed and a `parseDXF` added.
+
+**DXF scope (ASCII R12+ DXF):**
+- Read the `ENTITIES` section (group-code/value pairs). Coordinates are already y-up (CAD math
+  orientation) → **no flip** (unlike SVG).
+- Entities → contours:
+  - `LINE` (10/20→11/21) → 2-pt open segment.
+  - `LWPOLYLINE` (10/20 verts, 42 bulge per-vert, 70&1 closed) → polyline, bulge arcs sampled.
+  - `POLYLINE`/`VERTEX`/`SEQEND` (old style, 10/20 per VERTEX, 70&1 closed) → polyline + bulge.
+  - `CIRCLE` (10/20 center, 40 r) → closed ring.
+  - `ARC` (10/20, 40 r, 50 start°, 51 end°, CCW) → open arc segment.
+  - `ELLIPSE` (10/20 center, 11/21 major-axis vec, 40 ratio, 41 start, 42 end param) → ring/arc.
+  - `SPLINE` → polyline through fit pts (11/21) else control pts (10/20); 70&1 closed.
+  - `POINT/TEXT/DIMENSION/INSERT` → skipped (INSERT block refs unsupported — noted).
+- **Endpoint chaining:** open segments (LINE/ARC/open polylines) are joined end-to-end by
+  matching endpoints (tolerance) into closed rings — how real DXF outlines (many separate
+  LINE/ARC entities) become polygons. `chainDxfSegments`.
+- Bulge → arc via circumcircle-through-apex (`arcFromBulge` + `circleFrom3`), robust on sign.
+
+**Build order:**
+1. [ ] `parseDXF(text)` + `arcFromBulge`/`circleFrom3`/`chainDxfSegments` (editor).
+2. [ ] `loadSvgFiles` dispatches `.dxf` → `parseDXF`, else `parseSVG` (shared `_svg` store).
+3. [ ] Drop/file-input/accept + button title accept `.dxf`; remove the "DXF not parsed yet" warn.
+4. [ ] Verify via `eval_js`: LINE-chain square, LWPOLYLINE w/ bulge, CIRCLE, ARC chain, ELLIPSE;
+       `linear_extrude(2) import("x.dxf")` renders; missing file warns.
+
+---
+
 # HANDOFF — SVG 2D import (Phase 10) — ✅ SHIPPED (v0.9.0)
 
 `import("file.svg")` now renders. The engine emits a `primitive2d` (shape `import`, `dim:2`) so
