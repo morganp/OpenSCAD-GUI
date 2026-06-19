@@ -107,7 +107,7 @@ Real interpreter (lex → Pratt parse → AST → evaluate). Lives in `scad-engi
 - [x] Top-level + nested `name = value;` parameters.
 - [x] OpenSCAD scoping: lexical child scopes; **last assignment in scope wins** (hoisted).
 - [~] Special variables: `$fn` `$fa` `$fs` (tessellation) **done**; `$t` `$preview` `$children` done;
-      `$vpr/$vpt/$vpd/$vpf` exist as constants but are **not yet bound to the live camera**.
+      `$vpr/$vpt/$vpd/$vpf` **now bound to the live camera** (read each run; script assignment drives the view).
 - [x] `echo(...)` → console panel; `assert(cond, msg)` → error in console.
 - [ ] Deprecated `assign()` (parse + warn; treat as `let`).
 
@@ -200,7 +200,7 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       geometry tree, with the evaluated hierarchy shown in the Model Tree + a read-only badge.
 - [x] `$fn/$fa/$fs` drive real tessellation in the evaluator.  [ ] global `$fn` UI control wired to runs.
 - [x] Console panel for `echo`/`assert`/warnings (toggle in code drawer).  [ ] error markers on code lines.
-- [x] Color/modifier materials surfaced in the viewport.  [ ] camera ↔ `$vp*` binding.
+- [x] Color/modifier materials surfaced in the viewport.  [x] camera ↔ `$vp*` binding.
 
 ## Phase 13 — Conformance harness  `[ ]`
 - [ ] A suite of representative `.scad` snippets (one+ per cheat-sheet feature) with a
@@ -223,8 +223,8 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`, live
-`$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
+**Not yet rendered:** 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`,
+offset of boolean regions, and the conformance harness (Phase 13).
 `surface()` heightmaps (DAT + PNG) now render (watertight solid via the drag-drop provider).
 `projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).

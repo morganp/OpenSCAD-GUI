@@ -529,6 +529,11 @@ class Component extends DCLogic {
     controls.minDistance = 18;
     controls.maxDistance = 900;
     this.controls = controls;
+    // live $vp* binding: when the view settles, re-run programs that read the viewport vars
+    controls.addEventListener('end', () => {
+      if (this._applyingView) return;
+      if (this.state.readOnly && this._readsViewport) { clearTimeout(this._vpTimer); this._vpTimer = setTimeout(() => this.runCode(), 90); }
+    });
 
     // transform gizmo (move / resize handles)
     const TC = window.__TransformControls;
@@ -1868,6 +1873,7 @@ class Component extends DCLogic {
       catch (e) { advanced = true; }
     }
     if (advanced && window.ScadEngine) { this.runAdvanced(txt); return; }
+    this._readsViewport = false;
 
     const parsed = this.parseScad(txt);
     const count = this.collectPrimitives(parsed.tree || []).length;
@@ -1918,8 +1924,58 @@ class Component extends DCLogic {
     return !(ast.stmts || []).every(stmtSimple);
   }
 
+  // ============ VIEWPORT ($vp*) ↔ CAMERA BINDING (Phase 12) ============
+  // OpenSCAD gimbal camera in a Z-up world:
+  //   $vpt = look-at target, $vpd = distance, $vpf = vertical FOV,
+  //   $vpr = [90-elevation, 0, -90-azimuth] (degrees).
+  viewportFromCamera() {
+    const c = this.cam, t = this.controls ? this.controls.target : { x: 0, y: 0, z: 0 };
+    if (!c) return null;
+    const ox = c.position.x - t.x, oy = c.position.y - t.y, oz = c.position.z - t.z;
+    const r = Math.hypot(ox, oy, oz) || 1;
+    const elev = Math.asin(Math.max(-1, Math.min(1, oz / r))) * 180 / Math.PI;
+    const azim = Math.atan2(oy, ox) * 180 / Math.PI;
+    const norm = (a) => ((a % 360) + 360) % 360;
+    return {
+      vpr: [+norm(90 - elev).toFixed(2), 0, +norm(-90 - azim).toFixed(2)],
+      vpt: [+t.x.toFixed(3), +t.y.toFixed(3), +t.z.toFixed(3)],
+      vpd: +r.toFixed(2),
+      vpf: +c.fov.toFixed(2),
+    };
+  }
+  // apply script-assigned $vp* to the live camera (inverse of the mapping above)
+  applyViewport(vp, assigned) {
+    if (!this.cam || !this.controls || !assigned) return;
+    const cur = this.viewportFromCamera();
+    const vpr = assigned.vpr ? this.asVec3(vp.vpr, cur.vpr) : cur.vpr;
+    const vpt = assigned.vpt ? this.asVec3(vp.vpt, cur.vpt) : cur.vpt;
+    const vpd = assigned.vpd && typeof vp.vpd === 'number' ? vp.vpd : cur.vpd;
+    const vpf = assigned.vpf && typeof vp.vpf === 'number' ? vp.vpf : cur.vpf;
+    if (!assigned.vpr && !assigned.vpt && !assigned.vpd && !assigned.vpf) return;
+    const d2r = Math.PI / 180;
+    const elev = (90 - vpr[0]) * d2r, azim = (-90 - vpr[2]) * d2r;
+    const ox = vpd * Math.cos(elev) * Math.cos(azim);
+    const oy = vpd * Math.cos(elev) * Math.sin(azim);
+    const oz = vpd * Math.sin(elev);
+    this._applyingView = true;
+    this.controls.target.set(vpt[0], vpt[1], vpt[2]);
+    this.cam.position.set(vpt[0] + ox, vpt[1] + oy, vpt[2] + oz);
+    if (assigned.vpf && this.cam.fov !== vpf) { this.cam.fov = vpf; this.cam.updateProjectionMatrix(); }
+    this.controls.update();
+    setTimeout(() => { this._applyingView = false; }, 0);
+  }
+  asVec3(v, fallback) {
+    if (Array.isArray(v) && v.length >= 3 && v.every(n => typeof n === 'number')) return [v[0], v[1], v[2]];
+    return fallback;
+  }
+
   runAdvanced(txt) {
-    const res = window.ScadEngine.run(txt, { $fn: this.state.fn && this.state.fn < 100 ? 0 : 0, files: this.scadFilesMap() });
+    this._readsViewport = /\$vp[rtdf]/.test(txt);
+    const res = window.ScadEngine.run(txt, {
+      $fn: this.state.fn && this.state.fn < 100 ? 0 : 0,
+      files: this.scadFilesMap(),
+      viewport: this.viewportFromCamera(),
+    });
     const imports = []; this.collectImportNodes(res.geom, imports);
     for (const n of imports) {
       const f = n.params.file || '', ext = n.params.ext;
@@ -2020,6 +2076,10 @@ class Component extends DCLogic {
       consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
     });
     this.flashStatus(meshCount ? ('Rendered ' + meshCount + ' object' + (meshCount !== 1 ? 's' : '') + ' \u2014 read-only') : (res.errors.length ? 'Render error \u2014 see console' : 'Nothing to render'));
+    // camera write-back: script-assigned $vp* drives the view
+    if (res.viewport && res.viewport.assigned && Object.keys(res.viewport.assigned).length) {
+      this.applyViewport(res.viewport, res.viewport.assigned);
+    }
   }
 
   clearEngineRender() {

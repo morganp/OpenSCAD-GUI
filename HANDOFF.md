@@ -1,3 +1,20 @@
+# HANDOFF — `$vp*` ↔ camera binding (Phase 12) — ✅ SHIPPED (v0.7.0)
+
+`$vpr/$vpt/$vpd/$vpf` are now live, in both directions, for the advanced (evaluated) render path:
+- **Read (camera → $vp\*):** every run passes the live orbit camera into the engine via
+  `opts.viewport` — `$vpt`=target, `$vpd`=distance, `$vpf`=fov, `$vpr`=`[90-elev, 0, -90-azim]`
+  (Z-up gimbal). Programs that reference `$vp` re-run (throttled) when the view settles, so the
+  values track orbiting. `Editor.viewportFromCamera()`.
+- **Write ($vp\* → camera):** the engine reports which `$vp*` were assigned at top level
+  (`res.viewport.assigned`) plus their evaluated values; `Editor.applyViewport()` inverts the
+  mapping and drives the camera/target/fov. Guarded by `_applyingView` so a programmatic camera
+  move doesn't trigger the orbit-end re-run. `$t`-driven `$vpr` therefore animates the view.
+
+Verified: read reflects live camera exactly; write round-trips ([60,0,90]/200/[10,20,5]/30);
+orbit re-runs only for `$vp`-reading read-only programs; simple programs clear the flag.
+
+---
+
 # HANDOFF — `surface()` heightmaps (Phase 10) — IN PROGRESS
 
 **Feature:** render `surface(file="…dat|png", center, invert, convexity)` — the last

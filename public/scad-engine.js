@@ -415,12 +415,27 @@
     root.vars.set('$fn', opts.$fn != null ? opts.$fn : 0);
     root.vars.set('$fa', 12); root.vars.set('$fs', 2);
     root.vars.set('$t', opts.$t || 0); root.vars.set('$preview', true);
-    root.vars.set('$vpr', [55,0,25]); root.vars.set('$vpt', [0,0,0]); root.vars.set('$vpd', 500); root.vars.set('$vpf', 22.5);
+    const vp = opts.viewport || {};
+    root.vars.set('$vpr', vp.vpr || [55,0,25]); root.vars.set('$vpt', vp.vpt || [0,0,0]);
+    root.vars.set('$vpd', vp.vpd != null ? vp.vpd : 500); root.vars.set('$vpf', vp.vpf != null ? vp.vpf : 22.5);
     root.vars.set('PI', Math.PI);
     let geom = [];
     try { geom = evalBlock(parsed.ast, root, ctx, []); }
     catch (e) { errors.push({ msg: String(e.message || e), line: e.line || 0 }); }
-    return { geom, echos, warnings, errors, ast: parsed.ast };
+    // report viewport vars + whether the script assigned them at top level (for camera write-back)
+    const vpAssigned = {};
+    for (const s of topStmts) if (s && s.t === 'assign') {
+      if (s.name === '$vpr') vpAssigned.vpr = true;
+      else if (s.name === '$vpt') vpAssigned.vpt = true;
+      else if (s.name === '$vpd') vpAssigned.vpd = true;
+      else if (s.name === '$vpf') vpAssigned.vpf = true;
+    }
+    const viewport = {
+      vpr: root.vars.get('$vpr'), vpt: root.vars.get('$vpt'),
+      vpd: root.vars.get('$vpd'), vpf: root.vars.get('$vpf'),
+      assigned: vpAssigned,
+    };
+    return { geom, echos, warnings, errors, ast: parsed.ast, viewport };
   }
 
   function warn(ctx, msg) { if (!ctx.warnedSet.has(msg)) { ctx.warnedSet.add(msg); ctx.warnings.push({ msg }); } }
