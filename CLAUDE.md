@@ -205,7 +205,7 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] "Simple vs advanced" detector (`isAdvanced(ast)`): simple programs hydrate the GUI
       authoring tree (editable); advanced programs render **read-only** from the evaluated
       geometry tree, with the evaluated hierarchy shown in the Model Tree + a read-only badge.
-- [x] `$fn/$fa/$fs` drive real tessellation in the evaluator.  [ ] global `$fn` UI control wired to runs.
+- [x] `$fn/$fa/$fs` drive real tessellation in the evaluator.  [x] global `$fn` UI control wired to runs.
 - [x] Console panel for `echo`/`assert`/warnings (toggle in code drawer).  [x] error markers on code lines (scroll-synced line-number gutter; error lines tinted red).
 - [x] Color/modifier materials surfaced in the viewport.  [x] camera ↔ `$vp*` binding.
 

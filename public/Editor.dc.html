@@ -60,7 +60,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.11.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.12.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -364,9 +364,21 @@
   <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:25;display:flex;align-items:center;gap:0;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:9px;padding:5px 4px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9099;box-shadow:0 8px 24px rgba(0,0,0,.4);">
     <span style="padding:2px 11px;">{{ statusHint }}</span>
     <span style="width:1px;height:13px;background:#2C3037;"></span>
-    <span style="padding:2px 11px;">$fn {{ fnVal }}</span>
+    <button onClick="{{ toggleFnMenu }}" title="Global $fn — surface resolution applied to programs that don't set their own" style="{{ fnBtnStyle }}" style-hover="color:#C7CCD4;background:#23272E;">$fn {{ fnVal }}</button>
     <span style="width:1px;height:13px;background:#2C3037;"></span>
     <span style="padding:2px 11px;color:#5B616B;">mm</span>
+    <sc-if value="{{ fnMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeFnMenu }}" style="position:fixed;inset:0;z-index:40;"></div>
+      <div style="position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);z-index:41;background:#1B1E23;border:1px solid #2C3037;border-radius:9px;padding:5px;box-shadow:0 12px 32px rgba(0,0,0,.55);min-width:158px;">
+        <div style="font-size:9px;color:#5B616B;padding:3px 8px 5px;letter-spacing:.05em;text-transform:uppercase;">Surface resolution</div>
+        <sc-for list="{{ fnOptions }}" as="o" hint-placeholder-count="5">
+          <button onClick="{{ o.onClick }}" style="{{ o.style }}" style-hover="background:#23272E;">
+            <span style="flex:1;text-align:left;">{{ o.label }}</span>
+            <sc-if value="{{ o.active }}" hint-placeholder-val="{{ false }}"><span style="color:#9CC2F5;">✓</span></sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
   </div>
 
   <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
@@ -456,6 +468,7 @@ class Component extends DCLogic {
     csgOk: true,
     dirty: false,
     fn: 48,
+    fnMenuOpen: false,     // global $fn picker (bottom status bar)
     vars: [],              // serializable mirror of this.vars
     paramsOpen: false,
     fxEdit: null,          // 'shapeId:key' of the field whose expression editor is open
@@ -721,8 +734,11 @@ class Component extends DCLogic {
 
   matFor(shape) { return (shape.id === this.state.selectedShapeId || (this.state.selectedIds || []).includes(shape.id)) ? this.selMat : this.solidMat; }
 
+  // effective $fn for GUI preview tessellation: 0 ("Auto") still needs a positive segment count
+  gfn() { return this.state.fn > 0 ? this.state.fn : 64; }
+
   cylBase(r, h) {
-    const g = new this.THREE.CylinderGeometry(r, r, h, this.state.fn);
+    const g = new this.THREE.CylinderGeometry(r, r, h, this.gfn());
     g.rotateX(Math.PI / 2); // Y-axis -> Z-axis
     return g;
   }
@@ -758,7 +774,7 @@ class Component extends DCLogic {
     const THREE = this.THREE;
     const pts = this.cylProfile(shape.dims.r, shape.dims.h, shape.treatments || {});
     const v2 = pts.map(p => new THREE.Vector2(p[0], p[1]));
-    const geom = new THREE.LatheGeometry(v2, this.state.fn);
+    const geom = new THREE.LatheGeometry(v2, this.gfn());
     geom.rotateX(Math.PI / 2);
     geom.computeVertexNormals();
     return new THREE.Mesh(geom, this.matFor(shape));
@@ -810,7 +826,7 @@ class Component extends DCLogic {
       pts.push(new THREE.Vector2(R, zc));
       pts.push(new THREE.Vector2(R, ic));
     }
-    const geom = new THREE.LatheGeometry(pts, this.state.fn);
+    const geom = new THREE.LatheGeometry(pts, this.gfn());
     geom.rotateX(Math.PI / 2); // lathe Y-axis -> Z-axis
     return geom;
   }
@@ -891,7 +907,7 @@ class Component extends DCLogic {
     }
     if (shape.type === 'cylinder') {
       const pts = this.cylProfile(shape.dims.r, shape.dims.h, shape.treatments || {});
-      const geom = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), this.state.fn);
+      const geom = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), this.gfn());
       geom.rotateX(Math.PI / 2); geom.computeVertexNormals();
       return geom;
     }
@@ -1982,7 +1998,7 @@ class Component extends DCLogic {
   runAdvanced(txt) {
     this._readsViewport = /\$vp[rtdf]/.test(txt);
     const res = window.ScadEngine.run(txt, {
-      $fn: this.state.fn && this.state.fn < 100 ? 0 : 0,
+      $fn: this.state.fn,
       files: this.scadFilesMap(),
       viewport: this.viewportFromCamera(),
     });
@@ -3388,6 +3404,17 @@ class Component extends DCLogic {
   pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => this.updateGizmo());
   toggleDrawer = () => this.setState({ drawerOpen: !this.state.drawerOpen });
 
+  // ---- global $fn picker (status bar) ----
+  toggleFnMenu = () => this.setState({ fnMenuOpen: !this.state.fnMenuOpen });
+  closeFnMenu = () => this.setState({ fnMenuOpen: false });
+  setFn = (v) => {
+    this.setState({ fn: v, fnMenuOpen: false }, () => {
+      if (this.state.readOnly) this.runCode();      // advanced: re-evaluate with new global $fn default
+      else { this.rebuildScene(); this.regenCode(); } // simple GUI: re-tessellate + refresh the $fn = line
+    });
+  };
+
+
   onKey(e) {
     if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
     const k = e.key.toLowerCase();
@@ -3634,7 +3661,19 @@ class Component extends DCLogic {
       ctxOpen: !!ctx, ctxItems, ctxStyle, closeCtx: this.closeCtx,
 
       statusHint: st.statusMsg || (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it')),
-      fnVal: st.fn,
+      fnVal: st.fn > 0 ? st.fn : 'auto',
+      fnMenuOpen: st.fnMenuOpen,
+      toggleFnMenu: this.toggleFnMenu,
+      closeFnMenu: this.closeFnMenu,
+      fnBtnStyle: "background:transparent;border:none;color:" + (st.fnMenuOpen ? '#C7CCD4' : '#8A9099') + ";font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 11px;border-radius:5px;cursor:pointer;",
+      fnOptions: [0, 16, 24, 32, 48, 64, 96, 128].map(v => ({
+        label: v === 0 ? 'Auto ($fa / $fs)' : String(v),
+        active: st.fn === v,
+        onClick: () => this.setFn(v),
+        style: 'display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:none;'
+          + "font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:6px 9px;border-radius:6px;cursor:pointer;text-align:left;color:"
+          + (st.fn === v ? '#E6E9EE' : '#9AA3AE') + ';',
+      })),
 
       drawerStyle, drawerTab,
       toggleDrawer: this.toggleDrawer,

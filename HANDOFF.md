@@ -1,3 +1,23 @@
+# HANDOFF — Global `$fn` UI control (Phase 12) — ✅ SHIPPED (v0.12.0)
+
+The bottom status-bar `$fn` chip is now an interactive picker (Auto / 16 / 24 / 32 / 48 / 64 / 96 / 128).
+Picking a value sets `state.fn` and re-applies: advanced (read-only) programs re-evaluate with the new
+value passed as the engine's global `$fn` default; simple GUI programs re-tessellate (`rebuildScene`)
+and refresh the `$fn = …` line in the generated code. **Fixed the long-standing no-op** on the run path
+(`$fn: this.state.fn && this.state.fn < 100 ? 0 : 0` always passed `0`) → now passes `this.state.fn`.
+"Auto" (0) means the engine falls back to `$fa`/`$fs`; a program's own top-level `$fn=` still overrides
+the global (hoisted assignment wins). Editor-only change. Verified via `eval_js`: menu toggles;
+`setFn(0)`→`state.fn=0`, `gfn()=64` (GUI preview floor); `run('sphere(10)',{$fn:8})`→`params.$fn=8`,
+`{$fn:128}`→`128`; `'$fn=64; sphere(10)'` with global 8 → `64` (override). GUI lathe/cylinder builders
+use `gfn()` so Auto never feeds 0 segments.
+
+- **State:** `fn` (default 48; 0 = Auto), `fnMenuOpen`.
+- **Handlers:** `toggleFnMenu`/`closeFnMenu`/`setFn(v)`; `gfn()` = `fn>0 ? fn : 64` (GUI tessellation floor).
+- **renderVals:** `fnVal` ('auto' when 0), `fnBtnStyle`, `fnOptions` (label/active/onClick/style), `fnMenuOpen`.
+- **Deferred:** per-call `$fa`/`$fs` UI; the picker doesn't surface a free numeric entry (preset list only).
+
+---
+
 # HANDOFF — Code-editor line gutter + error markers (Phase 12) — ✅ SHIPPED (v0.11.0)
 
 The code drawer's `<textarea>` now has a **scroll-synced line-number gutter**; lines the engine
