@@ -5,6 +5,11 @@
 - The main file must be named `index.html`.
 - **Semantic versioning on zips.** When offering a download zip, label it with a version number (e.g. `v0.1.0`, `v0.1.1`). Increment the patch for fixes, minor for new features, major for breaking changes.
 
+## Version badge (REQUIRED)
+- The app's top-left version badge (the `vX.Y.Z` chip next to "SCAD Studio" in
+  `public/Editor.dc.html`) MUST always show the current `VERSION`. Update it in the same
+  commit as every `VERSION` bump so the UI and the release number never drift.
+
 ## Release after every feature (REQUIRED)
 - **Version source of truth: the root `VERSION` file.** It holds the current semver (e.g. `0.4.0`)
   and nothing else. Read it to know the current version; it is the only place the number is tracked.
