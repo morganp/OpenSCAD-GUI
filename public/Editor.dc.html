@@ -430,7 +430,7 @@
   </sc-if>
 
   <input ref="{{ setFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onFileChosen }}" style="display:none;" />
-  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.dat,.png" multiple onChange="{{ onImportChosen }}" style="display:none;" />
+  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.dat,.png,.svg" multiple onChange="{{ onImportChosen }}" style="display:none;" />
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -1982,6 +1982,15 @@ class Component extends DCLogic {
       if (ext !== 'stl' && ext !== 'off') res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): only STL and OFF are supported so far' }]);
       else if (!(this._imports && this._imports.has(f.toLowerCase()))) res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): file not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
     }
+    // 2D vector imports (.svg) → attach parsed rings from the store (sync)
+    const svgs = []; this.collectSvgImportNodes(res.geom, svgs);
+    for (const n of svgs) {
+      const f = n.params.file || '';
+      if (n.params.ext === 'dxf') { res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): DXF is not parsed yet \u2014 use SVG' }]); continue; }
+      const store = this._svg && this._svg.get(f.toLowerCase());
+      if (store) n.rings = store.rings;
+      else res.warnings = res.warnings.concat([{ msg: 'import("' + f + '"): SVG not loaded \u2014 click \u201cImport mesh\u201d or drag it onto the viewport' }]);
+    }
     const texts = []; this.collectTextNodes(res.geom, texts);
     if (texts.length) {
       this.flashStatus('Shaping text\u2026');
@@ -2747,7 +2756,7 @@ class Component extends DCLogic {
 
   // ============ MESH IMPORT (Phase 10: import STL / OFF) ============
   openImport = () => { if (this._importInput) this._importInput.click(); };
-  onImportChosen = (e) => { const all = Array.from(e.target.files || []); this.loadImportFiles(all.filter(f => /\.(stl|off)$/i.test(f.name))); this.loadSurfaceFiles(all.filter(f => /\.(dat|png)$/i.test(f.name))); e.target.value = ''; };
+  onImportChosen = (e) => { const all = Array.from(e.target.files || []); this.loadImportFiles(all.filter(f => /\.(stl|off)$/i.test(f.name))); this.loadSurfaceFiles(all.filter(f => /\.(dat|png)$/i.test(f.name))); this.loadSvgFiles(all.filter(f => /\.svg$/i.test(f.name))); e.target.value = ''; };
   attachMeshDrop(el) {
     const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
     el.addEventListener('dragover', (ev) => { stop(ev); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'; });
@@ -2755,9 +2764,11 @@ class Component extends DCLogic {
       const all = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []);
       const meshes = all.filter(f => /\.(stl|off)$/i.test(f.name));
       const heightmaps = all.filter(f => /\.(dat|png)$/i.test(f.name));
+      const vectors = all.filter(f => /\.svg$/i.test(f.name));
       const scads = all.filter(f => /\.scad$/i.test(f.name));
       if (meshes.length) this.loadImportFiles(meshes);
       if (heightmaps.length) this.loadSurfaceFiles(heightmaps);
+      if (vectors.length) this.loadSvgFiles(vectors);
       if (scads.length) this.loadScadFiles(scads);
     });
   }
@@ -2969,7 +2980,159 @@ class Component extends DCLogic {
     mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
   }
 
-  // --- mesh parsers (pure JS, no external libs) ---
+  // ============ SVG 2D IMPORT (Phase 10: import .svg → rings → 2D pipeline) ============
+  loadSvgFiles(files) {
+    files = (files || []).filter(Boolean); if (!files.length) return;
+    if (!this._svg) this._svg = new Map();
+    let pending = files.length; const loaded = [];
+    files.forEach(f => {
+      const rd = new FileReader();
+      rd.onload = () => {
+        try {
+          const rings = this.parseSVG(String(rd.result || ''));
+          if (rings && rings.length) { this._svg.set(f.name.toLowerCase(), { name: f.name, rings, contours: rings.length }); loaded.push(f.name); }
+          else this.flashStatus('No drawable shapes in ' + f.name);
+        } catch (e) { console.warn('svg parse', e); this.flashStatus('Failed to parse ' + f.name); }
+        if (--pending === 0) this.afterSvg(loaded);
+      };
+      rd.onerror = () => { if (--pending === 0) this.afterSvg(loaded); };
+      rd.readAsText(f);
+    });
+  }
+  afterSvg(loaded) {
+    if (!loaded.length) { this.forceUpdate(); return; }
+    let code = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const appended = [];
+    for (const name of loaded) {
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('import\\s*\\(\\s*(?:file\\s*=\\s*)?["\\\']' + esc + '["\\\']', 'i');
+      if (!re.test(code)) { code += (code.trim() ? '\n' : '') + 'linear_extrude(2) import("' + name + '");'; appended.push(name); }
+    }
+    if (appended.length) { if (this._codeArea) this._codeArea.value = code; this.setState({ code }, () => this.runCode()); }
+    else this.runCode();
+    this.flashStatus('Imported ' + loaded.join(', '));
+  }
+  removeSvg(nameLower) { if (this._svg) this._svg.delete(nameLower); this.forceUpdate(); this.runCode(); }
+  collectSvgImportNodes(arr, out) { for (const n of (arr || [])) { if (!n) continue; if (n.kind === 'primitive2d' && n.shape === 'import') out.push(n); if (n.children) this.collectSvgImportNodes(n.children, out); } }
+
+  // --- SVG parsing → array of closed contours [[x,y],…] in OpenSCAD (y-up) space ---
+  identMat2() { return [1, 0, 0, 1, 0, 0]; }                                   // [a,b,c,d,e,f]
+  applyMat2(m, p) { return [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]]; }
+  mulMat2(a, b) { // compose: apply b then a
+    return [a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1], a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3], a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]];
+  }
+  svgTransform(str) {
+    let m = this.identMat2(); if (!str) return m;
+    const re = /(translate|scale|rotate|matrix|skewX|skewY)\s*\(([^)]*)\)/g; let t;
+    while ((t = re.exec(str))) {
+      const a = t[2].trim().split(/[\s,]+/).map(Number);
+      const d2r = Math.PI / 180; let lm = this.identMat2();
+      if (t[1] === 'translate') lm = [1, 0, 0, 1, a[0] || 0, a[1] || 0];
+      else if (t[1] === 'scale') lm = [a[0] || 1, 0, 0, (a.length > 1 ? a[1] : a[0]) || 1, 0, 0];
+      else if (t[1] === 'rotate') { const c = Math.cos((a[0]||0)*d2r), s = Math.sin((a[0]||0)*d2r); let r = [c, s, -s, c, 0, 0]; if (a.length >= 3) { r = this.mulMat2([1,0,0,1,a[1],a[2]], this.mulMat2(r, [1,0,0,1,-a[1],-a[2]])); } lm = r; }
+      else if (t[1] === 'matrix') lm = [a[0]||0, a[1]||0, a[2]||0, a[3]||0, a[4]||0, a[5]||0];
+      else if (t[1] === 'skewX') lm = [1, 0, Math.tan((a[0]||0)*d2r), 1, 0, 0];
+      else if (t[1] === 'skewY') lm = [1, Math.tan((a[0]||0)*d2r), 0, 1, 0, 0];
+      m = this.mulMat2(m, lm);
+    }
+    return m;
+  }
+  parseSVG(text) {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const svg = doc.querySelector('svg'); if (!svg) return [];
+    let vbH = 0; const vb = svg.getAttribute('viewBox');
+    if (vb) { const p = vb.trim().split(/[\s,]+/).map(Number); if (p.length === 4) vbH = p[3]; }
+    if (!vbH) { const h = parseFloat(svg.getAttribute('height')); if (!isNaN(h)) vbH = h; }
+    const flip = (p) => [p[0], vbH - p[1]];   // SVG y-down → OpenSCAD y-up
+    const rings = [];
+    const num = (el, a, d) => { const v = parseFloat(el.getAttribute(a)); return isNaN(v) ? (d || 0) : v; };
+    const push = (contour, m) => { if (contour && contour.length >= 2) rings.push(contour.map(p => flip(this.applyMat2(m, p)))); };
+    const walk = (el, mat) => {
+      for (const ch of el.children) {
+        const tag = ch.tagName.toLowerCase();
+        if (tag === 'defs' || tag === 'clippath' || tag === 'mask') continue;
+        const m = this.mulMat2(mat, this.svgTransform(ch.getAttribute('transform')));
+        if (tag === 'g' || tag === 'a' || tag === 'svg') { walk(ch, m); continue; }
+        if (tag === 'path') { for (const c of this.svgPathContours(ch.getAttribute('d') || '')) push(c, m); }
+        else if (tag === 'rect') {
+          const x = num(ch,'x'), y = num(ch,'y'), w = num(ch,'width'), h = num(ch,'height');
+          if (w > 0 && h > 0) push([[x,y],[x+w,y],[x+w,y+h],[x,y+h]], m);
+        }
+        else if (tag === 'circle') { push(this.svgEllipsePts(num(ch,'cx'), num(ch,'cy'), num(ch,'r'), num(ch,'r')), m); }
+        else if (tag === 'ellipse') { push(this.svgEllipsePts(num(ch,'cx'), num(ch,'cy'), num(ch,'rx'), num(ch,'ry')), m); }
+        else if (tag === 'polygon' || tag === 'polyline') { push(this.svgPointList(ch.getAttribute('points')), m); }
+        else if (ch.children && ch.children.length) walk(ch, m);
+      }
+    };
+    walk(svg, this.identMat2());
+    return rings.filter(r => r.length >= 3);
+  }
+  svgEllipsePts(cx, cy, rx, ry) {
+    if (!(rx > 0) || !(ry > 0)) return null;
+    const n = Math.max(16, Math.ceil(Math.PI * (rx + ry) / 3)); const pts = [];
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; pts.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); }
+    return pts;
+  }
+  svgPointList(str) {
+    if (!str) return null; const n = str.trim().split(/[\s,]+/).map(Number); const pts = [];
+    for (let i = 0; i + 1 < n.length; i += 2) pts.push([n[i], n[i + 1]]);
+    return pts;
+  }
+  // path 'd' → array of contours (subpaths), beziers/arcs flattened
+  svgPathContours(d) {
+    const toks = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e-?\d+)?/gi); if (!toks) return [];
+    let i = 0; const contours = []; let cur = []; let cx = 0, cy = 0, sx = 0, sy = 0; let cmd = '', pcx = 0, pcy = 0, prevCmd = '';
+    const rd = () => parseFloat(toks[i++]);
+    const isCmd = (t) => /^[a-zA-Z]$/.test(t);
+    const start = () => { if (cur.length >= 2) contours.push(cur); cur = []; };
+    const lineTo = (x, y) => { cur.push([x, y]); cx = x; cy = y; };
+    const flatCubic = (x1,y1,x2,y2,x,y) => { const n = 16; for (let k=1;k<=n;k++){ const t=k/n, u=1-t; const X=u*u*u*cx+3*u*u*t*x1+3*u*t*t*x2+t*t*t*x; const Y=u*u*u*cy+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y; cur.push([X,Y]); } cx=x; cy=y; };
+    const flatQuad = (x1,y1,x,y) => { const n = 14; for (let k=1;k<=n;k++){ const t=k/n, u=1-t; const X=u*u*cx+2*u*t*x1+t*t*x; const Y=u*u*cy+2*u*t*y1+t*t*y; cur.push([X,Y]); } cx=x; cy=y; };
+    while (i < toks.length) {
+      if (isCmd(toks[i])) { cmd = toks[i++]; } // else: implicit repeat of last cmd
+      const rel = cmd === cmd.toLowerCase(); const C = cmd.toUpperCase();
+      const bx = rel ? cx : 0, by = rel ? cy : 0;
+      if (C === 'M') { start(); const x = rd()+bx, y = rd()+by; cur.push([x,y]); cx=x; cy=y; sx=x; sy=y; cmd = rel ? 'l' : 'L'; }
+      else if (C === 'L') { lineTo(rd()+bx, rd()+by); }
+      else if (C === 'H') { lineTo(rd()+bx, cy); }
+      else if (C === 'V') { lineTo(cx, rd()+by); }
+      else if (C === 'C') { const x1=rd()+bx,y1=rd()+by,x2=rd()+bx,y2=rd()+by,x=rd()+bx,y=rd()+by; flatCubic(x1,y1,x2,y2,x,y); pcx=x2; pcy=y2; }
+      else if (C === 'S') { const sm=(prevCmd==='C'||prevCmd==='S'); const x1=sm?2*cx-pcx:cx, y1=sm?2*cy-pcy:cy; const x2=rd()+bx,y2=rd()+by,x=rd()+bx,y=rd()+by; flatCubic(x1,y1,x2,y2,x,y); pcx=x2; pcy=y2; }
+      else if (C === 'Q') { const x1=rd()+bx,y1=rd()+by,x=rd()+bx,y=rd()+by; flatQuad(x1,y1,x,y); pcx=x1; pcy=y1; }
+      else if (C === 'T') { const sm=(prevCmd==='Q'||prevCmd==='T'); const x1=sm?2*cx-pcx:cx, y1=sm?2*cy-pcy:cy; const x=rd()+bx,y=rd()+by; flatQuad(x1,y1,x,y); pcx=x1; pcy=y1; }
+      else if (C === 'A') { const rx=rd(),ry=rd(),rot=rd(),laf=rd(),sf=rd(),x=rd()+bx,y=rd()+by; this.flatArc(cur,cx,cy,rx,ry,rot,laf,sf,x,y); cx=x; cy=y; }
+      else if (C === 'Z') { if (cur.length) { cur.push([sx,sy]); } start(); cx=sx; cy=sy; }
+      else { i++; }                                   // unknown — skip a token
+      prevCmd = C;
+    }
+    start();
+    return contours;
+  }
+  // endpoint-arc → sampled points appended to `out`
+  flatArc(out, x1, y1, rx, ry, rotDeg, laf, sf, x2, y2) {
+    if (rx === 0 || ry === 0) { out.push([x2, y2]); return; }
+    rx = Math.abs(rx); ry = Math.abs(ry);
+    const phi = rotDeg * Math.PI / 180, cp = Math.cos(phi), sp = Math.sin(phi);
+    const dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+    const x1p = cp * dx + sp * dy, y1p = -sp * dx + cp * dy;
+    let r2 = (x1p*x1p)/(rx*rx) + (y1p*y1p)/(ry*ry); if (r2 > 1) { const s = Math.sqrt(r2); rx *= s; ry *= s; }
+    let num = rx*rx*ry*ry - rx*rx*y1p*y1p - ry*ry*x1p*x1p; num = num < 0 ? 0 : num;
+    const den = rx*rx*y1p*y1p + ry*ry*x1p*x1p;
+    let co = (den === 0 ? 0 : Math.sqrt(num / den)); if (laf === sf) co = -co;
+    const cxp = co * rx * y1p / ry, cyp = -co * ry * x1p / rx;
+    const cx = cp * cxp - sp * cyp + (x1 + x2) / 2, cy = sp * cxp + cp * cyp + (y1 + y2) / 2;
+    const ang = (ux, uy, vx, vy) => { const d = Math.sqrt((ux*ux+uy*uy)*(vx*vx+vy*vy)); let c = (ux*vx+uy*vy)/(d||1); c = Math.max(-1, Math.min(1, c)); let a = Math.acos(c); if (ux*vy - uy*vx < 0) a = -a; return a; };
+    let th1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let dth = ang((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    if (!sf && dth > 0) dth -= 2 * Math.PI; else if (sf && dth < 0) dth += 2 * Math.PI;
+    const n = Math.max(8, Math.ceil(Math.abs(dth) / (Math.PI / 16)));
+    for (let k = 1; k <= n; k++) {
+      const th = th1 + dth * (k / n);
+      const ex = cx + rx * Math.cos(th) * cp - ry * Math.sin(th) * sp;
+      const ey = cy + rx * Math.cos(th) * sp + ry * Math.sin(th) * cp;
+      out.push([ex, ey]);
+    }
+  }
   parseSTL(buffer) {
     const dv = new DataView(buffer), n = buffer.byteLength;
     if (n >= 84) { const tris = dv.getUint32(80, true); if (84 + tris * 50 === n) return this.parseBinarySTL(dv, tris); }
@@ -3289,7 +3452,7 @@ class Component extends DCLogic {
       runCode: this.runCode, copyCode: this.copyCode,
       openFile: this.openFile, saveFile: this.saveFile, onFileChosen: this.onFileChosen,
       openImport: this.openImport, onImportChosen: this.onImportChosen,
-      hasImports: !!((this._imports && this._imports.size) || (this._surfaces && this._surfaces.size) || (this._scadFiles && this._scadFiles.size)),
+      hasImports: !!((this._imports && this._imports.size) || (this._surfaces && this._surfaces.size) || (this._svg && this._svg.size) || (this._scadFiles && this._scadFiles.size)),
       importsList: [].concat(
         (this._imports ? Array.from(this._imports.values()) : []).map(im => ({
           name: im.name, isMesh: true, isLib: false,
@@ -3300,6 +3463,11 @@ class Component extends DCLogic {
           name: sf.name, isMesh: true, isLib: false,
           meta: sf.cols + '\u00d7' + sf.rows + (sf.isImage ? ' px' : ''),
           remove: () => this.removeSurface(sf.name.toLowerCase()),
+        })),
+        (this._svg ? Array.from(this._svg.values()) : []).map(sv => ({
+          name: sv.name, isMesh: true, isLib: false,
+          meta: sv.contours + ' path' + (sv.contours !== 1 ? 's' : ''),
+          remove: () => this.removeSvg(sv.name.toLowerCase()),
         })),
         (this._scadFiles ? Array.from(this._scadFiles.values()) : []).map(lib => ({
           name: lib.name, isMesh: false, isLib: true,

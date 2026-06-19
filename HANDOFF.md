@@ -1,3 +1,20 @@
+# HANDOFF — SVG 2D import (Phase 10) — ✅ SHIPPED (v0.9.0)
+
+`import("file.svg")` now renders. The engine emits a `primitive2d` (shape `import`, `dim:2`) so
+SVG flows through the existing 2D→extrude/boolean pipeline (same path as `text`). The editor
+parses the SVG at load into 2D rings and attaches them at run (sync), like text shaping:
+- `Editor.parseSVG` (DOMParser): walks `path` (full `d` grammar M/L/H/V/C/S/Q/T/A/Z with
+  cubic/quad bezier + endpoint-arc flattening), `rect`, `circle`, `ellipse`, `polygon`,
+  `polyline`; composes nested `<g transform>` (translate/scale/rotate/matrix/skewX/skewY);
+  Y-flips to OpenSCAD (y-up) using the viewBox/height. Skips `defs`/`clipPath`/`mask`.
+- Loaded via the drag-drop / "Import mesh" provider (`.svg`); auto-appends
+  `linear_extrude(2) import("…");`. Listed in the chip strip with path count + remove.
+- Multiple contours feed the even-odd region builder (holes work, as with `text`).
+Verified: rect/circle/polygon/path(cubic+arc)/`<g>` parse; Y-flip correct; extrudes + renders.
+DXF still logs "not parsed yet".
+
+---
+
 # HANDOFF — language gaps: C-style comprehension + assign() + parent_module — ✅ SHIPPED (v0.8.0)
 
 Three small engine-only additions (all in `scad-engine.js`), verified via `ScadEngine.run` echo:

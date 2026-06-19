@@ -665,8 +665,10 @@
         const ext = (fn.split('.').pop() || '').toLowerCase();
         const is2d = ext === 'svg' || ext === 'dxf';
         if (!fn) { warn(ctx, 'import(): missing file name'); return null; }
-        // geometry is supplied editor-side from the uploaded-file store (sync at realize)
-        return { kind:'import', params:{ file: fn, center, ext, convexity }, matrix: Mat.identity(), dim: is2d ? 2 : 3 };
+        // 2D vector imports flow through the 2D pipeline as a primitive2d (rings attached editor-side)
+        if (is2d) return { kind:'primitive2d', shape:'import', params:{ file: fn, center, ext, convexity }, rings: [], matrix: Mat.identity(), dim:2 };
+        // 3D mesh geometry is supplied editor-side from the uploaded-file store (sync at realize)
+        return { kind:'import', params:{ file: fn, center, ext, convexity }, matrix: Mat.identity(), dim: 3 };
       }
       case 'surface': {
         const file = arg(0, 'file', named['file']);
