@@ -1,3 +1,19 @@
+# HANDOFF — language gaps: C-style comprehension + assign() + parent_module — ✅ SHIPPED (v0.8.0)
+
+Three small engine-only additions (all in `scad-engine.js`), verified via `ScadEngine.run` echo:
+- **C-style list comprehension** `[ for (init; cond; next) expr ]`: parser detects `;` after the
+  first generator and emits a `cfor` comp node; `runComp` inits once, loops while `cond`, applies
+  `next` updates **simultaneously** (snapshot then assign) each pass. Op-guarded. Multiple
+  comma-separated init/next vars supported. `[for(i=0,j=10;i<j;i=i+1,j=j-2)[i,j]]` → `[[0,10],[1,8],[2,6],[3,4]]`.
+- **`assign(a=1,…){…}`** (deprecated): `execStmt` case binds named args into a child scope and
+  evaluates the child block as a `let`; emits a deprecation warning.
+- **`parent_module(n)` + `$parent_modules`**: `ctx.moduleStack` tracks active module names
+  (pushed in `instantiateModule`, popped in `finally`); `$parent_modules` set on each module
+  scope = stack depth at entry; `parent_module(n)` returns `stack[len-2-n]`. Top-level call →
+  `undef`/`0`; `inner()` under `outer()` → `"outer"`/`1`.
+
+---
+
 # HANDOFF — `$vp*` ↔ camera binding (Phase 12) — ✅ SHIPPED (v0.7.0)
 
 `$vpr/$vpt/$vpd/$vpf` are now live, in both directions, for the advanced (evaluated) render path:

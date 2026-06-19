@@ -109,13 +109,13 @@ Real interpreter (lex → Pratt parse → AST → evaluate). Lives in `scad-engi
 - [~] Special variables: `$fn` `$fa` `$fs` (tessellation) **done**; `$t` `$preview` `$children` done;
       `$vpr/$vpt/$vpd/$vpf` **now bound to the live camera** (read each run; script assignment drives the view).
 - [x] `echo(...)` → console panel; `assert(cond, msg)` → error in console.
-- [ ] Deprecated `assign()` (parse + warn; treat as `let`).
+- [x] Deprecated `assign()` (parse + warn; treated as `let`).
 
 ## Phase 3 — Built-in functions  `[~]`
 - [x] Math: `abs sign sin cos tan asin acos atan atan2 floor round ceil ln log pow sqrt exp` (degrees trig).
 - [x] `min max` (scalar + list), `norm`, `cross`, `rands`.
 - [x] List/string: `len concat lookup str chr ord search`.
-- [x] `version version_num`. — [ ] `parent_module` (pending).
+- [x] `version version_num`. — [x] `parent_module(n)` + `$parent_modules`.
 - [x] Type tests: `is_undef is_bool is_num is_string is_list is_function`.
 
 ## Phase 4 — 3D primitives (complete)  `[x]`
@@ -151,7 +151,7 @@ Applied as a column-major matrix stack baked into each evaluated GeomNode.
 
 ## Phase 8 — List comprehensions  `[~]`
 - [x] `[ for (i = range|list) expr ]`; `each`; `if`/`if-else`; `let`; nesting.
-- [ ] C-style `[ for (init; cond; next) expr ]`.
+- [x] C-style `[ for (init; cond; next) expr ]` (multiple comma-separated init/next, simultaneous update).
 
 ## Phase 9 — 2D subsystem + extrusion  `[~]`
 No 2D polygon clipper needed: the engine emits abstract `primitive2d` + `extrude` nodes, and
@@ -223,11 +223,11 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`,
+**Not yet rendered:** 3MF/AMF + SVG/DXF import (Phase 10 tail),
 offset of boolean regions, and the conformance harness (Phase 13).
 `surface()` heightmaps (DAT + PNG) now render (watertight solid via the drag-drop provider).
 `projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 95–96%** (by cheat-sheet feature count). The remaining
-~4–5% is the rest of `import` (3MF/AMF/SVG/DXF), C-style comprehensions, and polish items. `include`/`use` now load via the drag-drop .scad provider.
+**Estimated true language coverage ≈ 97–98%** (by cheat-sheet feature count). The remaining
+~2–3% is the rest of `import` (3MF/AMF/SVG/DXF), offset of boolean regions, and polish items. `include`/`use` now load via the drag-drop .scad provider.

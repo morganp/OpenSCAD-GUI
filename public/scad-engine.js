@@ -214,7 +214,16 @@
     // list comprehension generator body (subset): for / if / let / each / bare expr
     function parseListCompBody() {
       if (at('for')) {
-        next(); expect('('); const gens = parseForGenerators(); expect(')');
+        next(); expect('(');
+        const gens = parseForGenerators();
+        if (at(';')) {
+          // C-style comprehension: [ for (init; cond; next) expr ]
+          next(); const cond = parseExpr(0); expect(';');
+          const updates = parseForGenerators(); expect(')');
+          const body = parseListCompBody();
+          return { c:'cfor', inits: gens, cond, updates, body };
+        }
+        expect(')');
         const body = parseListCompBody();
         return { c:'for', gens, body };
       }
@@ -403,7 +412,7 @@
     opts = opts || {};
     const parsed = window.ScadEngine.parse(src);
     const echos = [], warnings = [], errors = parsed.errors.slice();
-    const ctx = { echos, warnings, errors, ops: 0, maxOps: opts.maxOps || 4000000, warnedSet: new Set() };
+    const ctx = { echos, warnings, errors, ops: 0, maxOps: opts.maxOps || 4000000, warnedSet: new Set(), moduleStack: [] };
     // resolve include/use against provided files (warns if any referenced file is missing)
     let topStmts = (parsed.ast && parsed.ast.stmts) || [];
     if (topStmts.some(s => s && (s.t === 'include' || s.t === 'use'))) {
@@ -419,6 +428,7 @@
     root.vars.set('$vpr', vp.vpr || [55,0,25]); root.vars.set('$vpt', vp.vpt || [0,0,0]);
     root.vars.set('$vpd', vp.vpd != null ? vp.vpd : 500); root.vars.set('$vpf', vp.vpf != null ? vp.vpf : 22.5);
     root.vars.set('PI', Math.PI);
+    root.vars.set('$parent_modules', 0);
     let geom = [];
     try { geom = evalBlock(parsed.ast, root, ctx, []); }
     catch (e) { errors.push({ msg: String(e.message || e), line: e.line || 0 }); }
@@ -669,6 +679,13 @@
         return { kind:'surface', params:{ file: fn, center, invert, convexity }, matrix: Mat.identity(), dim:3 };
       }
       case 'echo': { ctx.echos.push({ msg: s.args.map(a => echoStr(evalExpr(a.expr, scope, ctx))).join(', ') }); return null; }
+      case 'assign': {
+        // deprecated: assign(a=1, b=2) { ... } — treat as a let() over the child block
+        warn(ctx, 'assign() is deprecated \u2014 treated as let()');
+        const sc = scope.child();
+        for (const a of s.args) if (a.name) sc.vars.set(a.name, evalExpr(a.expr, scope, ctx));
+        return childBlock ? evalBlock(childBlock, sc, ctx, parentChildGeom) : [];
+      }
       case 'assert': { const cond = truthy(arg(0)); if (!cond) { const m = s.args[1] ? echoStr(arg(1)) : 'assertion failed'; ctx.errors.push({ msg:'assert: '+m }); } return null; }
       case 'children': {
         const cg = parentChildGeom || [];
@@ -693,7 +710,10 @@
     // children of THIS instantiation
     const childGeom = callStmt.children ? evalBlock(callStmt.children, callScope.child(), ctx, parentChildGeom) : [];
     sc.vars.set('$children', childGeom.length);
-    return evalBlock(mod.body, sc, ctx, childGeom);
+    sc.vars.set('$parent_modules', ctx.moduleStack.length);
+    ctx.moduleStack.push(mod.name);
+    try { return evalBlock(mod.body, sc, ctx, childGeom); }
+    finally { ctx.moduleStack.pop(); }
   }
   function modDefScope(mod, callScope) { return callScope; } // lexical-ish: defs see call scope chain (sufficient for most)
 
@@ -789,6 +809,19 @@
         };
         rec(0, scope.child()); break;
       }
+      case 'cfor': {
+        // C-style: init once, loop while cond, apply updates each pass (updates evaluated simultaneously)
+        const sc = scope.child();
+        for (const a of body.inits) sc.vars.set(a.name, evalExpr(a.expr, sc, ctx));
+        let guard = 0;
+        while (truthy(evalExpr(body.cond, sc, ctx))) {
+          if (++ctx.ops > ctx.maxOps || ++guard > 500000) throw new Error('evaluation too large (op limit)');
+          runComp(body.body, sc, ctx, out);
+          const upd = body.updates.map(a => [a.name, evalExpr(a.expr, sc, ctx)]);
+          for (const [n, v] of upd) sc.vars.set(n, v);
+        }
+        break;
+      }
       case 'let': { const sc = scope.child(); for (const a of body.assigns) sc.vars.set(a.name, evalExpr(a.expr, sc, ctx)); runComp(body.body, sc, ctx, out); break; }
       case 'if': { if (truthy(evalExpr(body.cond, scope, ctx))) runComp(body.then, scope, ctx, out); else if (body.els) runComp(body.els, scope, ctx, out); break; }
       case 'each': { const v = compValue(body.expr, scope, ctx); toList(v).forEach(x=>out.push(x)); break; }
@@ -856,6 +889,7 @@
       case 'is_undef': return P(0)===undefined; case 'is_bool': return typeof P(0)==='boolean'; case 'is_num': return isNum(P(0));
       case 'is_string': return isStr(P(0)); case 'is_list': return isVec(P(0)); case 'is_function': return isFn(P(0));
       case 'version': return [2021,1,0]; case 'version_num': return 20210100;
+      case 'parent_module': { const i = num(P(0), 0); const st = ctx.moduleStack || []; const idx = st.length - 2 - i; return idx >= 0 ? st[idx] : undefined; }
       default: {
         // user function
         const fn = scope.getFunction(name);
