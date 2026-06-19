@@ -643,8 +643,16 @@
         // geometry is supplied editor-side from the uploaded-file store (sync at realize)
         return { kind:'import', params:{ file: fn, center, ext, convexity }, matrix: Mat.identity(), dim: is2d ? 2 : 3 };
       }
-      case 'surface':
-        warn(ctx, 'surface() not yet supported — Phase 10 (heightmap import)'); return null;
+      case 'surface': {
+        const file = arg(0, 'file', named['file']);
+        const fn = (typeof file === 'string') ? file : '';
+        if (!fn) { warn(ctx, 'surface(): missing file name'); return null; }
+        const center = truthy(named['center']);
+        const invert = truthy(named['invert']);
+        const convexity = named['convexity'];
+        // heightmap geometry is supplied editor-side from the uploaded-file store (sync at realize)
+        return { kind:'surface', params:{ file: fn, center, invert, convexity }, matrix: Mat.identity(), dim:3 };
+      }
       case 'echo': { ctx.echos.push({ msg: s.args.map(a => echoStr(evalExpr(a.expr, scope, ctx))).join(', ') }); return null; }
       case 'assert': { const cond = truthy(arg(0)); if (!cond) { const m = s.args[1] ? echoStr(arg(1)) : 'assertion failed'; ctx.errors.push({ msg:'assert: '+m }); } return null; }
       case 'children': {

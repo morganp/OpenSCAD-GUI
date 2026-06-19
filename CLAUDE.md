@@ -177,7 +177,10 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       (sync, like `text()`). Imported meshes render, transform, and feed booleans (a zeroed `uv`
       is added so three-bvh-csg can match attributes against primitives); `center=true` honored;
       missing/unsupported files log a console warning. **3MF/AMF and SVG/DXF (2D) not parsed yet.**
-- [ ] `surface(file="file.dat|png", center, convexity)`.
+- [x] `surface(file="file.dat|png", center, invert, convexity)` — **DAT (whitespace float matrix,
+      `#`/blank lines skipped) and PNG (sRGB luminance → 0..100, `invert`) via the drag-drop / "Import
+      mesh" file provider.** Builds a watertight solid (heightmap top + 1-unit base below min + side
+      walls), `center` honored, renders + transforms + feeds booleans (zeroed uv for three-bvh-csg).
 - [x] `include <file.scad>` / `use <file.scad>` — **resolved against a drag-drop .scad file provider.**
       `include` splices the file's full statement list inline (vars + defs + geometry); `use` imports
       only its module/function definitions. Recursive (nested include/use), cycle-guarded, warns on a
@@ -220,11 +223,11 @@ twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `off
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** `surface`
-file loading, 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`, live
+**Not yet rendered:** 3MF/AMF + SVG/DXF import (Phase 10 tail), C-style list comprehensions, `parent_module`, `assign()`, live
 `$vp*` camera binding, offset of boolean regions, and the conformance harness (Phase 13).
+`surface()` heightmaps (DAT + PNG) now render (watertight solid via the drag-drop provider).
 `projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 93–95%** (by cheat-sheet feature count). The remaining
-~5–7% is `surface`, the rest of `import` (3MF/AMF/SVG/DXF), and polish items. `include`/`use` now load via the drag-drop .scad provider.
+**Estimated true language coverage ≈ 95–96%** (by cheat-sheet feature count). The remaining
+~4–5% is the rest of `import` (3MF/AMF/SVG/DXF), C-style comprehensions, and polish items. `include`/`use` now load via the drag-drop .scad provider.

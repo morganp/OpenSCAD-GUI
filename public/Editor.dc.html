@@ -430,7 +430,7 @@
   </sc-if>
 
   <input ref="{{ setFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onFileChosen }}" style="display:none;" />
-  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off" multiple onChange="{{ onImportChosen }}" style="display:none;" />
+  <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.dat,.png" multiple onChange="{{ onImportChosen }}" style="display:none;" />
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -2048,6 +2048,7 @@ class Component extends DCLogic {
     const col = node.color || color;
     if (node.dim === 2) { const mesh = this.flat2DMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'import') { const mesh = this.importMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
+    if (node.kind === 'surface') { const mesh = this.surfaceMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'extrude') { const mesh = this.extrudeMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'op') {
       const mesh = this.opMesh(node, pm, col);
@@ -2686,15 +2687,17 @@ class Component extends DCLogic {
 
   // ============ MESH IMPORT (Phase 10: import STL / OFF) ============
   openImport = () => { if (this._importInput) this._importInput.click(); };
-  onImportChosen = (e) => { this.loadImportFiles(Array.from(e.target.files || [])); e.target.value = ''; };
+  onImportChosen = (e) => { const all = Array.from(e.target.files || []); this.loadImportFiles(all.filter(f => /\.(stl|off)$/i.test(f.name))); this.loadSurfaceFiles(all.filter(f => /\.(dat|png)$/i.test(f.name))); e.target.value = ''; };
   attachMeshDrop(el) {
     const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
     el.addEventListener('dragover', (ev) => { stop(ev); if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'copy'; });
     el.addEventListener('drop', (ev) => { stop(ev);
       const all = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []);
       const meshes = all.filter(f => /\.(stl|off)$/i.test(f.name));
+      const heightmaps = all.filter(f => /\.(dat|png)$/i.test(f.name));
       const scads = all.filter(f => /\.scad$/i.test(f.name));
       if (meshes.length) this.loadImportFiles(meshes);
+      if (heightmaps.length) this.loadSurfaceFiles(heightmaps);
       if (scads.length) this.loadScadFiles(scads);
     });
   }
@@ -2770,6 +2773,141 @@ class Component extends DCLogic {
     this.flashStatus('Imported ' + loaded.join(', '));
   }
   removeImport(nameLower) { if (this._imports) this._imports.delete(nameLower); this.forceUpdate(); this.runCode(); }
+
+  // ============ SURFACE HEIGHTMAPS (Phase 10: surface DAT / PNG) ============
+  loadSurfaceFiles(files) {
+    files = (files || []).filter(Boolean); if (!files.length) return;
+    if (!this._surfaces) this._surfaces = new Map();
+    let pending = files.length; const loaded = [];
+    const done = (name, grid) => {
+      if (grid && grid.rows >= 2 && grid.cols >= 2) { this._surfaces.set(name.toLowerCase(), Object.assign({ name }, grid)); loaded.push(name); }
+      else this.flashStatus('Could not parse heightmap ' + name);
+      if (--pending === 0) this.afterSurface(loaded);
+    };
+    files.forEach(f => {
+      const ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (ext === 'png') {
+        const rd = new FileReader();
+        rd.onload = () => { this.parsePNG(rd.result, f.name).then(g => done(f.name, g)).catch(err => { console.warn('surface png', err); done(f.name, null); }); };
+        rd.onerror = () => done(f.name, null);
+        rd.readAsDataURL(f);
+      } else {
+        const rd = new FileReader();
+        rd.onload = () => { try { done(f.name, this.parseDAT(String(rd.result || ''))); } catch (err) { console.warn('surface dat', err); done(f.name, null); } };
+        rd.onerror = () => done(f.name, null);
+        rd.readAsText(f);
+      }
+    });
+  }
+  afterSurface(loaded) {
+    if (!loaded.length) { this.forceUpdate(); return; }
+    let code = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const appended = [];
+    for (const name of loaded) {
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('surface\\s*\\(\\s*(?:file\\s*=\\s*)?["\\\']' + esc + '["\\\']', 'i');
+      if (!re.test(code)) { code += (code.trim() ? '\n' : '') + 'surface(file = "' + name + '", center = true);'; appended.push(name); }
+    }
+    if (appended.length) { if (this._codeArea) this._codeArea.value = code; this.setState({ code }, () => this.runCode()); }
+    else this.runCode();
+    this.flashStatus('Loaded heightmap ' + loaded.join(', '));
+  }
+  removeSurface(nameLower) { if (this._surfaces) this._surfaces.delete(nameLower); this.forceUpdate(); this.runCode(); }
+
+  // DAT: whitespace-separated float matrix; '#'-leading and blank lines ignored.
+  parseDAT(text) {
+    const rowsArr = [];
+    let cols = 0;
+    for (let line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t[0] === '#' || t[0] === '!') continue;
+      const nums = t.split(/[\s,]+/).map(Number).filter(v => !Number.isNaN(v));
+      if (!nums.length) continue;
+      rowsArr.push(nums); if (nums.length > cols) cols = nums.length;
+    }
+    const rows = rowsArr.length;
+    if (rows < 2 || cols < 2) return null;
+    const data = new Float32Array(rows * cols);
+    let min = Infinity, max = -Infinity;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = rowsArr[r][c] != null ? rowsArr[r][c] : 0;
+      data[r * cols + c] = v; if (v < min) min = v; if (v > max) max = v;
+    }
+    return { rows, cols, data, min, max };
+  }
+  // PNG (or any image dataURL): luminance 0..100; row 0 -> Y=0; invert handled at realize.
+  parsePNG(dataUrl, name) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cols = img.naturalWidth, rows = img.naturalHeight;
+          if (cols < 2 || rows < 2) { resolve(null); return; }
+          const cv = document.createElement('canvas'); cv.width = cols; cv.height = rows;
+          const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+          const px = cx.getImageData(0, 0, cols, rows).data;
+          const data = new Float32Array(rows * cols);
+          let min = Infinity, max = -Infinity;
+          for (let i = 0; i < rows * cols; i++) {
+            const o = i * 4;
+            const v = (0.2126 * px[o] + 0.7152 * px[o + 1] + 0.0722 * px[o + 2]) / 255 * 100;
+            data[i] = v; if (v < min) min = v; if (v > max) max = v;
+          }
+          resolve({ rows, cols, data, min, max, isImage: true });
+        } catch (e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+  }
+  collectSurfaceNodes(arr, out) { for (const n of (arr || [])) { if (!n) continue; if (n.kind === 'surface') out.push(n); if (n.children) this.collectSurfaceNodes(n.children, out); } }
+  surfaceGeometry(node) {
+    const store = this._surfaces && this._surfaces.get((node.params.file || '').toLowerCase());
+    if (!store) return null;
+    const THREE = this.THREE;
+    const { rows, cols, data, min, max } = store;
+    const invert = node.params.invert && store.isImage;
+    const hAt = (r, c) => { const v = data[r * cols + c]; return invert ? (max - (v - min)) : v; };
+    const zBase = (invert ? (max - (max - min)) : min) - 1;     // 1-unit base below the lowest point
+    const ox = node.params.center ? -(cols - 1) / 2 : 0;
+    const oy = node.params.center ? -(rows - 1) / 2 : 0;
+    const pos = []; const idx = [];
+    const topIndex = (r, c) => r * cols + c;
+    // top surface vertices
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) pos.push(c + ox, r + oy, hAt(r, c));
+    // bottom surface vertices (flat at zBase), offset = rows*cols
+    const botBase = rows * cols;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) pos.push(c + ox, r + oy, zBase);
+    // top faces (CCW, +Z up)
+    for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
+      const a = topIndex(r, c), b = topIndex(r, c + 1), d = topIndex(r + 1, c), e = topIndex(r + 1, c + 1);
+      idx.push(a, b, e, a, e, d);
+    }
+    // bottom faces (reversed winding, -Z down)
+    for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++) {
+      const a = botBase + topIndex(r, c), b = botBase + topIndex(r, c + 1), d = botBase + topIndex(r + 1, c), e = botBase + topIndex(r + 1, c + 1);
+      idx.push(a, e, b, a, d, e);
+    }
+    // side walls around the perimeter (top edge -> bottom edge)
+    const wall = (t0, t1) => idx.push(t0, t1, botBase + t1, t0, botBase + t1, botBase + t0);
+    for (let c = 0; c < cols - 1; c++) wall(topIndex(0, c + 1), topIndex(0, c));               // front (y=0)
+    for (let c = 0; c < cols - 1; c++) wall(topIndex(rows - 1, c), topIndex(rows - 1, c + 1)); // back
+    for (let r = 0; r < rows - 1; r++) wall(topIndex(r, 0), topIndex(r + 1, 0));               // left (x=0)
+    for (let r = 0; r < rows - 1; r++) wall(topIndex(r + 1, cols - 1), topIndex(r, cols - 1)); // right
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
+    return g;
+  }
+  surfaceMesh(node, pm, col) {
+    const m = this.mul(pm, node.matrix || this.IDENTITY());
+    const geo = this.surfaceGeometry(node); if (!geo) return null;
+    geo.applyMatrix4(this.toM4(m));
+    const mesh = new this.THREE.Mesh(geo, this.engineMat(node.color || col, node.mod));
+    mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+  }
 
   // --- mesh parsers (pure JS, no external libs) ---
   parseSTL(buffer) {
@@ -3091,12 +3229,17 @@ class Component extends DCLogic {
       runCode: this.runCode, copyCode: this.copyCode,
       openFile: this.openFile, saveFile: this.saveFile, onFileChosen: this.onFileChosen,
       openImport: this.openImport, onImportChosen: this.onImportChosen,
-      hasImports: !!((this._imports && this._imports.size) || (this._scadFiles && this._scadFiles.size)),
+      hasImports: !!((this._imports && this._imports.size) || (this._surfaces && this._surfaces.size) || (this._scadFiles && this._scadFiles.size)),
       importsList: [].concat(
         (this._imports ? Array.from(this._imports.values()) : []).map(im => ({
           name: im.name, isMesh: true, isLib: false,
           meta: (im.tris >= 1000 ? (im.tris / 1000).toFixed(1) + 'k' : String(im.tris)) + ' \u25b3',
           remove: () => this.removeImport(im.name.toLowerCase()),
+        })),
+        (this._surfaces ? Array.from(this._surfaces.values()) : []).map(sf => ({
+          name: sf.name, isMesh: true, isLib: false,
+          meta: sf.cols + '\u00d7' + sf.rows + (sf.isImage ? ' px' : ''),
+          remove: () => this.removeSurface(sf.name.toLowerCase()),
         })),
         (this._scadFiles ? Array.from(this._scadFiles.values()) : []).map(lib => ({
           name: lib.name, isMesh: false, isLib: true,

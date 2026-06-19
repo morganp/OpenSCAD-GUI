@@ -1,3 +1,33 @@
+# HANDOFF — `surface()` heightmaps (Phase 10) — IN PROGRESS
+
+**Feature:** render `surface(file="…dat|png", center, invert, convexity)` — the last
+unimplemented core primitive. Mirrors the existing STL/OFF `import()` provider pipeline:
+files are loaded editor-side into a store, the engine emits an abstract node, and the
+geometry is realized synchronously from the store at render time.
+
+**Semantics (from OpenSCAD manual, locked):**
+- **DAT:** whitespace-separated float matrix. Empty lines + lines starting `#` ignored.
+  Rows → Y (first row Y=0), columns → X (first value X=0), unit spacing. `invert` ignored.
+- **PNG:** grayscale via linear luminance `0.2126R+0.7152G+0.0722B`, scaled 0..100.
+  `invert=true` flips (100 − v). Alpha ignored. Row 0 → Y=0 (same indexing as DAT).
+- **Solid:** top surface = heightmap grid (R×C verts, (C-1)×(R-1) quads, 2 tris each).
+  A flat base one unit below the **minimum** value (`zBase = min - 1`), plus perimeter side
+  walls → a watertight closed mesh (required for three-bvh-csg booleans).
+- **center=true:** translate X,Y by `-(C-1)/2, -(R-1)/2` (Z not centered).
+
+**Build order:**
+1. [x] Engine: replace the `surface` warn with a node `{kind:'surface', params:{file,center,invert,convexity}, dim:3}`.
+2. [x] Editor `parseDAT` (sync) + `parsePNG` (async Image→canvas→luminance) → `_surfaces` Map keyed by lc filename.
+3. [x] `loadSurfaceFiles` + drag-drop/`Import mesh` accept `.dat`/`.png`; auto-append `surface("…")` like import.
+4. [x] `surfaceGeometry(node)` (watertight solid) + `surfaceMesh(node,pm,col)`; realize branch beside `import`.
+5. [x] Chip strip lists loaded heightmaps (grid dims as meta) with remove.
+6. [x] Verified: DAT solid renders watertight, live CSG; PNG luminance 0..100 + isImage; center;
+      intersection of two surfaces resolves via CSG; missing file warns + renders nothing.
+
+**Status: ✅ SHIPPED (v0.6.0).**
+
+---
+
 # HANDOFF — `include` / `use` file loading (Phase 10)
 
 **Status: ✅ SHIPPED (this session).** `include <f.scad>` and `use <f.scad>` now resolve against a
