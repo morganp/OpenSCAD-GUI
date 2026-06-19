@@ -1,3 +1,32 @@
+# HANDOFF — 3MF / AMF mesh import (Phase 10) — ✅ SHIPPED (v0.13.0)
+
+`import("file.3mf")` and `import("file.amf")` now render, flowing through the **same mesh pipeline
+as STL/OFF** (triangle-soup `Float32Array` → `_imports` store → `importGeometry`/`importMesh`,
+booleans via three-bvh-csg with zeroed uv). Editor-only change — engine already emitted the
+`{kind:'import', ext}` node. Verified via `eval_js` with synthetic files: 3MF (stored **and**
+raw-deflate ZIP entries) → 4-tri tetra, vertices indexed correctly; AMF (plain XML) → 2 tris; an
+injected 3MF renders read-only with **no import warnings**.
+
+### How it works (Editor.dc.html only)
+- `parse3MF(buffer)` (async): `unzipEntries` → find `*/3dmodel.model` → `meshXmlToPositions(xml,'3mf')`.
+- `parseAMF(buffer)`: `PK` magic → unzip + find `*.amf`; else decode XML directly → `meshXmlToPositions(xml,'amf')`.
+- `meshXmlToPositions`: DOMParser over every `<mesh>`. 3MF: `<vertex x/y/z>` + `<triangle v1/v2/v3>`.
+  AMF: `<vertex><coordinates><x/y/z>` + `<volume><triangle><v1/v2/v3>`. Merges all meshes (per-mesh
+  vertex indexing); returns a flat triangle-soup `Float32Array`.
+- `unzipEntries(buffer)`: minimal pure-JS ZIP reader (EOCD scan → central directory → local headers).
+  Method 0 (stored) sliced directly; method 8 (raw deflate) inflated via `inflateRaw` =
+  `DecompressionStream('deflate-raw')`. No zip64.
+- `loadImportFiles` now dispatches `.3mf`→`parse3MF`, `.amf`→`parseAMF`, `.off`→`parseOFF`, else STL,
+  and **awaits parsers that return a Promise** (the async unzip path). Accept/drop filters + the
+  "Import mesh" button title + the unsupported-format warning all widened to include 3MF/AMF.
+
+### Not done (deferred)
+3MF build-item / component transforms and AMF units are ignored (common single-object, identity-transform
+case is exact); 3MF color/material resources not read. Offset of boolean regions and the conformance
+harness (Phase 13) remain.
+
+---
+
 # HANDOFF — Global `$fn` UI control (Phase 12) — ✅ SHIPPED (v0.12.0)
 
 The bottom status-bar `$fn` chip is now an interactive picker (Auto / 16 / 24 / 32 / 48 / 64 / 96 / 128).
