@@ -1,3 +1,37 @@
+# HANDOFF — Close all Phase 0–12 open items: resize() + offset of boolean regions (Phase 5/9) — ✅ SHIPPED (v0.14.0)
+
+Closed the last three non-Phase-13 boxes on the roadmap. Engine + editor change.
+
+1. **`resize([x,y,z], auto)`** — was a warn-only no-op. Engine now emits `{kind:'resize',
+   params:{newsize, auto[]}}`; the editor realizes it (`resizeBrush`) by building the child's union
+   brush at identity, reading its geometry bounding box, and applying a per-axis scale so the bbox
+   matches `newsize`. A `0`/omitted axis stays unscaled unless its `auto` flag is set, then it takes
+   the first explicitly-sized axis's factor (proportional). Scales about origin; works inside booleans
+   (geomBrush branch) and shows as a "Resize" group in the Model Tree. Verified via bbox readback:
+   `resize([30,20,5]) cube(10)`→[30,20,5] exact; `resize([30,0,0],auto=true) cube(10)`→[30,30,30];
+   `resize([40,0,0]) sphere(10)`→[40,20,20].
+
+2. **`offset()` of a boolean region** — single-contour offset stayed analytic (`offsetRings`, crisp
+   miter/round); a boolean-region child used to pass through unchanged. Now `applyOffsetTree`
+   rasterizes the region (`treeInside` predicate over the collect2D op-tree → coverage grid),
+   runs a chamfer **distance transform** (`distanceField`), grows (`r>0`/`delta>0`) or shrinks
+   (`<0`) the mask by the offset distance, and re-traces with the existing `marchSquares`. Round
+   joins, multi-region + holes supported (exact joins would need a 2D clipper — noted). Verified:
+   `offset(r=3) difference(){square([20,20],c);circle(6)}`→~26mm outer (raster ≈25.8, ~0.6%);
+   `offset(r=-2)` of a union shrinks 20→~16. No console errors.
+
+3. **Phase 2 special vars** — verified already-complete (`$t` drives dims, `$children`=2 in a
+   user module, `$vp*` read echoes the live camera, `$vpd=` write reports `assigned`); flipped to `[x]`.
+
+**Scoreboard:** Phases 2, 5, 9, 10, 12 headers now `[x]`. Every Phase 0–12 box is checked. Only
+**Phase 13 (conformance harness)** + the optional openscad-wasm differential check remain.
+
+### Deferred
+Raster offset of boolean regions approximates curves/joins (resolution-bounded, like `projection`);
+`delta`/`chamfer` joins on a boolean region render round. resize of purely-2D children isn't special-cased.
+
+---
+
 # HANDOFF — 3MF / AMF mesh import (Phase 10) — ✅ SHIPPED (v0.13.0)
 
 `import("file.3mf")` and `import("file.amf")` now render, flowing through the **same mesh pipeline

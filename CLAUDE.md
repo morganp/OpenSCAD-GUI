@@ -108,11 +108,11 @@ Real interpreter (lex → Pratt parse → AST → evaluate). Lives in `scad-engi
 - [x] List indexing `list[i]`; dot indexing `v.x/.y/.z`; nested lists.
 - [x] `PI`; the `undef` constant.
 
-## Phase 2 — Evaluator core (scopes & semantics)  `[~]`
+## Phase 2 — Evaluator core (scopes & semantics)  `[x]`
 - [x] Top-level + nested `name = value;` parameters.
 - [x] OpenSCAD scoping: lexical child scopes; **last assignment in scope wins** (hoisted).
-- [~] Special variables: `$fn` `$fa` `$fs` (tessellation) **done**; `$t` `$preview` `$children` done;
-      `$vpr/$vpt/$vpd/$vpf` **now bound to the live camera** (read each run; script assignment drives the view).
+- [x] Special variables: `$fn` `$fa` `$fs` (tessellation), `$t` `$preview` `$children` done;
+      `$vpr/$vpt/$vpd/$vpf` **bound to the live camera** (read each run; script assignment drives the view).
 - [x] `echo(...)` → console panel; `assert(cond, msg)` → error in console.
 - [x] Deprecated `assign()` (parse + warn; treated as `let`).
 
@@ -129,14 +129,14 @@ Real interpreter (lex → Pratt parse → AST → evaluate). Lives in `scad-engi
 - [x] `cylinder(h, r|d, center)` **and cones** `r1/r2`, `d1/d2`.
 - [x] `polyhedron(points, faces, convexity)` (fan-triangulated).
 
-## Phase 5 — Transformations  `[~]`
+## Phase 5 — Transformations  `[x]`
 Applied as a column-major matrix stack baked into each evaluated GeomNode.
 - [x] `translate([x,y,z])`.
 - [x] `rotate([x,y,z])` and `rotate(a, [x,y,z])` (axis-angle).
 - [x] `scale([x,y,z])`; `mirror([x,y,z])`; `multmatrix(m)`.
 - [x] `color("name"|"#hex"|[r,g,b,a], alpha)` → per-subtree material.
-- [~] `resize(...)` approximated as no-op (warns).
-- [~] `offset(r | delta, chamfer)` (2D) — basic miter offset on a single contour (round/delta), `r` & `delta`; offset of a boolean region still passes through (needs a 2D clipper).
+- [x] `resize([x,y,z], auto)` — scales children so their combined bounding box matches the target; a 0/omitted axis stays unscaled unless `auto` (then proportional to the first sized axis). Realized editor-side from the child geometry bbox.
+- [x] `offset(r | delta, chamfer)` (2D) — analytic miter/round offset on a single contour; **offset of a boolean region** now rasterizes the region + distance-transform grow/shrink + marching-squares re-trace (round joins; multi-region & holes supported).
 - [x] `hull()` — convex hull of all descendant vertices via three's `ConvexGeometry` (2D hull = hull-then-extrude under `linear_extrude`).
 - [x] `minkowski(convexity)` — hull of pairwise vertex sums via `ConvexGeometry` (exact for convex operands, approximates concave — logged).
 
@@ -158,7 +158,7 @@ Applied as a column-major matrix stack baked into each evaluated GeomNode.
 - [x] `[ for (i = range|list) expr ]`; `each`; `if`/`if-else`; `let`; nesting.
 - [x] C-style `[ for (init; cond; next) expr ]` (multiple comma-separated init/next, simultaneous update).
 
-## Phase 9 — 2D subsystem + extrusion  `[~]`
+## Phase 9 — 2D subsystem + extrusion  `[x]`
 No 2D polygon clipper needed: the engine emits abstract `primitive2d` + `extrude` nodes, and
 the editor pushes each extrude down to the 2D leaves (extrude each to a 3D prism) so 2D
 booleans resolve through the existing three-bvh-csg pipeline. `collect2D` bakes in-extrude
@@ -173,10 +173,10 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] `rotate_extrude(angle, convexity)` — custom revolve about Z (full + partial w/ end caps), `$fn` segments.
 - [x] `projection(cut)` (3D→2D) — realized: child solid rasterized to a top-down coverage grid, boundary traced via marching squares → simplified 2D rings (multi-region + holes via even-odd). `cut=true` first intersects a thin z=0 slab (CSG) for the cross-section; `cut=false` is the full silhouette. Rings flow through the flat-sheet render and the extrude push-down, so `linear_extrude(h) projection() …` works.
 - [x] 2D booleans/transforms feed `hull`/`minkowski` (resolved in 3D); `offset` basic (single contour).
-(Holes in `rotate_extrude` profiles are ignored for now; offset of boolean regions passes through.)
+(Holes in `rotate_extrude` profiles are ignored for now; offset of a boolean region is raster-traced — round joins, exact joins would need a 2D clipper.)
 
-## Phase 10 — Import, surface, includes  `[~]`
-- [~] `import("file.stl|off|3mf|amf")` (3D meshes) / `import("file.svg|dxf")` (2D) — **STL (binary + ASCII),
+## Phase 10 — Import, surface, includes  `[x]`
+- [x] `import("file.stl|off|3mf|amf")` (3D meshes) / `import("file.svg|dxf")` (2D) — **STL (binary + ASCII),
       OFF, 3MF, AMF, SVG, and DXF** import via a drag-and-drop / "Import mesh" file provider. **3MF** (OPC
       zip: minimal pure-JS ZIP reader — stored + raw-deflate via `DecompressionStream` — extracts
       `3D/3dmodel.model`, parses `<vertices>/<triangles>`) and **AMF** (XML, optionally zip-wrapped;
@@ -204,7 +204,7 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] `#` debug highlight (tinted overlay material).
 - [x] `%` background/transparent (ghosted material).
 
-## Phase 12 — Viewer / GUI reconciliation  `[~]`
+## Phase 12 — Viewer / GUI reconciliation  `[x]`
 - [x] Live CSG viewport; Model Tree; draggable inspector panels; edge fillet/chamfer (GUI ext).
 - [x] "Simple vs advanced" detector (`isAdvanced(ast)`): simple programs hydrate the GUI
       authoring tree (editable); advanced programs render **read-only** from the evaluated
@@ -229,16 +229,18 @@ cones & polyhedron), **all affine transforms** (translate/rotate/scale/mirror/mu
 `color`, booleans, flow control (`for`/`intersection_for`/`if`/`let`), **user modules &
 functions** (recursion, `children()`, defaults), list comprehensions, and modifier characters
 `* ! # %`. **2D subsystem + extrudes** (`circle/square/polygon`, `linear_extrude` incl.
-twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, basic `offset`), **`text`
+twist/scale, `rotate_extrude`, 2D booleans via extrude-push-down CSG, `offset` incl. boolean
+regions via raster grow/shrink), **`resize()`** (bbox-matched scaling, `auto`), **`text`
 (opentype.js glyph shaping → multi-region 2D rings, bundled Roboto)**, and real
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** offset of boolean regions, and the conformance harness (Phase 13).
-`surface()` heightmaps (DAT + PNG) now render (watertight solid via the drag-drop provider).
-`projection` (3D→2D) now renders (raster + marching-squares contour trace, both cut modes);
-**STL/OFF `import()`** now renders (drag-drop/Import-mesh provider, pure-JS parsers).
+**Not yet rendered:** only the conformance harness (Phase 13) remains; the optional
+openscad-wasm fidelity fallback is deferred by design.
+`surface()` heightmaps (DAT + PNG) render (watertight solid via the drag-drop provider).
+`projection` (3D→2D) renders (raster + marching-squares contour trace, both cut modes);
+**STL/OFF/3MF/AMF `import()`** render (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 99%** (by cheat-sheet feature count). The remaining
-~1% is offset of boolean regions and polish items. 3MF/AMF mesh import now renders (pure-JS ZIP +
-XML parsers); `include`/`use` load via the drag-drop .scad provider.
+**Estimated true language coverage ≈ 100%** of the cheat-sheet feature set (offset of boolean
+regions, `resize`, and 3MF/AMF import all now render). Every Phase 0–12 box is checked; only the
+Phase 13 conformance harness (and the optional WASM differential check) is open.

@@ -578,7 +578,13 @@
         return wrap(m, evalChildren());
       }
       case 'multmatrix': { const rows = arg(0,'m',null); const m = isVec(rows) ? Mat.fromRows(rows) : Mat.identity(); return wrap(m, evalChildren()); }
-      case 'resize': { warn(ctx,'resize() approximated as no-op scale'); return wrap(Mat.identity(), evalChildren()); }
+      case 'resize': {
+        const ns = arg(0, 'newsize', named['newsize']);
+        const size = isVec(ns) ? [num(ns[0],0), num(ns[1],0), num(ns[2],0)] : [0,0,0];
+        const auto = named['auto'] !== undefined ? named['auto'] : pos[1];
+        const autoV = isVec(auto) ? [truthy(auto[0]), truthy(auto[1]), truthy(auto[2])] : [truthy(auto), truthy(auto), truthy(auto)];
+        return { kind:'resize', params:{ newsize:size, auto:autoV }, children: evalChildren(), matrix: Mat.identity(), dim:3 };
+      }
       case 'color': {
         const c = arg(0,'c', named['c']); const alpha = named['alpha'] !== undefined ? num(named['alpha']) : (pos[1] !== undefined ? num(pos[1]) : undefined);
         const rgba = colorToRGBA(c, alpha);

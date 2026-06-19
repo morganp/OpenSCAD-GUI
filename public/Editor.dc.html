@@ -60,7 +60,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.13.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.14.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -2146,6 +2146,7 @@ class Component extends DCLogic {
     if (node.kind === 'import') { const mesh = this.importMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'surface') { const mesh = this.surfaceMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
     if (node.kind === 'extrude') { const mesh = this.extrudeMesh(node, pm, col); if (mesh) parent.add(mesh); return; }
+    if (node.kind === 'resize') { const b = this.resizeBrush(node, m); if (b && b.geometry) { const mesh = new this.THREE.Mesh(b.geometry, this.engineMat(col, node.mod)); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh); } return; }
     if (node.kind === 'op') {
       const mesh = this.opMesh(node, pm, col);
       if (mesh) parent.add(mesh);
@@ -2160,6 +2161,25 @@ class Component extends DCLogic {
       mesh.castShadow = true; mesh.receiveShadow = true;
       parent.add(mesh);
     }
+  }
+
+  // resize([x,y,z], auto): scale children so their combined bounding box matches the given
+  // dimensions. A 0 (or omitted) axis stays unscaled unless auto is set for it, in which case it
+  // takes the scale factor of the first explicitly-sized axis (proportional). Scales about origin.
+  resizeBrush(node, m) {
+    if (!this.CSG) return null;
+    const child = this.geomBrush({ kind: 'group', children: node.children || [], matrix: this.IDENTITY() }, this.IDENTITY());
+    if (!child || !child.geometry) return null;
+    const geo = child.geometry; geo.computeBoundingBox(); const bb = geo.boundingBox;
+    const size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+    const ns = node.params.newsize || [0,0,0], auto = node.params.auto || [false,false,false];
+    const f = [1,1,1]; let firstScaled = null;
+    for (let i = 0; i < 3; i++) { if (ns[i] > 0 && size[i] > 1e-9) { f[i] = ns[i] / size[i]; if (firstScaled == null) firstScaled = f[i]; } }
+    for (let i = 0; i < 3; i++) { if (!(ns[i] > 0)) f[i] = (auto[i] && firstScaled != null) ? firstScaled : 1; }
+    const sm = [f[0],0,0,0, 0,f[1],0,0, 0,0,f[2],0, 0,0,0,1];
+    geo.applyMatrix4(this.toM4(this.mul(m, sm)));
+    geo.computeVertexNormals();
+    const b = new this.CSG.Brush(geo); b.updateMatrixWorld(); return b;
   }
 
   // CSG over a boolean subtree -> single mesh
@@ -2181,6 +2201,7 @@ class Component extends DCLogic {
       const b = new Brush(geo); b.updateMatrixWorld(); return b;
     }
     if (node.kind === 'extrude') return this.extrudeBrush(node, m);
+    if (node.kind === 'resize') return this.resizeBrush(node, m);
     if (node.kind === 'import') { const geo = this.importGeometry(node); if (!geo) return null; geo.applyMatrix4(this.toM4(m)); const b = new Brush(geo); b.updateMatrixWorld(); return b; }
     const kids = (node.children || []).map(c => this.geomBrush(c, m)).filter(Boolean);
     if (!kids.length) return null;
@@ -2273,7 +2294,69 @@ class Component extends DCLogic {
   }
   applyOffsetTree(t) {
     if (t.child && t.child.leaf) return { leaf: true, rings: this.offsetRings(t.child.rings, t.offset) };
-    return t.child; // offset of a boolean region needs a 2D clipper - passed through (warned by engine)
+    // offset of a boolean region: rasterize the region, morphological grow/shrink by a distance
+    // transform, re-trace with marching squares (round joins; exact joins need a 2D clipper).
+    const rings = this.regionOffsetRaster(t.child, t.offset);
+    return rings ? { leaf: true, rings } : t.child;
+  }
+  ptInRingsEO(x, y, rings) {
+    let c = false;
+    for (const r of (rings || [])) { for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) c = !c;
+    } } return c;
+  }
+  // inside-test for a collect2D op-tree (leaf | {op,children} | {offset,child})
+  treeInside(t, x, y) {
+    if (!t) return false;
+    if (t.leaf) return this.ptInRingsEO(x, y, t.rings);
+    if (t.offset) { if (!t._resolved) t._resolved = this.regionOffsetRaster(t.child, t.offset) || []; return this.ptInRingsEO(x, y, t._resolved); }
+    const kids = t.children || [];
+    if (t.op === 'intersection') return kids.length > 0 && kids.every(k => this.treeInside(k, x, y));
+    if (t.op === 'difference') return kids.length > 0 && this.treeInside(kids[0], x, y) && !kids.slice(1).some(k => this.treeInside(k, x, y));
+    return kids.some(k => this.treeInside(k, x, y)); // union / group
+  }
+  collectTreeRings(t, out) {
+    if (!t) return;
+    if (t.leaf) { for (const r of (t.rings || [])) out.push(r); return; }
+    if (t.offset) { this.collectTreeRings(t.child, out); return; }
+    for (const k of (t.children || [])) this.collectTreeRings(k, out);
+  }
+  // chamfer distance transform (world units) from the seed mask, two passes
+  distanceField(seed, nx, ny, cw, ch) {
+    const INF = 1e9, D = new Float32Array(nx * ny), diag = Math.hypot(cw, ch);
+    for (let k = 0; k < D.length; k++) D[k] = seed[k] ? 0 : INF;
+    const rx = (k, nk, w) => { if (D[nk] + w < D[k]) D[k] = D[nk] + w; };
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const k = j * nx + i;
+      if (i > 0) rx(k, k - 1, cw); if (j > 0) rx(k, k - nx, ch);
+      if (i > 0 && j > 0) rx(k, k - nx - 1, diag); if (i < nx - 1 && j > 0) rx(k, k - nx + 1, diag); }
+    for (let j = ny - 1; j >= 0; j--) for (let i = nx - 1; i >= 0; i--) { const k = j * nx + i;
+      if (i < nx - 1) rx(k, k + 1, cw); if (j < ny - 1) rx(k, k + nx, ch);
+      if (i < nx - 1 && j < ny - 1) rx(k, k + nx + 1, diag); if (i > 0 && j < ny - 1) rx(k, k + nx - 1, diag); }
+    return D;
+  }
+  regionOffsetRaster(tree, params) {
+    const d = params.r != null ? params.r : (params.delta != null ? params.delta : 0);
+    const allRings = []; this.collectTreeRings(tree, allRings);
+    if (!allRings.length) return null;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const r of allRings) for (const p of r) { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < miny) miny = p[1]; if (p[1] > maxy) maxy = p[1]; }
+    const ad = Math.abs(d); minx -= ad + 1; miny -= ad + 1; maxx += ad + 1; maxy += ad + 1;
+    const W = maxx - minx, H = maxy - miny; if (!(W > 0 && H > 0)) return null;
+    let cell = Math.max(W, H) / 360; if (ad > 0) cell = Math.min(cell, ad / 4);
+    cell = Math.max(cell, Math.max(W, H) / 900);   // floor to bound grid size
+    let nx = Math.ceil(W / cell) + 3, ny = Math.ceil(H / cell) + 3;
+    if (nx * ny > 260000) { const s = Math.sqrt(260000 / (nx * ny)); nx = Math.max(8, Math.floor(nx * s)); ny = Math.max(8, Math.floor(ny * s)); }
+    const ox = minx - cell, oy = miny - cell, cw = (W + 2 * cell) / nx, ch = (H + 2 * cell) / ny;
+    const filled = new Uint8Array(nx * ny);
+    for (let j = 0; j < ny; j++) { const py = oy + (j + 0.5) * ch; for (let i = 0; i < nx; i++) { if (this.treeInside(tree, ox + (i + 0.5) * cw, py)) filled[j * nx + i] = 1; } }
+    let out;
+    if (!d) out = filled;
+    else if (d > 0) { const dist = this.distanceField(filled, nx, ny, cw, ch); out = new Uint8Array(nx * ny); for (let k = 0; k < out.length; k++) out[k] = (filled[k] || dist[k] <= d) ? 1 : 0; }
+    else { const empty = new Uint8Array(nx * ny); for (let k = 0; k < empty.length; k++) empty[k] = filled[k] ? 0 : 1;
+      const dist = this.distanceField(empty, nx, ny, cw, ch); out = new Uint8Array(nx * ny); for (let k = 0; k < out.length; k++) out[k] = (filled[k] && dist[k] > ad) ? 1 : 0; }
+    const rings = this.marchSquares(out, nx, ny, ox, oy, cw, ch);
+    return rings.length ? rings : null;
   }
 
   // largest |area| ring -> Shape outline; remaining rings -> holes (single-region)
@@ -2549,9 +2632,9 @@ class Component extends DCLogic {
   serializeGeom(node, idx, depth) {
     if (!node) return null;
     const id = 'g' + depth + '_' + idx;
-    if (node.kind === 'extrude' || node.kind === 'offset2d' || node.kind === 'projection') {
+    if (node.kind === 'extrude' || node.kind === 'offset2d' || node.kind === 'projection' || node.kind === 'resize') {
       const kids = (node.children || []).map((c, i) => this.serializeGeom(c, i, depth + 1)).filter(Boolean);
-      const label = node.kind === 'extrude' ? (node.mode === 'rotate' ? 'Rotate extrude' : 'Linear extrude') : node.kind === 'offset2d' ? 'Offset' : 'Projection';
+      const label = node.kind === 'extrude' ? (node.mode === 'rotate' ? 'Rotate extrude' : 'Linear extrude') : node.kind === 'offset2d' ? 'Offset' : node.kind === 'resize' ? 'Resize' : 'Projection';
       return { id, kind: 'group', op: 'group', label, depth, count: kids.length, children: kids, readOnly: true };
     }
     if (node.kind === 'import') {
