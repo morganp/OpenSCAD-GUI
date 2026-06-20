@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.17.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.18.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -215,13 +215,13 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12M8 2 6.4 3.8M8 2l1.6 1.8M8 14l-1.6-1.8M8 14l1.6-1.8M2 8l1.8-1.6M2 8l1.8 1.6M14 8l-1.8-1.6M14 8l-1.8 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Move
         </button>
-        <button onClick="{{ setGizmoRotate }}" style="{{ rotateTab }}">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.85M13.4 2.4V5h-2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Rotate
-        </button>
         <button onClick="{{ setGizmoScale }}" style="{{ scaleTab }}">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="1.2" stroke="currentColor" stroke-width="1.2"/><rect x="8.5" y="8.5" width="5" height="5" rx="0.8" fill="currentColor"/></svg>
           Resize
+        </button>
+        <button onClick="{{ setGizmoRotate }}" style="{{ rotateTab }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.85M13.4 2.4V5h-2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Rotate
         </button>
       </div>
       </sc-if>
@@ -256,6 +256,26 @@
       <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Position</div>
       <div style="display:flex;gap:8px;margin-bottom:13px;align-items:flex-start;">
         <sc-for list="{{ posFields }}" as="f" hint-placeholder-count="3">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
+            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
+            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
+                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
+                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+        <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Rotation</span>
+        <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">degrees</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start;">
+        <sc-for list="{{ rotFields }}" as="f" hint-placeholder-count="3">
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
             <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
             <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
@@ -1732,6 +1752,9 @@ class Component extends DCLogic {
     if (key === 'px') return s.pos[0];
     if (key === 'py') return s.pos[1];
     if (key === 'pz') return s.pos[2];
+    if (key === 'rx') return (s.rot && s.rot[0]) || 0;
+    if (key === 'ry') return (s.rot && s.rot[1]) || 0;
+    if (key === 'rz') return (s.rot && s.rot[2]) || 0;
     return 0;
   }
   applyFieldNumber(s, key, n) {
@@ -1743,6 +1766,10 @@ class Component extends DCLogic {
     else if (key === 'px') s.pos[0] = n;
     else if (key === 'py') s.pos[1] = n;
     else if (key === 'pz') s.pos[2] = n;
+    else if (key === 'rx' || key === 'ry' || key === 'rz') {
+      if (!s.rot) s.rot = [0, 0, 0];
+      s.rot[key === 'rx' ? 0 : key === 'ry' ? 1 : 2] = n;
+    }
   }
   clearExpr(s, key) { if (s.expr) { delete s.expr[key]; if (!Object.keys(s.expr).length) delete s.expr; } }
   rebuildField(s) {
@@ -4067,6 +4094,7 @@ class Component extends DCLogic {
             : [this.buildField(ssh, 'd', '\u2300 base'), this.buildField(ssh, 'd2', '\u2300 top'), this.buildField(ssh, 'h', 'Z (height)')])
             : [this.buildField(ssh, 'd', '\u2300 diameter'), this.buildField(ssh, 'h', 'Z (height)')]);
     const posFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'px', 'X'), this.buildField(ssh, 'py', 'Y'), this.buildField(ssh, 'pz', 'Z (plane)')];
+    const rotFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'rx', 'X°'), this.buildField(ssh, 'ry', 'Y°'), this.buildField(ssh, 'rz', 'Z°')];
     const showGizmoTabs = !!ssh && !sshIsGroup;
     const sshRole = sshNested ? this.memberRole(ssh) : null;
     const sshNestedNotice = sshRole === 'cut'
@@ -4190,6 +4218,7 @@ class Component extends DCLogic {
       isCylinderSel: sshIsCyl,
       dimFields,
       posFields,
+      rotFields,
       placeOnFloor: this.placeOnFloor,
       deselectShape: () => this.selectShape(null),
 
