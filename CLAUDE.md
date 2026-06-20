@@ -213,11 +213,14 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] Console panel for `echo`/`assert`/warnings (toggle in code drawer).  [x] error markers on code lines (scroll-synced line-number gutter; error lines tinted red).
 - [x] Color/modifier materials surfaced in the viewport.  [x] camera ↔ `$vp*` binding.
 
-## Phase 13 — Conformance harness  `[ ]`
-- [ ] A suite of representative `.scad` snippets (one+ per cheat-sheet feature) with a
-      pass/fail render check, run via `eval_js`, to guard against regressions and measure
-      true % coverage.
-- [ ] *(Optional)* differential check against openscad-wasm output for high-value cases.
+## Phase 13 — Conformance harness  `[x]`  — `conformance.js` + editor "run tests" panel
+- [x] A suite of 113 representative `.scad` snippets (one+ per cheat-sheet feature) with a
+      pass/fail check, run through `window.ScadEngine.run` (engine output: geom-node kinds/counts,
+      matrix layout, echo formatting, errors/warnings). `window.ScadConformance.run()` returns
+      `{passed,total,coveragePct,sections}`; runnable via `eval_js` AND from the editor's bottom
+      status-bar **run tests** button (results panel: per-section pass/fail, click any case to load
+      its snippet into the editor). Current score **113/113 = 100%**.
+- [ ] *(Optional, deferred)* differential check against openscad-wasm output for high-value cases.
 
 ---
 
@@ -235,12 +238,13 @@ regions via raster grow/shrink), **`resize()`** (bbox-matched scaling, `auto`), 
 `hull`/`minkowski` (via `ConvexGeometry`), and **`projection`** (silhouette + `cut=true` cross-section, traced to 2D rings via marching squares) now render. Simple programs stay GUI-editable;
 advanced programs render read-only with an evaluated Model Tree + an echo/warn/error console.
 
-**Not yet rendered:** only the conformance harness (Phase 13) remains; the optional
-openscad-wasm fidelity fallback is deferred by design.
+**Not yet rendered:** nothing core remains — the conformance harness (Phase 13) now ships
+(`conformance.js`, 113/113 = 100%); only the optional openscad-wasm fidelity fallback is deferred
+by design.
 `surface()` heightmaps (DAT + PNG) render (watertight solid via the drag-drop provider).
 `projection` (3D→2D) renders (raster + marching-squares contour trace, both cut modes);
 **STL/OFF/3MF/AMF `import()`** render (drag-drop/Import-mesh provider, pure-JS parsers).
 
-**Estimated true language coverage ≈ 100%** of the cheat-sheet feature set (offset of boolean
-regions, `resize`, and 3MF/AMF import all now render). Every Phase 0–12 box is checked; only the
-Phase 13 conformance harness (and the optional WASM differential check) is open.
+**Estimated true language coverage ≈ 100%** of the cheat-sheet feature set, now measured by the
+Phase 13 conformance harness (**113/113 cases pass**). Every Phase 0–13 box is checked; only the
+optional openscad-wasm differential check is left open by design.

@@ -1,4 +1,40 @@
-# HANDOFF — Close all Phase 0–12 open items: resize() + offset of boolean regions (Phase 5/9) — ✅ SHIPPED (v0.14.0)
+# HANDOFF — Phase 13 conformance harness — ✅ SHIPPED (v0.15.0)
+
+The last roadmap phase. A 113-case conformance suite (`public/conformance.js`,
+`window.ScadConformance`) exercises one+ snippet per cheat-sheet feature and checks engine
+output through `window.ScadEngine.run`. **113/113 pass = 100% coverage.** Runnable via
+`eval_js(window.ScadConformance.run())` AND from the editor UI: a **run tests** button in the
+bottom status bar (next to `console`) opens a results panel — per-section pass/fail bars, a
+coverage meter + ALL PASS badge, and every case clickable to load its `.scad` snippet into the
+editor for inspection. Sections with any failure auto-expand.
+
+### What each case checks (engine-level, deterministic — no WebGL needed)
+- **echo-based** (most of the language): runs the snippet, compares `res.echos[i].msg` to the
+  expected OpenSCAD-formatted string (operators, math/string/list/type-test fns, special vars,
+  list comprehensions incl. C-style, recursion, lambdas, `assign()`).
+- **geom-node-based**: flattens `res.geom` and counts `kind`/`type`/`shape`/`op` nodes, or
+  inspects the wrapping `group` node's column-major `matrix` (translate at m[12..14], scale at
+  m[0]/m[5]/m[10], etc.) for the transform cases. Covers 3D + 2D primitives, all transforms,
+  booleans, flow/modules/`children()`/`$children`, extrudes, projection, import/surface/
+  include-use (with synthetic `opts.files`), and modifier tags (`#`→`mod:highlight`,
+  `%`→`mod:background`, `*`→skipped, `!`→renders).
+- **error/warn-based**: `assert(false,…)` must populate `res.errors`; `assert(true,…)` must not.
+
+### Files
+- `public/conformance.js` — `{ cases, run(globalOpts), flatten }`. `add(section,name,src,ck,opts)`;
+  each `ck(H,res)` returns `true` or a failure-detail string. `H` helpers: `echo(i)`, `eq(i,v)`,
+  `kindCount/typeCount/shapeCount/opCount`, `find(pred)`, `noErr`, `errs`, `warns`, `flat`.
+- `public/Editor.dc.html` — helmet loads `conformance.js`; state `confOpen/confReport/confExpanded`;
+  handlers `runConformance` (passes the live global `$fn`), `closeConf`, `toggleConfSection`,
+  `loadConfCase`; the status-bar button + the centered results panel; `confSections` renderVals.
+
+### Deferred (by design)
+The optional openscad-wasm differential check (Phase 13 second box) — only worthwhile if the
+native evaluator ever stalls on exotic features. Every other Phase 0–13 box is now checked.
+
+---
+
+
 
 Closed the last three non-Phase-13 boxes on the roadmap. Engine + editor change.
 
