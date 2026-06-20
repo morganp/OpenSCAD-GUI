@@ -1,3 +1,60 @@
+# HANDOFF — Rotation gizmo + movable/rotatable groups + group hull — IN PROGRESS (v0.17.0)
+
+## Feature (restated)
+1. Shapes have **Move** and **Resize** gizmos but no **Rotate** — add a third gizmo mode.
+2. **Groups** (boolean assemblies) must be **movable and rotatable** as a whole (they had no gizmo).
+3. Groups gain a **Hull** operation alongside Union / Difference / Intersection.
+
+## Data model
+- A node's rotation is `node.rot = [rx,ry,rz]` (degrees, OpenSCAD `rotate([x,y,z])` order).
+  Absent ⇒ `[0,0,0]`; only written when non-zero (no migration of existing spawn sites needed).
+- Groups gain optional `node.pos` / `node.rot` (default `[0,0,0]`) so a whole assembly can be
+  translated/rotated; members keep their own local pos/rot inside the group frame.
+
+## Rotation math (the crux)
+OpenSCAD `rotate([x,y,z])` = `Rz·Ry·Rx` == three.js Euler **order `'ZYX'`**. So every driven
+object sets `rotation.order='ZYX'`; `setEuler(obj,rot)` writes degrees→rad in that order and
+`readEuler(obj)` reads `.x/.y/.z` back as the exact `[x,y,z]` for codegen. Helpers added near the
+gizmo block.
+
+## Touch-points (all in public/Editor.dc.html)
+- **Gizmo:** `_applyGizmoMode` (mode/space: world for move, local for rotate/scale; groups skip
+  scale), `updateGizmo` (now also attaches top-level **groups**; ghost gets rotation), `setEuler`/
+  `readEuler`, `onGizmoChange`/`onGizmoEnd` (branch on isGroup + rotate mode), `setGizmoRotate`.
+- **Render:** `buildGroup` (shape.rot), `buildGroupRender` (group pos/rot + fallback member rot),
+  `evalBrush` (member rot + nested-group transform + **hull** via `hullMinkBrush`), `buildGhost`
+  (rot), `hullMinkBrush.vertsOf` (apply `matrixWorld` so GUI member transforms count).
+- **Codegen:** `rotLine`, `emitPrimitive` (rotate after translate ×3 branches), `emitNode`
+  (group translate/rotate wrap; `hull(){}` falls out of `node.op`).
+- **Parse:** `parseBlock` captures `rotate`→rot, group `pos`/`rot`, `GROUPS += 'hull'`;
+  `readRotTokens`; `buildNodeFromParsed` (group pos/rot/hull label, primitive rot); `isAdvanced`
+  SIMPLE set `+= 'rotate','hull'` so rotated/hull GUI programs stay editable.
+- **UI:** shape panel Rotate tab; group panel Transform (Move/Rotate) tabs + Hull op button
+  (2×2 grid); tree context-menu Hull; renderVals (`rotateTab`, `setGizmoRotate`, group gizmo/hull
+  props, `showGroupGizmo`).
+
+## Status: DONE (v0.17.0). Verified in-app: rotate + group hull + group translate/rotate round-trip
+## through parse→codegen and stay GUI-editable (isAdvanced=false); hull group renders a real mesh;
+## gizmo attaches to top-level groups (move=world, rotate=local, scale→falls back to move). Badge
+## updated, VERSION=0.17.0, release snapshot cut.
+
+## KNOWN BUG (open) — shared parameter not propagated to siblings during live gizmo edit
+When a parameter (variable) is bound to an object's property (e.g. `cube([w,w,w])`), dragging/
+resizing/rotating that object writes the new value back into the variable (`setVarValueRaw`/
+`setVarValue` from `onGizmoChange`/`onGizmoEnd`/`bakeDim`). The variable value updates and the
+**dragged** object re-resolves, but **other objects that reference the same parameter do not
+re-render live** — they only refresh on the next full rebuild (Run, or another edit).
+- Want: editing a shared param via gizmo updates every shape bound to it in the live viewport.
+- Where to fix: after `setVarValueRaw`/`setVarValue` during a gizmo drag, re-resolve + rebuild
+  every shape whose `expr` references that var (not just the active one). `resolveAll()` already
+  re-resolves all shapes from `varMap()`; the live path needs to call it (or a scoped variant that
+  rebuilds only the affected shapes' groups) and refresh their three.js geometry/position, instead
+  of only `resolveShape(activeShape)` + `rebuildField(activeShape)`. Watch perf: throttle the
+  multi-shape rebuild during continuous drag (rebuild on `onGizmoChange` may be heavy — consider
+  updating sibling transforms live but deferring CSG-heavy rebuilds to `onGizmoEnd`).
+
+---
+
 # HANDOFF — GUI authoring: more shapes + 2D + extrudes + boolean-edge fillets — IN PROGRESS
 
 > The engine renders 100% of OpenSCAD already (read-only, advanced path). This work is about the
@@ -49,6 +106,28 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
    analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
    common case of two-primitive intersections.)
+6. **[~] Slice 6 — Face push/pull extrude (linear + rotational)**: pick a face of the evaluated
+   solid, drag to **linear-extrude** it along its normal (outward → union, inward → difference) or
+   **rotate-extrude** it around a chosen edge/axis. Exports cleanly: the picked face becomes a
+   `polygon()` placed on the face plane via `multmatrix`, wrapped in `linear_extrude`/`rotate_extrude`,
+   and `union`/`difference`-ed with the model. Shares the result-mesh face/edge detection with Slice 5.
+
+## Slice 6 design — Face push/pull
+**Foundation (this turn): face detection.** From the evaluated result `BufferGeometry`:
+- `faceClusters(geo)` / `faceTrisAt(geo, triIndex)` — group triangles into **planar faces** by
+  quantized (normal, plane-offset). v1 merges coplanar tris (a cube top = 1 face); connectivity-split
+  is a later refinement.
+- `faceData(geo, tris)` — extract the boundary loop(s): collect every triangle edge, keep edges used
+  an odd number of times (boundary), chain them into closed loops by shared endpoints. Build a face
+  frame (origin = a boundary vertex, +Z = face normal, U/V in-plane), project the loops to 2D rings
+  in that frame. Returns `{ rings2D, frame:Matrix4, normal, center, area }` such that
+  `multmatrix(frame) linear_extrude(d) polygon(rings2D)` reproduces a prism standing on the face.
+**Then:** pick (raycast result mesh → hit triangle → `faceTrisAt` → highlight loop), a push/pull
+gizmo (drag along normal = linear distance; modifier or second handle = revolve angle about a chosen
+boundary edge), realize as a new boolean member, emit OpenSCAD. Restructure: wrap the current model
+in a `union(){ … }` / `difference(){ … }` with the new extruded solid.
+**Open UX questions:** how the user enters the tool (select a face vs a dedicated tool), linear vs
+rotational toggle, axis pick for revolve, numeric entry vs drag.
 
 ---
 

@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.16.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.17.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -215,6 +215,10 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12M8 2 6.4 3.8M8 2l1.6 1.8M8 14l-1.6-1.8M8 14l1.6-1.8M2 8l1.8-1.6M2 8l1.8 1.6M14 8l-1.8-1.6M14 8l-1.8 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Move
         </button>
+        <button onClick="{{ setGizmoRotate }}" style="{{ rotateTab }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.85M13.4 2.4V5h-2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Rotate
+        </button>
         <button onClick="{{ setGizmoScale }}" style="{{ scaleTab }}">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="1.2" stroke="currentColor" stroke-width="1.2"/><rect x="8.5" y="8.5" width="5" height="5" rx="0.8" fill="currentColor"/></svg>
           Resize
@@ -280,11 +284,26 @@
         <button onClick="{{ deselectGroup }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;" style-hover="color:#C7CCD4;">×</button>
       </div>
 
-      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Boolean operation</div>
+      <sc-if value="{{ showGroupGizmo }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Transform</div>
       <div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button onClick="{{ setGizmoMove }}" style="{{ groupMoveTab }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12M8 2 6.4 3.8M8 2l1.6 1.8M8 14l-1.6-1.8M8 14l1.6-1.8M2 8l1.8-1.6M2 8l1.8 1.6M14 8l-1.8-1.6M14 8l-1.8 1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Move
+        </button>
+        <button onClick="{{ setGizmoRotate }}" style="{{ groupRotateTab }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.2 8a5.2 5.2 0 1 1-1.7-3.85M13.4 2.4V5h-2.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Rotate
+        </button>
+      </div>
+      </sc-if>
+
+      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Operation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;">
         <button onClick="{{ setGroupUnion }}" style="{{ groupUnionTab }}">∪ Union</button>
         <button onClick="{{ setGroupDiff }}" style="{{ groupDiffTab }}">− Difference</button>
         <button onClick="{{ setGroupInt }}" style="{{ groupIntTab }}">∩ Intersect</button>
+        <button onClick="{{ setGroupHull }}" style="{{ groupHullTab }}">⬢ Hull</button>
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
@@ -772,6 +791,7 @@ class Component extends DCLogic {
     if (shape.group) { this.scene.remove(shape.group); this.disposeGroup(shape.group); }
     const g = new THREE.Group();
     g.position.set(shape.pos[0], shape.pos[1], shape.pos[2]);
+    this.setEuler(g, shape.rot);
 
     // edges list (local) — spheres have no treatable edges in v1
     shape.edges = shape.type === 'cuboid'
@@ -1035,15 +1055,29 @@ class Component extends DCLogic {
     if (!this.isGroup(node)) {
       const b = new Brush(this.solidGeometry(node));
       b.position.set(node.pos[0], node.pos[1], node.pos[2]);
+      this.setEuler(b, node.rot);
       b.updateMatrixWorld(true);
       return b;
     }
     const kids = node.children.map(c => this.evalBrush(c)).filter(Boolean);
     if (!kids.length) return null;
-    if (kids.length === 1) { kids[0].updateMatrixWorld(true); return kids[0]; }
-    const mode = node.op === 'union' ? ADDITION : node.op === 'intersection' ? INTERSECTION : SUBTRACTION;
-    let acc = kids[0];
-    for (let i = 1; i < kids.length; i++) acc = this._ev.evaluate(acc, kids[i], mode);
+    let acc;
+    if (node.op === 'hull') {
+      acc = this.hullMinkBrush(kids, 'hull');
+    } else if (kids.length === 1) {
+      acc = kids[0];
+    } else {
+      const mode = node.op === 'union' ? ADDITION : node.op === 'intersection' ? INTERSECTION : SUBTRACTION;
+      acc = kids[0];
+      for (let i = 1; i < kids.length; i++) acc = this._ev.evaluate(acc, kids[i], mode);
+    }
+    if (!acc) return null;
+    // a nested group's own translate/rotate (baked when this brush feeds a parent boolean)
+    const gp = node.pos || [0, 0, 0], gr = node.rot || [0, 0, 0];
+    if (gp[0] || gp[1] || gp[2] || gr[0] || gr[1] || gr[2]) {
+      acc.position.set(gp[0], gp[1], gp[2]);
+      this.setEuler(acc, gr);
+    }
     acc.updateMatrixWorld(true);
     return acc;
   }
@@ -1051,6 +1085,9 @@ class Component extends DCLogic {
   buildGroupRender(node) {
     const THREE = this.THREE;
     const g = new THREE.Group();
+    const gp = node.pos || [0, 0, 0];
+    g.position.set(gp[0], gp[1], gp[2]);
+    this.setEuler(g, node.rot);
     let mesh = null;
     if (this.CSG) {
       try {
@@ -1063,7 +1100,7 @@ class Component extends DCLogic {
       mesh = new THREE.Group();
       for (const p of this.collectPrimitives([node])) {
         const m = new THREE.Mesh(this.solidGeometry(p), this.matFor(node));
-        m.position.set(p.pos[0], p.pos[1], p.pos[2]); m.castShadow = true; m.receiveShadow = true;
+        m.position.set(p.pos[0], p.pos[1], p.pos[2]); this.setEuler(m, p.rot); m.castShadow = true; m.receiveShadow = true;
         mesh.add(m);
       }
     }
@@ -1072,6 +1109,84 @@ class Component extends DCLogic {
     node.group = g; node.solid = mesh;
     this.scene.add(g);
     return g;
+  }
+
+  // ===== FACE DETECTION (Slice 6: face push/pull) =====
+  // index-aware triangle vertex fetch
+  _triVtx(geo, t, c) {
+    const THREE = this.THREE, pos = geo.attributes.position, idx = geo.index;
+    const i = idx ? idx.getX(3 * t + c) : 3 * t + c;
+    return new THREE.Vector3().fromBufferAttribute(pos, i);
+  }
+  _triCount(geo) { return (geo.index ? geo.index.count : geo.attributes.position.count) / 3; }
+  _triNormal(geo, t) {
+    const a = this._triVtx(geo, t, 0), b = this._triVtx(geo, t, 1), c = this._triVtx(geo, t, 2);
+    return b.clone().sub(a).cross(c.clone().sub(a)).normalize();
+  }
+  // all triangles coplanar (same normal + plane offset) with the seed triangle
+  faceTrisAt(geo, seed) {
+    const sN = this._triNormal(geo, seed);
+    const sD = sN.dot(this._triVtx(geo, seed, 0));
+    const triN = this._triCount(geo), tris = [];
+    for (let t = 0; t < triN; t++) {
+      const n = this._triNormal(geo, t);
+      if (n.dot(sN) < 0.999) continue;
+      const d = n.dot(this._triVtx(geo, t, 0));
+      if (Math.abs(d - sD) > 0.05) continue;
+      tris.push(t);
+    }
+    return { tris, normal: sN, offset: sD };
+  }
+  // boundary outline of a coplanar triangle set -> 2D rings (in a face frame) + world placement.
+  // Rasterize + marching-squares (same robust path as projection) so overlapping coplanar
+  // triangles from a CSG seam still yield a clean union outline.
+  faceData(geo, tris, normal) {
+    const THREE = this.THREE;
+    if (!tris.length) return null;
+    const origin = this._triVtx(geo, tris[0], 0).clone();
+    let U = Math.abs(normal.z) < 0.9 ? new THREE.Vector3(0, 0, 1).cross(normal) : new THREE.Vector3(1, 0, 0).cross(normal);
+    if (U.length() < 1e-6) U = new THREE.Vector3(1, 0, 0);
+    U.normalize();
+    const V = new THREE.Vector3().crossVectors(normal, U).normalize();
+    // project each tri's 3 corners into the (U,V) face frame relative to origin
+    const proj = tris.map(t => [0, 1, 2].map(k => { const d = this._triVtx(geo, t, k).sub(origin); return [d.dot(U), d.dot(V)]; }));
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const tri of proj) for (const [x, y] of tri) { if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    if (!isFinite(minx) || maxx <= minx || maxy <= miny) return null;
+    const W = maxx - minx, H = maxy - miny, maxRes = 360, cell = Math.max(W, H) / maxRes;
+    let nx = Math.ceil(W / cell) + 3, ny = Math.ceil(H / cell) + 3;
+    if (nx * ny > 220000) { const s = Math.sqrt(220000 / (nx * ny)); nx = Math.max(3, Math.floor(nx * s)); ny = Math.max(3, Math.floor(ny * s)); }
+    const ox = minx - cell, oy = miny - cell, cw = (W + 2 * cell) / nx, ch = (H + 2 * cell) / ny;
+    const grid = new Uint8Array(nx * ny);
+    const cross = (ax, ay, bx, by, px, py) => (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    for (const tri of proj) {
+      const [[x0, y0], [x1, y1], [x2, y2]] = tri;
+      if (Math.abs(cross(x0, y0, x1, y1, x2, y2)) < 1e-12) continue;
+      const a0 = Math.max(0, Math.floor((Math.min(x0, x1, x2) - ox) / cw)), a1 = Math.min(nx - 1, Math.floor((Math.max(x0, x1, x2) - ox) / cw));
+      const b0 = Math.max(0, Math.floor((Math.min(y0, y1, y2) - oy) / ch)), b1 = Math.min(ny - 1, Math.floor((Math.max(y0, y1, y2) - oy) / ch));
+      for (let j = b0; j <= b1; j++) { const py = oy + (j + 0.5) * ch;
+        for (let i = a0; i <= a1; i++) { if (grid[j * nx + i]) continue; const px = ox + (i + 0.5) * cw;
+          const w0 = cross(x1, y1, x2, y2, px, py), w1 = cross(x2, y2, x0, y0, px, py), w2 = cross(x0, y0, x1, y1, px, py);
+          if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0)) grid[j * nx + i] = 1;
+        } }
+    }
+    const rings2D = this.marchSquares(grid, nx, ny, ox, oy, cw, ch);
+    if (!rings2D || !rings2D.length) return null;
+    // outer ring = largest |signed area|; compute area + centroid from it
+    const sArea = (r) => { let A = 0; for (let i = 0; i < r.length; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % r.length]; A += x1 * y2 - x2 * y1; } return A / 2; };
+    let oi = 0, oa = 0; rings2D.forEach((r, i) => { const a = Math.abs(sArea(r)); if (a > oa) { oa = a; oi = i; } });
+    const r0 = rings2D[oi], A = sArea(r0); let cx = 0, cy = 0;
+    for (let i = 0; i < r0.length; i++) { const [x1, y1] = r0[i], [x2, y2] = r0[(i + 1) % r0.length]; const cr = x1 * y2 - x2 * y1; cx += (x1 + x2) * cr; cy += (y1 + y2) * cr; }
+    const center2 = Math.abs(A) > 1e-6 ? [cx / (6 * A), cy / (6 * A)] : [0, 0];
+    const centerWorld = origin.clone().add(U.clone().multiplyScalar(center2[0])).add(V.clone().multiplyScalar(center2[1]));
+    const frame = new THREE.Matrix4().makeBasis(U, V, normal).setPosition(origin);
+    return { rings2D, frame: frame.elements.slice(), normal: normal.toArray(), origin: origin.toArray(), U: U.toArray(), V: V.toArray(), area: oa, center: centerWorld.toArray() };
+  }
+  // convenience: face under a raycast-hit triangle index
+  pickFace(geo, triIndex) {
+    const f = this.faceTrisAt(geo, triIndex);
+    const data = this.faceData(geo, f.tris, f.normal);
+    return data ? { ...data, triCount: f.tris.length } : null;
   }
 
   // ============ POINTER / PICK ============
@@ -1243,41 +1358,74 @@ class Component extends DCLogic {
     wire.renderOrder = 4;
     g.add(fill); g.add(wire);
     g.position.set(node.pos[0], node.pos[1], node.pos[2]);
+    this.setEuler(g, node.rot);
     g.userData = { ghostFor: node.id };
     this.scene.add(g);
     this.ghost = g;
     return g;
   }
 
+  // gizmo space helper: world for move, local for rotate/scale; groups skip scale
+  _applyGizmoMode(obj, allowScale) {
+    let m = this.state.gizmoMode;
+    if (m === 'scale' && !allowScale) m = 'translate';
+    this.tc.setMode(m === 'scale' ? 'scale' : m === 'rotate' ? 'rotate' : 'translate');
+    this.tc.setSpace(m === 'translate' ? 'world' : 'local');
+    this.tc.attach(obj);
+    this.tc.visible = true; this.tc.enabled = true;
+  }
+  // OpenSCAD rotate([x,y,z]) == Rz*Ry*Rx == three Euler order 'ZYX'
+  setEuler(obj, rot) {
+    const d2r = Math.PI / 180, r = rot || [0, 0, 0];
+    obj.rotation.set(r[0] * d2r, r[1] * d2r, r[2] * d2r, 'ZYX');
+  }
+  readEuler(obj) {
+    if (obj.rotation.order !== 'ZYX') obj.rotation.reorder('ZYX');
+    const r2d = 180 / Math.PI;
+    const norm = (a) => { let v = +(a * r2d).toFixed(2); if (Math.abs(v) < 0.005) v = 0; return v; };
+    return [norm(obj.rotation.x), norm(obj.rotation.y), norm(obj.rotation.z)];
+  }
   updateGizmo() {
     if (!this.tc) return;
     const id = this.state.selectedShapeId;
     const n = (!this.state.selectedEdge && id) ? this.findNode(id) : null;
-    if (n && !this.isGroup(n) && this.isTopLevel(id) && n.group) {
+    if (n && this.isGroup(n) && this.isTopLevel(id) && n.group) {
+      // top-level group: move/rotate the whole assembly (no scale)
+      this.clearGhost();
+      this._applyGizmoMode(n.group, false);
+    } else if (n && !this.isGroup(n) && this.isTopLevel(id) && n.group) {
       // top-level primitive: drive its own group directly
       this.clearGhost();
-      this.tc.setMode(this.state.gizmoMode === 'scale' ? 'scale' : 'translate');
-      this.tc.setSpace(this.state.gizmoMode === 'scale' ? 'local' : 'world');
-      this.tc.attach(n.group);
-      this.tc.visible = true; this.tc.enabled = true;
+      this._applyGizmoMode(n.group, true);
     } else if (n && !this.isGroup(n) && !this.isTopLevel(id)) {
       // nested member: show + drive a ghost proxy so negatives are visible and editable
       if (!this.ghost || this.ghost.userData.ghostFor !== n.id) this.buildGhost(n);
-      else { this.ghost.position.set(n.pos[0], n.pos[1], n.pos[2]); this.ghost.scale.set(1, 1, 1); }
-      this.tc.setMode(this.state.gizmoMode === 'scale' ? 'scale' : 'translate');
-      this.tc.setSpace(this.state.gizmoMode === 'scale' ? 'local' : 'world');
-      this.tc.attach(this.ghost);
-      this.tc.visible = true; this.tc.enabled = true;
+      else { this.ghost.position.set(n.pos[0], n.pos[1], n.pos[2]); this.setEuler(this.ghost, n.rot); this.ghost.scale.set(1, 1, 1); }
+      this._applyGizmoMode(this.ghost, true);
     } else {
       this.clearGhost();
       this.tc.detach(); this.tc.visible = false;
     }
   }
   onGizmoChange() {
-    const s = this.selShape(); const obj = this.gizmoObject();
-    if (!s || !obj) return;
-    if (this.state.gizmoMode === 'scale') return;
-    const p = obj.position;
+    const node = this.findNode(this.state.selectedShapeId); const obj = this.gizmoObject();
+    if (!node || !obj) return;
+    const mode = this.state.gizmoMode;
+    if (mode === 'scale') return;          // baked on drag end
+    if (this.isGroup(node)) {
+      if (mode === 'rotate') node.rot = this.readEuler(obj);
+      else node.pos = [+obj.position.x.toFixed(2), +obj.position.y.toFixed(2), +obj.position.z.toFixed(2)];
+      this.syncShapesState(); this.regenCode(); this.forceUpdate();
+      return;
+    }
+    if (mode === 'rotate') {
+      node.rot = this.readEuler(obj);
+      if (!this.isTopLevel(node.id)) this.rebuildAncestor(node);
+      this.syncVarsState(); this.regenCode(); this.forceUpdate();
+      return;
+    }
+    // translate a primitive
+    const s = node, p = obj.position;
     const np = [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)];
     const keys = ['px', 'py', 'pz'];
     for (let i = 0; i < 3; i++) {
@@ -1291,10 +1439,10 @@ class Component extends DCLogic {
     this.syncVarsState(); this.regenCode(); this.forceUpdate();
   }
   onGizmoEnd() {
-    const s = this.selShape(); const obj = this.gizmoObject();
+    const s = this.findNode(this.state.selectedShapeId); const obj = this.gizmoObject();
     if (!s) return;
-    const nested = !this.isTopLevel(s.id);
-    if (this.state.gizmoMode === 'scale' && obj) {
+    const nested = !this.isGroup(s) && !this.isTopLevel(s.id);
+    if (this.state.gizmoMode === 'scale' && obj && !this.isGroup(s)) {
       const sc = obj.scale;
       if (s.type === 'cuboid') {
         this.bakeDim(s, 'x', s.dims.x * sc.x);
@@ -1325,6 +1473,7 @@ class Component extends DCLogic {
     else this.applyFieldNumber(s, key, v);
   }
   setGizmoMove = () => { this.setState({ gizmoMode: 'translate' }, () => this.updateGizmo()); };
+  setGizmoRotate = () => { this.setState({ gizmoMode: 'rotate' }, () => this.updateGizmo()); };
   setGizmoScale = () => { this.setState({ gizmoMode: 'scale' }, () => this.updateGizmo()); };
 
   // ============ TREATMENTS ============
@@ -1950,12 +2099,21 @@ class Component extends DCLogic {
   emitNode(node, level, out) {
     const pad = this.ind(level);
     if (this.isGroup(node)) {
+      const gp = node.pos || [0, 0, 0];
+      if (gp[0] || gp[1] || gp[2]) out.push(pad + `translate([${this.fmt(gp[0])}, ${this.fmt(gp[1])}, ${this.fmt(gp[2])}])`);
+      const rl = this.rotLine(node, pad); if (rl) out.push(rl);
       out.push(pad + node.op + '() {');
       for (const c of node.children) this.emitNode(c, level + 1, out);
       out.push(pad + '}');
       return;
     }
     this.emitPrimitive(node, level, out);
+  }
+  rotLine(node, pad) {
+    const r = node.rot || [0, 0, 0];
+    if (!r[0] && !r[1] && !r[2]) return null;
+    const F = (n) => this.fmt(n);
+    return pad + `rotate([${F(r[0])}, ${F(r[1])}, ${F(r[2])}])`;
   }
   emitPrimitive(s, level, out) {
     const F = (n) => this.fmt(n);
@@ -1966,12 +2124,15 @@ class Component extends DCLogic {
     if (s.type === 'cylinder' && treats.length) {
       out.push(pad + '// rims: ' + treats.map(([k, t]) => k.toLowerCase() + ' ' + t.type + ' r=' + F(t.size)).join(', '));
       out.push(pad + `translate(${pos})`);
+      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
       out.push(pad + '  ' + this.cylinderScad(s).replace(/\n/g, '\n' + pad) + ';');
     } else if (!treats.length) {
       out.push(pad + `translate(${pos})`);
+      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
       out.push(pad + '  ' + this.baseCall(s) + ';');
     } else {
       out.push(pad + `translate(${pos})`);
+      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
       out.push(pad + 'difference() {');
       out.push(pad + '  ' + this.baseCall(s) + ';');
       for (const [name, t] of treats) {
@@ -2057,7 +2218,7 @@ class Component extends DCLogic {
   // a program is "simple" (GUI-editable) only if it is numeric assigns + translate-wrapped or
   // bare cube/cylinder/sphere + union/difference/intersection. Everything else evaluates.
   isAdvanced(ast) {
-    const SIMPLE = new Set(['translate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection']);
+    const SIMPLE = new Set(['translate', 'rotate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection', 'hull']);
     const exprSimple = (e) => {
       if (!e) return true;
       switch (e.e) {
@@ -2605,7 +2766,7 @@ class Component extends DCLogic {
   // hull / minkowski via ConvexGeometry (ConvexHull). Exact for convex operands.
   hullMinkBrush(brushes, op) {
     const THREE = this.THREE, CG = window.__ConvexGeometry;
-    const vertsOf = (b) => { const out = [], pos = b.geometry.attributes.position; for (let i = 0; i < pos.count; i++) out.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i))); return out; };
+    const vertsOf = (b) => { const out = [], pos = b.geometry.attributes.position, mw = b.matrixWorld; for (let i = 0; i < pos.count; i++) out.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(mw)); return out; };
     if (!CG || !brushes.length) return this.unionBrushes(brushes);
     try {
       if (op === 'hull') {
@@ -2811,17 +2972,19 @@ class Component extends DCLogic {
   buildNodeFromParsed(p) {
     if (p.type === 'group') {
       this.seq.group++;
+      const opLabel = p.op === 'union' ? 'Union ' : p.op === 'difference' ? 'Difference ' : p.op === 'hull' ? 'Hull ' : p.op === 'intersection' ? 'Intersection ' : 'Group ';
       return {
         id: 'gp' + Date.now() + Math.random().toString(36).slice(2, 6), op: p.op,
-        label: (p.op === 'union' ? 'Union ' : p.op === 'difference' ? 'Difference ' : 'Intersection ') + this.seq.group,
+        label: opLabel + this.seq.group,
         children: (p.children || []).map(c => this.buildNodeFromParsed(c)),
+        pos: p.pos || undefined, rot: p.rot || undefined,
       };
     }
     this.seq[p.type] = (this.seq[p.type] || 0) + 1;
     const label = (p.type === 'cuboid' ? 'Cuboid ' : p.type === 'sphere' ? 'Sphere ' : 'Cylinder ') + this.seq[p.type];
     return {
       id: p.type + Date.now() + Math.random().toString(36).slice(2, 6), type: p.type, label,
-      dims: p.dims, pos: p.pos, treatments: {},
+      dims: p.dims, pos: p.pos, rot: p.rot || undefined, treatments: {},
       expr: (p.expr && Object.keys(p.expr).length) ? p.expr : undefined,
     };
   }
@@ -2882,6 +3045,16 @@ class Component extends DCLogic {
     ['px', 'py', 'pz'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); pos[i] = r.value; if (r.expr) pexpr[k] = r.expr; });
     return { pos, pexpr };
   }
+  // rotate([x,y,z]) -> [x,y,z]; rotate(angle) -> [0,0,angle]
+  readRotTokens(args) {
+    if (/\[/.test(args)) {
+      const toks = this.splitArgs(this.argVector(args)); const r = [0, 0, 0];
+      toks.forEach((t, i) => { if (i < 3) r[i] = +(this.tokOrNum(t, this._vmap).value || 0).toFixed(4); });
+      return r;
+    }
+    const a = +(this.tokOrNum(this.splitArgs(args)[0] || '0', this._vmap).value || 0).toFixed(4);
+    return [0, 0, a];
+  }
   readPrimitive(name, args) {
     if (name === 'cube') {
       const toks = this.splitArgs(this.argVector(args)); const dims = { x: 10, y: 10, z: 10 }, ex = {};
@@ -2922,14 +3095,14 @@ class Component extends DCLogic {
   }
   parseBlock(src) {
     const nodes = []; let i = 0; const n = src.length;
-    const TRANSFORMS = ['rotate', 'scale', 'mirror', 'color', 'multmatrix', 'resize', 'offset'];
-    const GROUPS = ['union', 'difference', 'intersection'];
+    const TRANSFORMS = ['scale', 'mirror', 'color', 'multmatrix', 'resize', 'offset'];
+    const GROUPS = ['union', 'difference', 'intersection', 'hull'];
     const PRIMS = ['cube', 'cylinder', 'sphere'];
     while (i < n) {
       while (i < n && /[\s;]/.test(src[i])) i++;
       if (i >= n) break;
-      // consume transform prefixes; remember a translate as the node's position
-      let pos = null, pexpr = null, guard = 0;
+      // consume transform prefixes; remember translate/rotate as the node's pos/rot
+      let pos = null, pexpr = null, rot = null, guard = 0;
       while (guard++ < 50) {
         const mm = /^([A-Za-z_]\w*)\s*\(/.exec(src.slice(i));
         if (!mm) break;
@@ -2938,6 +3111,11 @@ class Component extends DCLogic {
           const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart);
           const r = this.readPosTokens(this.argVector(src.slice(pStart + 1, pEnd - 1)));
           pos = r.pos; pexpr = r.pexpr; i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue;
+        }
+        if (nm === 'rotate') {
+          const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart);
+          rot = this.readRotTokens(src.slice(pStart + 1, pEnd - 1));
+          i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue;
         }
         if (TRANSFORMS.includes(nm)) { const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart); i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue; }
         break;
@@ -2955,9 +3133,12 @@ class Component extends DCLogic {
           const children = this.parseBlock(inner);
           if (isEdgeTreat) {                       // our own edge-treatment wrapper, not a user boolean
             const prim = children.find(c => c.type !== 'group');
-            if (prim) { if (pos) { prim.pos = pos; if (pexpr && Object.keys(pexpr).length) prim.expr = { ...pexpr, ...(prim.expr || {}) }; } else prim.pos = this.restingPos(prim); nodes.push(prim); }
+            if (prim) { if (pos) { prim.pos = pos; if (pexpr && Object.keys(pexpr).length) prim.expr = { ...pexpr, ...(prim.expr || {}) }; } else prim.pos = this.restingPos(prim); if (rot && (rot[0] || rot[1] || rot[2])) prim.rot = rot; nodes.push(prim); }
           } else if (children.length) {
-            nodes.push({ type: 'group', op: name, children });
+            const grp = { type: 'group', op: name, children };
+            if (pos && (pos[0] || pos[1] || pos[2])) grp.pos = pos;
+            if (rot && (rot[0] || rot[1] || rot[2])) grp.rot = rot;
+            nodes.push(grp);
           }
         }
         continue;
@@ -2966,6 +3147,7 @@ class Component extends DCLogic {
         const node = this.readPrimitive(name, args);
         if (pos) { node.pos = pos; if (pexpr && Object.keys(pexpr).length) node.expr = { ...pexpr, ...(node.expr || {}) }; }
         else node.pos = this.restingPos(node);
+        if (rot && (rot[0] || rot[1] || rot[2])) node.rot = rot;
         while (i < n && /[\s;]/.test(src[i])) i++;
         nodes.push(node);
         continue;
@@ -3848,6 +4030,7 @@ class Component extends DCLogic {
         items.push(mk('\u222a', 'Union', () => this.changeOp(ctx.id, 'union'), { checked: node.op === 'union' }));
         items.push(mk('\u2212', 'Difference', () => this.changeOp(ctx.id, 'difference'), { checked: node.op === 'difference' }));
         items.push(mk('\u2229', 'Intersection', () => this.changeOp(ctx.id, 'intersection'), { checked: node.op === 'intersection' }));
+        items.push(mk('\u2b22', 'Hull', () => this.changeOp(ctx.id, 'hull'), { checked: node.op === 'hull' }));
         items.push(sep);
         items.push(mk('\u2922', 'Ungroup', () => this.ungroupById(ctx.id)));
       }
@@ -3977,9 +4160,11 @@ class Component extends DCLogic {
       shapePanelLabel: ssh ? ssh.label : '',
       shapeDotStyle: `width:10px;height:10px;border-radius:${sshIsCyl || (ssh && ssh.type === 'sphere') ? '50%' : '2px'};background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,.6);`,
       showGizmoTabs, sshNested, sshNestedNotice,
-      moveTab: this.tab(st.gizmoMode !== 'scale'),
+      moveTab: this.tab(st.gizmoMode === 'translate'),
+      rotateTab: this.tab(st.gizmoMode === 'rotate'),
       scaleTab: this.tab(st.gizmoMode === 'scale'),
       setGizmoMove: this.setGizmoMove,
+      setGizmoRotate: this.setGizmoRotate,
       setGizmoScale: this.setGizmoScale,
 
       hasGroupPanel: sshIsGroup,
@@ -3989,9 +4174,14 @@ class Component extends DCLogic {
       groupUnionTab: this.tab(sshIsGroup && ssh.op === 'union'),
       groupDiffTab: this.tab(sshIsGroup && ssh.op === 'difference'),
       groupIntTab: this.tab(sshIsGroup && ssh.op === 'intersection'),
+      groupHullTab: this.tab(sshIsGroup && ssh.op === 'hull'),
       setGroupUnion: () => sshIsGroup && this.changeOp(ssh.id, 'union'),
       setGroupDiff: () => sshIsGroup && this.changeOp(ssh.id, 'difference'),
       setGroupInt: () => sshIsGroup && this.changeOp(ssh.id, 'intersection'),
+      setGroupHull: () => sshIsGroup && this.changeOp(ssh.id, 'hull'),
+      showGroupGizmo: sshIsGroup && this.isTopLevel(ssh.id),
+      groupMoveTab: this.tab(st.gizmoMode === 'translate'),
+      groupRotateTab: this.tab(st.gizmoMode === 'rotate'),
       grpMembers,
       grpIsDiff: sshIsGroup && ssh.op === 'difference',
       ungroupCurrent: () => sshIsGroup && this.ungroupById(ssh.id),
