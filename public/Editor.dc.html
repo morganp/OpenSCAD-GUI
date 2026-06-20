@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.18.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.18.1</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -232,64 +232,33 @@
         </div>
       </sc-if>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
-        <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Dimensions</span>
-        <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">type a value or variable</span>
+      <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:9px;">
+        <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">value or variable</span>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start;">
-        <sc-for list="{{ dimFields }}" as="f" hint-placeholder-count="2">
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
-            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
-            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
-                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
-                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
-                </sc-for>
-              </div>
-            </sc-if>
+      <sc-for list="{{ transformSections }}" as="sec" hint-placeholder-count="3">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:9px;">
+          <div style="width:58px;flex:none;">
+            <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#8A9099;line-height:1.2;">{{ sec.title }}</div>
+            <div style="font-size:9px;color:#5B616B;font-family:'IBM Plex Mono',monospace;margin-top:1px;">{{ sec.unit }}</div>
           </div>
-        </sc-for>
-      </div>
-
-      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Position</div>
-      <div style="display:flex;gap:8px;margin-bottom:13px;align-items:flex-start;">
-        <sc-for list="{{ posFields }}" as="f" hint-placeholder-count="3">
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
-            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
-            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
-                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
-                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
-                </sc-for>
+          <div style="flex:1;min-width:0;display:flex;gap:6px;align-items:flex-start;">
+            <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="3">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;">
+                <span style="font-size:9px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:11px;">{{ f.label }}</span>
+                <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
+                <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
+                    <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
+                      <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
               </div>
-            </sc-if>
+            </sc-for>
           </div>
-        </sc-for>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
-        <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Rotation</span>
-        <span style="font-size:9.5px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">degrees</span>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:flex-start;">
-        <sc-for list="{{ rotFields }}" as="f" hint-placeholder-count="3">
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ f.label }}</span>
-            <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
-            <sc-if value="{{ f.hasSub }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ f.computedColor }};white-space:nowrap;">{{ f.computed }}</span>
-                <sc-for list="{{ f.chips }}" as="c" hint-placeholder-count="0">
-                  <button onClick="{{ c.onClick }}" title="Adjust this parameter" style="{{ c.style }}">{{ c.label }}</button>
-                </sc-for>
-              </div>
-            </sc-if>
-          </div>
-        </sc-for>
-      </div>
+        </div>
+      </sc-for>
       <button onClick="{{ placeOnFloor }}" style="width:100%;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">Rest base on floor</button>
     </div>
   </sc-if>
@@ -4095,6 +4064,11 @@ class Component extends DCLogic {
             : [this.buildField(ssh, 'd', '\u2300 diameter'), this.buildField(ssh, 'h', 'Z (height)')]);
     const posFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'px', 'X'), this.buildField(ssh, 'py', 'Y'), this.buildField(ssh, 'pz', 'Z (plane)')];
     const rotFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'rx', 'X°'), this.buildField(ssh, 'ry', 'Y°'), this.buildField(ssh, 'rz', 'Z°')];
+    const transformSections = (!ssh || sshIsGroup) ? [] : [
+      { title: 'Position', unit: 'mm', fields: posFields },
+      { title: 'Size', unit: 'mm', fields: dimFields },
+      { title: 'Rotation', unit: 'deg', fields: rotFields },
+    ];
     const showGizmoTabs = !!ssh && !sshIsGroup;
     const sshRole = sshNested ? this.memberRole(ssh) : null;
     const sshNestedNotice = sshRole === 'cut'
@@ -4219,6 +4193,7 @@ class Component extends DCLogic {
       dimFields,
       posFields,
       rotFields,
+      transformSections,
       placeOnFloor: this.placeOnFloor,
       deselectShape: () => this.selectShape(null),
 
