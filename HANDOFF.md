@@ -38,12 +38,24 @@ gizmo block.
 ## gizmo attaches to top-level groups (move=world, rotate=local, scale→falls back to move). Badge
 ## updated, VERSION=0.17.0, release snapshot cut.
 
-## KNOWN BUG (open) — shared parameter not propagated to siblings during live gizmo edit
+## KNOWN BUG (FIXED v0.18.2) — shared parameter now propagates to siblings during live gizmo edit
 When a parameter (variable) is bound to an object's property (e.g. `cube([w,w,w])`), dragging/
 resizing/rotating that object writes the new value back into the variable (`setVarValueRaw`/
-`setVarValue` from `onGizmoChange`/`onGizmoEnd`/`bakeDim`). The variable value updates and the
-**dragged** object re-resolves, but **other objects that reference the same parameter do not
-re-render live** — they only refresh on the next full rebuild (Run, or another edit).
+`setVarValue` from `onGizmoChange`/`onGizmoEnd`/`bakeDim`). Previously only the **dragged** object
+re-resolved; **other objects bound to the same parameter refreshed only on the next full rebuild**.
+**Fix (Editor.dc.html):** `propagateVarChange(changedVars, activeId, force)` — after a gizmo edit
+writes parameters, it re-resolves every OTHER shape whose `expr` references a changed var
+(`exprVars(expr)` scans identifiers that name a defined parameter) and rebuilds the distinct
+top-level ancestor groups those siblings live in (deduped; the active shape's ancestor is skipped —
+the existing `rebuildAncestor`/`rebuildField` already handles it). Heavy CSG is **throttled to ≤20fps
+during a continuous drag** (`_lastSibRebuild` + 50ms guard) and **forced on drag end** (`_gizmoEnding`
+flag set in `onGizmoEnd`; the translate-end `onGizmoChange()` passes it through; the scale branch
+passes `force:true`). `bakeDim` now returns the var name it wrote so the scale path can collect the
+changed set. Verified via `eval_js`: two cubes sized by `s` — scaling one 2× sets `s` and resizes
+**both** (data + rendered bbox ~10→~23); two cubes positioned by `d` — live-translating one to x=30
+sets `d` and moves the **sibling** to y=30 (group.position.y=30) mid-drag.
+
+### Original analysis (kept for reference)
 - Want: editing a shared param via gizmo updates every shape bound to it in the live viewport.
 - Where to fix: after `setVarValueRaw`/`setVarValue` during a gizmo drag, re-resolve + rebuild
   every shape whose `expr` references that var (not just the active one). `resolveAll()` already

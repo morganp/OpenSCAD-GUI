@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.18.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.18.2</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1417,49 +1417,57 @@ class Component extends DCLogic {
     const s = node, p = obj.position;
     const np = [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)];
     const keys = ['px', 'py', 'pz'];
+    const changed = new Set();
     for (let i = 0; i < 3; i++) {
       const expr = s.expr && s.expr[keys[i]];
-      if (expr) { const vn = this.isSingleVar(expr); if (vn) this.setVarValueRaw(vn, np[i]); /* locked: reverts below */ }
+      if (expr) { const vn = this.isSingleVar(expr); if (vn) { this.setVarValueRaw(vn, np[i]); changed.add(vn); } /* locked: reverts below */ }
       else s.pos[i] = np[i];
     }
     this.resolveShape(s);                 // locked axes snap back to expression value
     obj.position.set(s.pos[0], s.pos[1], s.pos[2]);
     if (!this.isTopLevel(s.id)) this.rebuildAncestor(s);   // live boolean update
+    this.propagateVarChange(changed, s.id, this._gizmoEnding);   // live shared-parameter siblings
     this.syncVarsState(); this.regenCode(); this.forceUpdate();
   }
   onGizmoEnd() {
     const s = this.findNode(this.state.selectedShapeId); const obj = this.gizmoObject();
     if (!s) return;
-    const nested = !this.isGroup(s) && !this.isTopLevel(s.id);
-    if (this.state.gizmoMode === 'scale' && obj && !this.isGroup(s)) {
-      const sc = obj.scale;
-      if (s.type === 'cuboid') {
-        this.bakeDim(s, 'x', s.dims.x * sc.x);
-        this.bakeDim(s, 'y', s.dims.y * sc.y);
-        this.bakeDim(s, 'z', s.dims.z * sc.z);
+    this._gizmoEnding = true;
+    try {
+      const nested = !this.isGroup(s) && !this.isTopLevel(s.id);
+      if (this.state.gizmoMode === 'scale' && obj && !this.isGroup(s)) {
+        const sc = obj.scale;
+        const changed = new Set(); const add = (vn) => { if (vn) changed.add(vn); };
+        if (s.type === 'cuboid') {
+          add(this.bakeDim(s, 'x', s.dims.x * sc.x));
+          add(this.bakeDim(s, 'y', s.dims.y * sc.y));
+          add(this.bakeDim(s, 'z', s.dims.z * sc.z));
+        } else {
+          const rs = (Math.abs(sc.x) + Math.abs(sc.y)) / 2;
+          add(this.bakeDim(s, 'd', s.dims.r * 2 * rs));
+          add(this.bakeDim(s, 'h', s.dims.h * sc.z));
+        }
+        obj.scale.set(1, 1, 1);
+        this.syncVarsState(); this.resolveShape(s);
+        if (nested) {
+          this.rebuildAncestor(s);
+          this.buildGhost(s); this.tc.attach(this.ghost);
+          this.propagateVarChange(changed, s.id, true);
+          this.regenCode(); this.forceUpdate();
+        } else {
+          this.rebuildField(s);
+          this.propagateVarChange(changed, s.id, true);
+        }
       } else {
-        const rs = (Math.abs(sc.x) + Math.abs(sc.y)) / 2;
-        this.bakeDim(s, 'd', s.dims.r * 2 * rs);
-        this.bakeDim(s, 'h', s.dims.h * sc.z);
+        this.onGizmoChange();
       }
-      obj.scale.set(1, 1, 1);
-      this.syncVarsState(); this.resolveShape(s);
-      if (nested) {
-        this.rebuildAncestor(s);
-        this.buildGhost(s); this.tc.attach(this.ghost);
-        this.regenCode(); this.forceUpdate();
-      } else {
-        this.rebuildField(s);
-      }
-    } else {
-      this.onGizmoChange();
-    }
+    } finally { this._gizmoEnding = false; }
   }
   bakeDim(s, key, newVal) {
     const v = +(+newVal).toFixed(2);
     const expr = s.expr && s.expr[key];
-    if (expr) { const vn = this.isSingleVar(expr); if (vn) this.setVarValueRaw(vn, v); /* locked equation: leave untouched */ }
-    else this.applyFieldNumber(s, key, v);
+    if (expr) { const vn = this.isSingleVar(expr); if (vn) { this.setVarValueRaw(vn, v); return vn; } return null; /* locked equation: leave untouched */ }
+    this.applyFieldNumber(s, key, v); return null;
   }
   setGizmoMove = () => { this.setState({ gizmoMode: 'translate' }, () => this.updateGizmo()); };
   setGizmoRotate = () => { this.setState({ gizmoMode: 'rotate' }, () => this.updateGizmo()); };
@@ -1635,6 +1643,46 @@ class Component extends DCLogic {
     this.syncShapesState(); this.regenCode(); this.forceUpdate();
   }
   afterVarsChanged() { this.syncVarsState(); this.resolveAll(); }
+
+  // identifiers in an expression that name a defined parameter
+  exprVars(expr) {
+    if (!expr) return [];
+    const out = []; const seen = new Set(); let m;
+    const re = /[A-Za-z_]\w*/g;
+    while ((m = re.exec(expr))) {
+      const n = m[0];
+      if (!seen.has(n) && this.vars.some(v => v.name === n)) { seen.add(n); out.push(n); }
+    }
+    return out;
+  }
+  // Live shared-parameter propagation: after a gizmo edit writes one or more
+  // parameters, re-resolve + re-render every OTHER shape bound to those parameters
+  // (the dragged shape is rebuilt by the caller). Throttled during a continuous
+  // drag (heavy CSG); forced on drag end so the final frame is always exact.
+  propagateVarChange(changedVars, activeId, force) {
+    if (!changedVars || !changedVars.size || !this.scene) return;
+    const vars = this.varMap();
+    const activeTop = this.topLevelAncestor(activeId);
+    const tops = new Set();
+    for (const s of this.shapes) {
+      if (s.id === activeId || !s.expr) continue;
+      let refs = false;
+      for (const e of Object.values(s.expr)) { if (this.exprVars(e).some(n => changedVars.has(n))) { refs = true; break; } }
+      if (!refs) continue;
+      this.resolveShape(s, vars);
+      const top = this.topLevelAncestor(s.id);
+      if (top && top !== activeTop) tops.add(top);
+    }
+    if (!tops.size) return;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (!force && this._lastSibRebuild && (now - this._lastSibRebuild) < 50) return;  // throttle continuous-drag CSG
+    this._lastSibRebuild = now;
+    for (const top of tops) {
+      if (top.group) { this.scene.remove(top.group); this.disposeGroup(top.group); top.group = null; top.solid = null; }
+      if (this.isGroup(top)) this.buildGroupRender(top); else this.buildGroup(top);
+    }
+    this.refreshSelectionMat();
+  }
 
   // --- parameter CRUD ---
   // ---- draggable floating panels (drag by header) ----
