@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.15.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.16.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -94,6 +94,35 @@
     <button onClick="{{ addSphere }}" title="Add sphere (S)" style="{{ btnSphere }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.3"/><ellipse cx="10" cy="10" rx="7" ry="2.6" stroke="currentColor" stroke-width="1.1" opacity=".5"/><path d="M10 3a7 7 0 0 1 0 14" stroke="currentColor" stroke-width="1.1" opacity=".5"/></svg>
     </button>
+    <button onClick="{{ toggleShapeMenu }}" title="More shapes\u2026" style="{{ btnShapes }}">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M6.4 3 9.3 8H3.5L6.4 3Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><rect x="11" y="3.4" width="5.4" height="5.4" rx="1" stroke="currentColor" stroke-width="1.2"/><circle cx="6.3" cy="14" r="2.9" stroke="currentColor" stroke-width="1.2"/><path d="M13.6 11.2 16.5 16.4H10.7L13.6 11.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" opacity=".55"/></svg>
+    </button>
+    <sc-if value="{{ shapeMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeShapeMenu }}" style="position:fixed;inset:0;z-index:39;"></div>
+      <div style="position:absolute;left:calc(100% + 10px);top:50%;transform:translateY(-50%);z-index:40;width:170px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:6px;">
+        <div style="font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:#5B616B;padding:5px 8px 6px;">Add shape</div>
+        <button onClick="{{ miCuboid }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M10 2.6 16.5 6v8L10 17.4 3.5 14V6L10 2.6Z" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round"/><path d="M3.6 6 10 9.4 16.4 6M10 9.4v8" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round" opacity=".55"/></svg>
+          Cuboid
+        </button>
+        <button onClick="{{ miCylinder }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><ellipse cx="10" cy="5" rx="6" ry="2.3" stroke="#9AA3AE" stroke-width="1.3"/><path d="M4 5v10c0 1.27 2.69 2.3 6 2.3s6-1.03 6-2.3V5" stroke="#9AA3AE" stroke-width="1.3"/></svg>
+          Cylinder
+        </button>
+        <button onClick="{{ miCone }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><ellipse cx="10" cy="15" rx="6.4" ry="2.3" stroke="#9AA3AE" stroke-width="1.3"/><path d="M10 2.6 16.4 15M10 2.6 3.6 15" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          Cone
+        </button>
+        <button onClick="{{ miPyramid }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M10 2.8 17 14.6 10 17.2 3 14.6 10 2.8Z" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round"/><path d="M10 2.8V17.2M3 14.6 10 11l7 3.6" stroke="#9AA3AE" stroke-width="1.2" stroke-linejoin="round" opacity=".55"/></svg>
+          Pyramid
+        </button>
+        <button onClick="{{ miSphere }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="#9AA3AE" stroke-width="1.3"/><ellipse cx="10" cy="10" rx="7" ry="2.6" stroke="#9AA3AE" stroke-width="1.1" opacity=".5"/></svg>
+          Sphere
+        </button>
+      </div>
+    </sc-if>
     <div style="height:1px;background:#2C3037;margin:2px 4px;"></div>
     <button onClick="{{ pickMove }}" title="Move selected (M)" style="{{ btnMove }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14M10 3 8 5.4m2-2.4 2 2.4M10 17l-2-2.4m2 2.4 2-2.4M3 10l2.4-2M3 10l2.4 2M17 10l-2.4-2m2.4 2-2.4 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -517,6 +546,7 @@ class Component extends DCLogic {
     dirty: false,
     fn: 48,
     fnMenuOpen: false,     // global $fn picker (bottom status bar)
+    shapeMenuOpen: false,  // "add shape" flyout (left toolbar)
     vars: [],              // serializable mirror of this.vars
     paramsOpen: false,
     fxEdit: null,          // 'shapeId:key' of the field whose expression editor is open
@@ -750,7 +780,7 @@ class Component extends DCLogic {
     shape.edges = shape.type === 'cuboid'
       ? this.cuboidEdges(shape.dims.x, shape.dims.y, shape.dims.z)
       : shape.type === 'cylinder'
-        ? this.cylinderEdges(shape.dims.r, shape.dims.h)
+        ? ((shape.dims.sides && shape.dims.sides >= 3) ? [] : this.cylinderEdges(shape.dims))
         : [];
 
     // solid (with CSG treatments)
@@ -762,7 +792,7 @@ class Component extends DCLogic {
     const baseGeom = shape.type === 'cuboid'
       ? new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z)
       : shape.type === 'cylinder'
-        ? this.cylBase(shape.dims.r, shape.dims.h)
+        ? this.cylWireGeom(shape.dims)
         : new THREE.SphereGeometry(shape.dims.r, 24, 16);
     const wire = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeom, 25), this.lineMat);
     g.add(wire); baseGeom.dispose();
@@ -793,37 +823,48 @@ class Component extends DCLogic {
     g.rotateX(Math.PI / 2); // Y-axis -> Z-axis
     return g;
   }
-  cylinderEdges(r, h) {
-    return [
-      { name: 'TOP', kind: 'rim', which: 'top', r, h, length: 2 * Math.PI * r },
-      { name: 'BOTTOM', kind: 'rim', which: 'bottom', r, h, length: 2 * Math.PI * r },
-    ];
+  // wire outline for the cylinder family (cone/pyramid/prism aware)
+  cylWireGeom(d) {
+    const rTop = d.r2 != null ? d.r2 : d.r;
+    const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : this.gfn();
+    const g = new this.THREE.CylinderGeometry(Math.max(1e-4, rTop), Math.max(1e-4, d.r), Math.max(0.1, d.h), sides);
+    g.rotateX(Math.PI / 2);
+    return g;
+  }
+  cylinderEdges(d) {
+    const h = d.h, edges = [];
+    edges.push({ name: 'BOTTOM', kind: 'rim', which: 'bottom', r: d.r, h, length: 2 * Math.PI * d.r });
+    const rTop = d.r2 != null ? d.r2 : d.r;
+    if (rTop > 0.4) edges.push({ name: 'TOP', kind: 'rim', which: 'top', r: rTop, h, length: 2 * Math.PI * rTop });
+    return edges;
   }
 
-  // ---- cylinder cross-section profile (radius x, height y) with rounded/chamfered rims ----
-  cylProfile(R, h, tr) {
+  // ---- cylinder/cone cross-section profile (bottom radius rBot, top radius rTop) with rounded/chamfered rims ----
+  cylProfile(rBot, rTop, h, tr) {
     const hh = h / 2;
     const top = tr.TOP, bot = tr.BOTTOM;
     const seg = Math.max(4, Math.round(this.state.fn / 4));
-    const clamp = (v) => Math.max(0.2, Math.min(v, R - 0.2, hh - 0.2));
+    const clamp = (v, R) => Math.max(0.2, Math.min(v, R - 0.2, hh - 0.2));
     const pts = [];
     pts.push([0, -hh]);
-    if (bot) {
-      const r = clamp(bot.size);
-      if (bot.type === 'chamfer') { pts.push([R - r, -hh]); pts.push([R, -hh + r]); }
-      else { for (let i = 0; i <= seg; i++) { const a = -Math.PI / 2 + (Math.PI / 2) * (i / seg); pts.push([R - r + r * Math.cos(a), (-hh + r) + r * Math.sin(a)]); } }
-    } else { pts.push([R, -hh]); }
-    if (top) {
-      const r = clamp(top.size);
-      if (top.type === 'chamfer') { pts.push([R, hh - r]); pts.push([R - r, hh]); }
-      else { for (let i = 0; i <= seg; i++) { const a = (Math.PI / 2) * (i / seg); pts.push([R - r + r * Math.cos(a), (hh - r) + r * Math.sin(a)]); } }
-    } else { pts.push([R, hh]); }
+    if (bot && rBot > 0.4) {
+      const r = clamp(bot.size, rBot);
+      if (bot.type === 'chamfer') { pts.push([rBot - r, -hh]); pts.push([rBot, -hh + r]); }
+      else { for (let i = 0; i <= seg; i++) { const a = -Math.PI / 2 + (Math.PI / 2) * (i / seg); pts.push([rBot - r + r * Math.cos(a), (-hh + r) + r * Math.sin(a)]); } }
+    } else { pts.push([rBot, -hh]); }
+    if (rTop > 0.001) {
+      if (top && rTop > 0.4) {
+        const r = clamp(top.size, rTop);
+        if (top.type === 'chamfer') { pts.push([rTop, hh - r]); pts.push([rTop - r, hh]); }
+        else { for (let i = 0; i <= seg; i++) { const a = (Math.PI / 2) * (i / seg); pts.push([rTop - r + r * Math.cos(a), (hh - r) + r * Math.sin(a)]); } }
+      } else { pts.push([rTop, hh]); }
+    }
     pts.push([0, hh]);
     return pts;
   }
   buildCylinderSolid(shape) {
     const THREE = this.THREE;
-    const pts = this.cylProfile(shape.dims.r, shape.dims.h, shape.treatments || {});
+    const pts = this.cylProfile(shape.dims.r, shape.dims.r2 != null ? shape.dims.r2 : shape.dims.r, shape.dims.h, shape.treatments || {});
     const v2 = pts.map(p => new THREE.Vector2(p[0], p[1]));
     const geom = new THREE.LatheGeometry(v2, this.gfn());
     geom.rotateX(Math.PI / 2);
@@ -957,7 +998,15 @@ class Component extends DCLogic {
       return new THREE.SphereGeometry(Math.max(0.1, shape.dims.r), Math.max(16, this.state.fn), Math.max(8, Math.round(this.state.fn / 2)));
     }
     if (shape.type === 'cylinder') {
-      const pts = this.cylProfile(shape.dims.r, shape.dims.h, shape.treatments || {});
+      const d = shape.dims;
+      const rTop = d.r2 != null ? d.r2 : d.r;
+      const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : 0;
+      if (sides) {
+        const g = new THREE.CylinderGeometry(Math.max(0, rTop), Math.max(0, d.r), Math.max(0.1, d.h), sides);
+        g.rotateX(Math.PI / 2); g.computeVertexNormals();
+        return g;
+      }
+      const pts = this.cylProfile(d.r, rTop, d.h, shape.treatments || {});
       const geom = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), this.gfn());
       geom.rotateX(Math.PI / 2); geom.computeVertexNormals();
       return geom;
@@ -1301,7 +1350,9 @@ class Component extends DCLogic {
   }
   edgeMaxRadius(shape, name) {
     if (shape.type === 'cuboid') return Math.max(0.5, Math.min(shape.dims.x, shape.dims.y, shape.dims.z) / 2 - 0.5);
-    return Math.max(0.5, Math.min(shape.dims.r, shape.dims.h / 2) - 0.5);
+    const e = (shape.edges || []).find(x => x.name === name);
+    const rr = (e && e.r != null) ? e.r : shape.dims.r;
+    return Math.max(0.5, Math.min(rr, shape.dims.h / 2) - 0.5);
   }
   removeTreatmentBtn = () => {
     const se = this.state.selectedEdge; if (!se) return;
@@ -1529,6 +1580,8 @@ class Component extends DCLogic {
   fieldNumber(s, key) {
     if (key === 'x' || key === 'y' || key === 'z') return s.dims[key];
     if (key === 'd') return s.dims.r * 2;
+    if (key === 'd2') return (s.dims.r2 != null ? s.dims.r2 : s.dims.r) * 2;
+    if (key === 'sides') return s.dims.sides || 4;
     if (key === 'h') return s.dims.h;
     if (key === 'px') return s.pos[0];
     if (key === 'py') return s.pos[1];
@@ -1538,6 +1591,8 @@ class Component extends DCLogic {
   applyFieldNumber(s, key, n) {
     if (key === 'x' || key === 'y' || key === 'z') s.dims[key] = Math.max(1, n);
     else if (key === 'd') s.dims.r = Math.max(0.5, n / 2);
+    else if (key === 'd2') s.dims.r2 = Math.max(0, n / 2);
+    else if (key === 'sides') s.dims.sides = Math.max(3, Math.round(n));
     else if (key === 'h') s.dims.h = Math.max(1, n);
     else if (key === 'px') s.pos[0] = n;
     else if (key === 'py') s.pos[1] = n;
@@ -1676,6 +1731,27 @@ class Component extends DCLogic {
     const pos = this.nextPos(); pos[2] = dims.h / 2;
     this.addPrimitive({ id: 'cy' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cylinder ' + this.seq.cylinder, dims, pos, treatments: {} });
   };
+  addCone = () => {
+    if (!this.scene) return;
+    this.seq.cylinder = (this.seq.cylinder || 0) + 1;
+    const dims = { r: 20, r2: 0, h: 50 };
+    const pos = this.nextPos(); pos[2] = dims.h / 2;
+    this.addPrimitive({ id: 'cn' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cone ' + this.seq.cylinder, dims, pos, treatments: {} });
+  };
+  addPyramid = () => {
+    if (!this.scene) return;
+    this.seq.cylinder = (this.seq.cylinder || 0) + 1;
+    const dims = { r: 26, r2: 0, h: 50, sides: 4 };
+    const pos = this.nextPos(); pos[2] = dims.h / 2;
+    this.addPrimitive({ id: 'py' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Pyramid ' + this.seq.cylinder, dims, pos, treatments: {} });
+  };
+  pickShape = (n) => {
+    this.setState({ shapeMenuOpen: false });
+    const fn = { cuboid: this.addCuboid, cylinder: this.addCylinder, cone: this.addCone, pyramid: this.addPyramid, sphere: this.addSphere }[n];
+    if (fn) fn();
+  };
+  toggleShapeMenu = () => this.setState({ shapeMenuOpen: !this.state.shapeMenuOpen });
+  closeShapeMenu = () => this.setState({ shapeMenuOpen: false });
   addSphere = () => {
     if (!this.scene) return;
     this.seq.sphere++;
@@ -1920,6 +1996,8 @@ class Component extends DCLogic {
     if (key === 'x' || key === 'y' || key === 'z') return this.fmt(s.dims[key]);
     if (key === 'h') return this.fmt(s.dims.h);
     if (key === 'd') return this.fmt(s.dims.r * 2);
+    if (key === 'r1') return this.fmt(s.dims.r);
+    if (key === 'r2') return this.fmt(s.dims.r2 != null ? s.dims.r2 : s.dims.r);
     return '0';
   }
   posTok(s, key) {
@@ -1931,10 +2009,15 @@ class Component extends DCLogic {
   baseCall(s) {
     if (s.type === 'cuboid') return `cube([${this.dimTok(s, 'x')}, ${this.dimTok(s, 'y')}, ${this.dimTok(s, 'z')}], center = true)`;
     if (s.type === 'sphere') return `sphere(d = ${this.dimTok(s, 'd')})`;
-    return `cylinder(h = ${this.dimTok(s, 'h')}, d = ${this.dimTok(s, 'd')}, center = true)`;
+    const d = s.dims;
+    const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : 0;
+    const tapered = (d.r2 != null && Math.abs(d.r2 - d.r) > 1e-9) || sides;
+    if (!tapered) return `cylinder(h = ${this.dimTok(s, 'h')}, d = ${this.dimTok(s, 'd')}, center = true)`;
+    const fn = sides ? `, $fn = ${sides}` : '';
+    return `cylinder(h = ${this.dimTok(s, 'h')}, r1 = ${this.dimTok(s, 'r1')}, r2 = ${this.dimTok(s, 'r2')}, center = true${fn})`;
   }
   cylinderScad(s) {
-    const pts = this.cylProfile(s.dims.r, s.dims.h, s.treatments || {});
+    const pts = this.cylProfile(s.dims.r, s.dims.r2 != null ? s.dims.r2 : s.dims.r, s.dims.h, s.treatments || {});
     const poly = pts.map(p => `[${this.fmt(p[0])}, ${this.fmt(p[1])}]`).join(', ');
     const note = (s.expr && (s.expr.d || s.expr.h)) ? '  // note: treated cylinder \u2014 dimensions baked numerically\n    ' : '';
     return `${note}rotate_extrude()\n    polygon([${poly}])`;
@@ -1990,7 +2073,6 @@ class Component extends DCLogic {
     const argSimple = (e) => e && e.e === 'vector' ? e.items.every(argSimple) : exprSimple(e);
     const callSimple = (s) => {
       if (!SIMPLE.has(s.name)) return false;
-      if (s.name === 'cylinder' && s.args.some(a => ['r1', 'r2', 'd1', 'd2'].includes(a.name))) return false;
       if (s.args.some(a => !argSimple(a.expr))) return false;
       if (s.children) for (const c of s.children.stmts) if (!stmtSimple(c)) return false;
       return true;
@@ -2761,7 +2843,8 @@ class Component extends DCLogic {
   }
   // raw value token of a named arg (key = …), paren-aware, stops at top-level comma
   argRaw(args, key) {
-    const re = new RegExp('(^|[,(\\s])' + key + '\\s*=\\s*');
+    const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(^|[,(\\s])' + esc + '\\s*=\\s*');
     const m = re.exec(args); if (!m) return null;
     let i = m.index + m[0].length, depth = 0, out = '';
     for (; i < args.length; i++) {
@@ -2817,9 +2900,22 @@ class Component extends DCLogic {
     }
     const dims = { r: 10, h: 10 }, ex = {};
     const hT = this.argRaw(args, 'h'); if (hT != null) { const r = this.tokOrNum(hT, this._vmap); dims.h = r.value || 10; if (r.expr) ex.h = r.expr; }
-    const dT = this.argRaw(args, 'd');
-    if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
-    else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } }
+    // cone / truncated cone: r1/r2 or d1/d2 (two radii) -> tapered cylinder
+    const r1T = this.argRaw(args, 'r1'), r2T = this.argRaw(args, 'r2');
+    const d1T = this.argRaw(args, 'd1'), d2T = this.argRaw(args, 'd2');
+    if (r1T != null || r2T != null || d1T != null || d2T != null) {
+      dims.r = r1T != null ? (this.tokOrNum(r1T, this._vmap).value)
+        : d1T != null ? (this.tokOrNum(d1T, this._vmap).value / 2) : 10;
+      dims.r2 = r2T != null ? (this.tokOrNum(r2T, this._vmap).value)
+        : d2T != null ? (this.tokOrNum(d2T, this._vmap).value / 2) : 0;
+    } else {
+      const dT = this.argRaw(args, 'd');
+      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
+      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } }
+    }
+    // low $fn -> faceted prism/pyramid (sides); high $fn left smooth
+    const fnT = this.argRaw(args, '$fn');
+    if (fnT != null) { const n = this.tokOrNum(fnT, this._vmap).value; if (n >= 3 && n <= 12) dims.sides = Math.round(n); }
     return { type: 'cylinder', dims, expr: ex };
   }
   restingPos(node) {
@@ -3782,10 +3878,14 @@ class Component extends DCLogic {
     const sshIsCyl = !!ssh && ssh.type === 'cylinder';
     const sshNested = !!ssh && !sshIsGroup && !this.isTopLevel(ssh.id);
 
+    const cylExtended = !!ssh && ssh.type === 'cylinder' && (ssh.dims.r2 != null || ssh.dims.sides);
     const dimFields = (!ssh || sshIsGroup) ? [] : (
       ssh.type === 'cuboid' ? [this.buildField(ssh, 'x', 'X'), this.buildField(ssh, 'y', 'Y'), this.buildField(ssh, 'z', 'Z (height)')]
         : ssh.type === 'sphere' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
-          : [this.buildField(ssh, 'd', '\u2300 diameter'), this.buildField(ssh, 'h', 'Z (height)')]);
+          : cylExtended ? (ssh.dims.sides
+            ? [this.buildField(ssh, 'd', '\u2300 base'), this.buildField(ssh, 'd2', '\u2300 top'), this.buildField(ssh, 'h', 'Z (height)'), this.buildField(ssh, 'sides', 'sides')]
+            : [this.buildField(ssh, 'd', '\u2300 base'), this.buildField(ssh, 'd2', '\u2300 top'), this.buildField(ssh, 'h', 'Z (height)')])
+            : [this.buildField(ssh, 'd', '\u2300 diameter'), this.buildField(ssh, 'h', 'Z (height)')]);
     const posFields = (!ssh || sshIsGroup) ? [] : [this.buildField(ssh, 'px', 'X'), this.buildField(ssh, 'py', 'Y'), this.buildField(ssh, 'pz', 'Z (plane)')];
     const showGizmoTabs = !!ssh && !sshIsGroup;
     const sshRole = sshNested ? this.memberRole(ssh) : null;
@@ -3841,6 +3941,10 @@ class Component extends DCLogic {
       btnDelete: this.toolBtn(false),
       btnParams: this.toolBtn(st.paramsOpen),
       pickSelect: this.pickSelect, addCuboid: this.addCuboid, addCylinder: this.addCylinder, addSphere: this.addSphere,
+      btnShapes: this.toolBtn(st.shapeMenuOpen),
+      shapeMenuOpen: st.shapeMenuOpen, toggleShapeMenu: this.toggleShapeMenu, closeShapeMenu: this.closeShapeMenu,
+      miCuboid: () => this.pickShape('cuboid'), miCylinder: () => this.pickShape('cylinder'),
+      miCone: () => this.pickShape('cone'), miPyramid: () => this.pickShape('pyramid'), miSphere: () => this.pickShape('sphere'),
       pickMove: this.pickMove, deleteSelected: this.deleteSelected,
       toggleParams: this.toggleParams,
 

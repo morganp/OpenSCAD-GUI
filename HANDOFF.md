@@ -1,3 +1,57 @@
+# HANDOFF — GUI authoring: more shapes + 2D + extrudes + boolean-edge fillets — IN PROGRESS
+
+> The engine renders 100% of OpenSCAD already (read-only, advanced path). This work is about the
+> **GUI authoring tree**: making more of the language directly *insertable & gizmo-editable* from
+> the toolbar, not just renderable from code. Today the authoring tree models only 3 primitive
+> types (cuboid / cylinder / sphere) and edge fillet/chamfer only works on a single primitive.
+
+## Full intended scope (the feature list, restated)
+- **A. All 3D solids in an "Add shape" submenu** — cone, pyramid/prism, torus, tube/pipe, wedge
+  (+ the existing cuboid/cylinder/sphere). A flyout menu off the left toolbar.
+- **B. 2D primitives** — circle, square, polygon as GUI-editable flat shapes.
+- **C. Extrusions as GUI operations** — wrap a 2D shape in `linear_extrude` (height/twist/scale)
+  or `rotate_extrude` (angle), edited via the inspector.
+- **D. Edge fillet/chamfer on UNION / boolean results** — today `cuboidEdges`/`cylinderEdges`
+  enumerate edges per primitive and bake a CSG mask into that one solid. Filleting the edges
+  *created by* a union/difference is not supported and was always meant to be.
+
+## Authoring-tree primitive pipeline (every touch-point a new prim type needs)
+A primitive node `{id,type,label,dims,pos,treatments,edges,...}` flows through:
+`addX()` → `addPrimitive` → `buildGroup` (edges + `solidGeometry` + wire + pick proxies) →
+inspector `dimFields` (`buildField`+`fieldNumber`/`applyFieldNumber`) → codegen
+(`emitPrimitive`/`baseCall`/`dimTok`) → parse-back (`readPrimitive` in `parseScad`, gated by
+`isAdvanced` SIMPLE set) → `restingPos` · model-tree `meta`/badge · `seq` counter.
+
+## Round-trip strategy (the crux)
+`isAdvanced(ast)` decides GUI-editable (simple) vs read-only (advanced). A new prim **round-trips
+as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. Therefore:
+- **Cone / Pyramid** emit native `cylinder(h, r1, r2, $fn=n, center=true)` → SIMPLE → fully
+  round-trip + keep edge fillets. (We unify them into the existing `cylinder` type with optional
+  `r2` (top radius) + `sides` dims — reuses all cylinder code paths.)
+- **Torus / Tube / Wedge / 2D / extrudes** emit `rotate_extrude` / `difference` / `polyhedron` /
+  `linear_extrude`, which `isAdvanced` flags → on an explicit *Run-from-code* they re-import as
+  the **read-only evaluated geometry** (engine renders them correctly). They stay gizmo-editable
+  while authored in the GUI; only a code round-trip drops them to read-only. A later slice can add
+  full round-trip via GUI marker-comments (`// @scs <type> …`) parsed before `isAdvanced`.
+
+## Build order (shippable slices, each released)
+1. **[~] Slice 1 — Add-shape submenu + Cone + Pyramid** (this turn, v0.16.0). Flyout menu;
+   `cylinder` type gains optional `r2`+`sides`; cone/pyramid fully round-trip; cone keeps rim
+   fillet/chamfer. Touch-points: `addCone`/`addPyramid`, `solidGeometry`, `cylProfile`(→rBot,rTop),
+   `cylinderEdges`, `cylWireGeom`, `edgeMaxRadius`, `baseCall`/`dimTok`(r1/r2/$fn), `dimFields`
+   (⌀base/⌀top/sides), `fieldNumber`/`applyFieldNumber` (d2/sides), `readPrimitive` (r1/r2/d1/d2/$fn),
+   remove the `cylinder r1/r2 → advanced` exclusion in `isAdvanced`.
+2. **[ ] Slice 2 — Torus / Tube / Wedge** solids (new types; live-editable, correct export,
+   read-only on re-run).
+3. **[ ] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes.
+4. **[ ] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child).
+5. **[ ] Slice 5 — Boolean-edge fillet/chamfer**: detect convex/concave edges on a union/difference
+   result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
+   analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
+   common case of two-primitive intersections.)
+
+---
+
 # HANDOFF — Phase 13 conformance harness — ✅ SHIPPED (v0.15.0)
 
 The last roadmap phase. A 113-case conformance suite (`public/conformance.js`,
