@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.24.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.25.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -148,6 +148,9 @@
     <div style="height:1px;background:#2C3037;margin:2px 4px;"></div>
     <button onClick="{{ pickMove }}" title="Move selected (M)" style="{{ btnMove }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14M10 3 8 5.4m2-2.4 2 2.4M10 17l-2-2.4m2 2.4 2-2.4M3 10l2.4-2M3 10l2.4 2M17 10l-2.4-2m2.4 2-2.4 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button onClick="{{ pickPush }}" title="Push/pull a face (E) \u2014 drag out to add, in to cut" style="{{ btnPush }}">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.5 7.5 8 5l4.5 2.5v5L8 15l-4.5-2.5v-5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M3.6 7.5 8 10l4.4-2.5M8 10v5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity=".5"/><path d="M14.5 10h3.5m0 0-1.6-1.5M18 10l-1.6 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <button onClick="{{ deleteSelected }}" title="Delete selected (\u232b)" style="{{ btnDelete }}">
       <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4.5 5.5h11M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5m2 0-.6 9a1.5 1.5 0 0 1-1.5 1.4H6.6a1.5 1.5 0 0 1-1.5-1.4l-.6-9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1351,6 +1354,126 @@ class Component extends DCLogic {
     return data ? { ...data, triCount: f.tris.length } : null;
   }
 
+  // ===== SLICE 6: FACE PUSH/PULL =====
+  // every pickable result mesh: simple-GUI solids + the advanced evaluated group
+  ppMeshes() {
+    const a = this.allSolids();
+    if (this._engineGroup) this._engineGroup.traverse(o => { if (o.isMesh) a.push(o); });
+    return a;
+  }
+  // world-space face under the pointer (rings/frame baked into world coords), or null
+  pickFaceAtPointer() {
+    if (!this.raycaster || !this.cam) return null;
+    this.scene.updateMatrixWorld(true);
+    this.raycaster.setFromCamera(this.pointer, this.cam);
+    const hit = this.raycaster.intersectObjects(this.ppMeshes(), false)[0];
+    if (!hit || hit.faceIndex == null || !hit.object.geometry) return null;
+    const wg = hit.object.geometry.clone();
+    wg.applyMatrix4(hit.object.matrixWorld);
+    let face = null;
+    try { face = this.pickFace(wg, hit.faceIndex); } catch (_) {}
+    wg.dispose();
+    if (face) face.hit = hit.point.toArray();
+    return face;
+  }
+  // face frame as a Matrix4; for an inward (cut) pull the +Z (extrude) axis is flipped to point in
+  frameMat(face, inward) {
+    const m = new this.THREE.Matrix4().fromArray(face.frame);
+    if (inward) { const e = m.elements; e[8] = -e[8]; e[9] = -e[9]; e[10] = -e[10]; }
+    return m;
+  }
+  // translucent flat overlay on the hovered face
+  showFaceOverlay(face) {
+    this.clearPPHover();
+    const THREE = this.THREE;
+    const shapes = this.ringsToShapes(face.rings2D);
+    if (!shapes.length) return;
+    const geo = new THREE.ShapeGeometry(shapes);
+    geo.applyMatrix4(this.frameMat(face, false));
+    const n = new THREE.Vector3().fromArray(face.normal).multiplyScalar(0.08); // beat z-fighting
+    geo.translate(n.x, n.y, n.z);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x46c6ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
+    mesh.renderOrder = 5;
+    this.ppHover = mesh; this.scene.add(mesh);
+  }
+  clearPPHover() { if (this.ppHover) { this.scene.remove(this.ppHover); this.disposeGroup(this.ppHover); this.ppHover = null; } }
+  clearPPGhost() { if (this.ppGhost) { this.scene.remove(this.ppGhost); this.disposeGroup(this.ppGhost); this.ppGhost = null; } }
+  // translucent extruded preview prism while dragging (green = add / outward, red = cut / inward)
+  updatePPGhost(face, dist) {
+    this.clearPPGhost();
+    const h = Math.abs(dist);
+    if (h < 0.05) return;
+    const THREE = this.THREE, inward = dist < 0;
+    const geo = this.linearSolid(face.rings2D, { height: h, center: false });
+    if (!geo) return;
+    geo.applyMatrix4(this.frameMat(face, inward));
+    const col = inward ? 0xe0734f : 0x46d39a;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: col, transparent: true, opacity: 0.45, roughness: 0.6, metalness: 0, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.renderOrder = 4;
+    this.ppGhost = mesh; this.scene.add(mesh);
+  }
+  // signed distance along the face normal: project the pointer ray onto the normal axis (closest pt)
+  ppDistance(face) {
+    const THREE = this.THREE;
+    this.raycaster.setFromCamera(this.pointer, this.cam);
+    const ray = this.raycaster.ray;
+    const C = new THREE.Vector3().fromArray(face.center);
+    const N = new THREE.Vector3().fromArray(face.normal).normalize();
+    const w0 = C.clone().sub(ray.origin);
+    const b = N.dot(ray.direction), d = N.dot(w0), e = ray.direction.dot(w0);
+    const denom = 1 - b * b;
+    return Math.abs(denom) > 1e-6 ? (b * e - d) / denom : 0;
+  }
+  startPushPull(face) {
+    this.pp = { face, t0: this.ppDistance(face), dist: 0 };
+    if (this.controls) this.controls.enabled = false;
+    this.clearPPHover();
+    this.setState({ ppDragging: true, ppDist: 0 });
+  }
+  movePushPull() {
+    if (!this.pp) return;
+    let dist = Math.round((this.ppDistance(this.pp.face) - this.pp.t0) * 10) / 10;
+    this.pp.dist = dist;
+    this.updatePPGhost(this.pp.face, dist);
+    this.setState({ ppDist: dist });
+  }
+  endPushPull() {
+    const pp = this.pp; this.pp = null;
+    if (this.controls) this.controls.enabled = true;
+    this.clearPPGhost();
+    this.setState({ ppDragging: false });
+    if (pp && Math.abs(pp.dist) >= 0.1) this.applyPushPull(pp.face, pp.dist);
+    else this.flashStatus('Push/pull cancelled');
+  }
+  // emit the picked face as a polygon on its plane, extruded |dist| along the (maybe flipped) normal
+  buildPrismScad(face, dist, inward) {
+    const F = (n) => this.fmt(n);
+    const m = this.frameMat(face, inward).elements;
+    const rows = [0, 1, 2, 3].map(r => '[' + [m[r], m[r + 4], m[r + 8], m[r + 12]].map(F).join(', ') + ']');
+    let pts = [], paths = [], k = 0;
+    for (const ring of face.rings2D) {
+      const idxs = [];
+      for (const p of ring) { pts.push('[' + F(p[0]) + ', ' + F(p[1]) + ']'); idxs.push(k++); }
+      paths.push('[' + idxs.join(', ') + ']');
+    }
+    return `multmatrix([${rows.join(', ')}])\n  linear_extrude(height = ${F(Math.abs(dist))})\n  polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
+  }
+  applyPushPull(face, dist) {
+    const inward = dist < 0;
+    const prism = this.buildPrismScad(face, dist, inward);
+    const code = ((this._codeArea ? this._codeArea.value : this.state.code) || '').replace(/\s+$/, '');
+    let next;
+    if (inward) {
+      const body = code.split('\n').map(l => '  ' + l).join('\n');
+      next = 'difference() {\n' + body + '\n  // push/pull cut (' + this.fmt(Math.abs(dist)) + 'mm)\n  ' + prism.replace(/\n/g, '\n  ') + '\n}\n';
+    } else {
+      next = code + '\n\n// push/pull add (' + this.fmt(dist) + 'mm)\n' + prism + '\n';
+    }
+    if (this._codeArea) this._codeArea.value = next;
+    this.setState({ code: next }, () => this.runCode());
+    this.flashStatus((inward ? 'Cut ' : 'Added ') + this.fmt(Math.abs(dist)) + 'mm \u2014 read-only');
+  }
+
   // ===== SLICE 5: BOOLEAN-EDGE FILLET / CHAMFER =====
   // Detect sharp feature edges of a CSG result mesh (group-local coords), chained into pickable
   // polylines, each tagged convex/concave with per-segment face frames (U=nA, V=nB outward normals).
@@ -1516,6 +1639,15 @@ class Component extends DCLogic {
     if (!this.raycaster) return;
     if (this.tc && this.tc.dragging) return;
     this.ndc(e);
+    if (this.state.tool === 'pushpull') {
+      if (this.pp) { this.movePushPull(); }
+      else {
+        const face = this.pickFaceAtPointer();
+        if (face) { this.showFaceOverlay(face); this.renderer.domElement.style.cursor = 'crosshair'; }
+        else { this.clearPPHover(); this.renderer.domElement.style.cursor = 'default'; }
+      }
+      return;
+    }
     this.raycaster.setFromCamera(this.pointer, this.cam);
     const hit = this.raycaster.intersectObjects(this.allProxies(), false)[0];
     if (this.state.tool === 'select' && hit) {
@@ -1531,6 +1663,11 @@ class Component extends DCLogic {
     if (e.button !== 0 || !this.raycaster) return;
     if (this.tc && (this.tc.dragging || this.tc.axis)) return; // grabbing the gizmo
     this.ndc(e);
+    if (this.state.tool === 'pushpull') {
+      const face = this.pickFaceAtPointer();
+      if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {} this.startPushPull(face); }
+      return;
+    }
     this.raycaster.setFromCamera(this.pointer, this.cam);
 
     // select tool: edges first, then shapes
@@ -1544,7 +1681,9 @@ class Component extends DCLogic {
     this.clearEdge(); this.selectShape(null);
   }
 
-  onPointerUp() {}
+  onPointerUp(e) {
+    if (this.pp) { try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {} this.endPushPull(); }
+  }
 
   shapeIdFromObject(o) {
     let cur = o;
@@ -4576,8 +4715,9 @@ class Component extends DCLogic {
   }
 
   // ============ TOOLS / UI ============
-  pickSelect = () => this.setState({ tool: 'select' });
-  pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => this.updateGizmo());
+  pickSelect = () => this.setState({ tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); });
+  pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.updateGizmo(); });
+  pickPush = () => { this.clearEdge(); this.selectShape(null); this.setState({ tool: 'pushpull' }); };
   toggleDrawer = () => this.setState({ drawerOpen: !this.state.drawerOpen });
 
   // ---- global $fn picker (status bar) ----
@@ -4601,6 +4741,7 @@ class Component extends DCLogic {
     else if (k === 'c') this.addCylinder();
     else if (k === 's') this.addSphere();
     else if (k === 'm') this.pickMove();
+    else if (k === 'e') this.pickPush();
     else if (k === 'delete' || k === 'backspace') this.deleteSelected();
     else if (k === 'escape') { this.clearEdge(); this.selectShape(null); }
   }
@@ -4796,6 +4937,8 @@ class Component extends DCLogic {
       btnCylinder: this.toolBtn(false),
       btnSphere: this.toolBtn(false),
       btnMove: this.toolBtn(st.gizmoMode === 'translate' && !!st.selectedShapeId && !sel),
+      btnPush: this.toolBtn(st.tool === 'pushpull'),
+      pickPush: this.pickPush,
       btnDelete: this.toolBtn(false),
       btnParams: this.toolBtn(st.paramsOpen),
       pickSelect: this.pickSelect, addCuboid: this.addCuboid, addCylinder: this.addCylinder, addSphere: this.addSphere,
@@ -4903,7 +5046,7 @@ class Component extends DCLogic {
       groupIntersection: () => this.groupSelection('intersection'),
       ctxOpen: !!ctx, ctxItems, ctxStyle, closeCtx: this.closeCtx,
 
-      statusHint: st.statusMsg || (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it')),
+      statusHint: st.statusMsg || (st.tool === 'pushpull' ? (st.ppDragging ? ((st.ppDist >= 0 ? 'Pulling +' : 'Pushing ') + this.fmt(st.ppDist) + 'mm \u2014 ' + (st.ppDist >= 0 ? 'add' : 'cut') + ', release to apply') : 'Push/pull \u2014 drag a face out to add material, in to cut') : (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it'))),
       fnVal: st.fn > 0 ? st.fn : 'auto',
       fnMenuOpen: st.fnMenuOpen,
       toggleFnMenu: this.toggleFnMenu,

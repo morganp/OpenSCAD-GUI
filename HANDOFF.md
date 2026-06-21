@@ -1,3 +1,46 @@
+# HANDOFF — Slice 6: Face push/pull (linear) — ✅ SHIPPED v1 (v0.25.0)
+# Pick any face of the rendered solid and drag along its normal: out = add material (union),
+# in = cut a pocket (difference). Works on BOTH simple-GUI solids and the advanced evaluated
+# group (faces are picked off whatever is actually rendered, so the appended code always aligns).
+#
+# UX: new left-toolbar tool "Push/pull" (cube+arrow icon, shortcut **E**). In the tool, hovering a
+# face shows a translucent cyan overlay of the face outline; press-drag projects the pointer onto the
+# face normal → live translucent prism preview (green = add / outward, red = cut / inward) + a live
+# ±mm readout in the status bar; release applies (≥0.1mm) or cancels. OrbitControls is disabled
+# during the drag (pointer captured on the canvas).
+#
+# PIPELINE (all in public/Editor.dc.html, "SLICE 6: FACE PUSH/PULL" section):
+# - ppMeshes(): allSolids() + traverse(_engineGroup) → every pickable result mesh.
+# - pickFaceAtPointer(): raycast ppMeshes; clone hit.object.geometry, applyMatrix4(matrixWorld) →
+#   world-space geo; pickFace(wg, hit.faceIndex) → {rings2D, frame, normal, center, area} (reuses the
+#   existing faceTrisAt/faceData raster+marching-squares face detector).
+# - frameMat(face, inward): Matrix4 from face.frame; inward negates the +Z (normal) basis column so
+#   the extrude points INTO the solid.
+# - showFaceOverlay (ShapeGeometry from rings2D, lifted 0.08 along N), updatePPGhost (linearSolid
+#   prism, colored by direction), ppDistance (closest-point of the pointer ray to the normal axis).
+# - start/move/endPushPull: drag lifecycle; endPushPull applies if |dist|≥0.1.
+# - buildPrismScad(face,dist,inward): `multmatrix([rows]) linear_extrude(height=|d|) polygon(points,
+#   paths)` — rings emitted as points + one path per ring (even-odd holes preserved). Rows are the
+#   (maybe flipped) frame in OpenSCAD row form.
+# - applyPushPull: ADD → append the prism statement (top-level implicit union). CUT → wrap the whole
+#   current program in `difference(){ <code> <inward prism> }`. Sets code + runCode() → engine renders
+#   read-only.
+# - Wiring: onPointerMove/Down/Up branch on state.tool==='pushpull'; pickPush handler; toolbar button
+#   (btnPush) + shortcut 'e'; status-bar hint shows the live ±mm; pickSelect/pickMove clear pp ghost.
+#
+# VERIFIED via eval_js: +X face of a toolbar cube (40³ @ z=20), add +10mm → engine renders 0 errors,
+# render bbox x-max 20→30 (others unchanged); top face cut −12mm → program wraps in difference(),
+# renders 0 errors, 1 mesh, outer bbox unchanged (interior pocket). Both prisms emit valid OpenSCAD
+# that ScadEngine.run evaluates clean.
+#
+# DEFERRED (v2): rotational push/pull (revolve a face about a chosen boundary edge); numeric distance
+# entry / snapping; connectivity-split faces (a face that wraps a concave corner is currently merged
+# by coplanarity only); GUI round-trip (push/pull always lands in read-only advanced); picking a face
+# whose outline the raster tracer simplifies heavily on tiny features. The Slice-6 face-detection
+# foundation (faceClusters notes) is otherwise fully consumed.
+#
+# ---------------------------------------------------------------------------------------------------
+#
 # HANDOFF — Slice 5: Boolean-edge fillet/chamfer (simplest useful v1) — ✅ SHIPPED (v0.24.0)
 # Verified via eval_js: detection on a stacked/L union → 12/15 convex edges (chained); difference
 # notch → 3 concave edges; apply convex fillet r=6 → tris 62→311, bbox preserved (rounds OUTER
@@ -199,7 +242,7 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
    analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
    common case of two-primitive intersections.)
-6. **[~] Slice 6 — Face push/pull extrude (linear + rotational)**: pick a face of the evaluated
+6. **[~] Slice 6 — Face push/pull extrude (linear DONE v0.25.0; rotational deferred)**: pick a face of the evaluated
    solid, drag to **linear-extrude** it along its normal (outward → union, inward → difference) or
    **rotate-extrude** it around a chosen edge/axis. Exports cleanly: the picked face becomes a
    `polygon()` placed on the face plane via `multmatrix`, wrapped in `linear_extrude`/`rotate_extrude`,
