@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.25.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.26.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -492,6 +492,14 @@
     </sc-if>
   </div>
 
+  <sc-if value="{{ ppToolActive }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;display:flex;align-items:center;gap:6px;background:rgba(27,30,35,.88);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:10px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.45);">
+      <span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#6B7280;padding:0 6px 0 4px;">Push/Pull</span>
+      <button onClick="{{ ppLinear }}" style="{{ ppLinearBtn }}">Linear</button>
+      <button onClick="{{ ppRevolve }}" style="{{ ppRevolveBtn }}">Revolve</button>
+    </div>
+  </sc-if>
+
   <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;top:16px;right:16px;z-index:33;display:flex;align-items:center;gap:8px;background:rgba(40,33,18,.9);backdrop-filter:blur(12px);border:1px solid #5A4A22;border-radius:10px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);">
       <span style="width:8px;height:8px;border-radius:50%;background:#E0A33B;box-shadow:0 0 8px #E0A33B;flex:none;"></span>
@@ -615,6 +623,7 @@ class Component extends DCLogic {
   state = {
     ready: false,
     tool: 'select',
+    ppMode: 'linear',         // push/pull sub-mode: 'linear' | 'revolve'
     shapes: [],            // serializable mirror for the tree
     selectedShapeId: null,
     selectedEdge: null,    // { shapeId, edgeName, label }
@@ -1425,14 +1434,31 @@ class Component extends DCLogic {
     const denom = 1 - b * b;
     return Math.abs(denom) > 1e-6 ? (b * e - d) / denom : 0;
   }
-  startPushPull(face) {
-    this.pp = { face, t0: this.ppDistance(face), dist: 0 };
+  startPushPull(face, e) {
+    if (this.state.ppMode === 'revolve') {
+      const rev = this.buildRevolveData(face, face.hit);
+      this.pp = { face, rev, mode: 'revolve', startX: e ? e.clientX : 0, angle: 0 };
+      if (this.controls) this.controls.enabled = false;
+      this.clearPPHover();
+      if (rev) this.showHinge(rev);
+      this.setState({ ppDragging: true, ppAngle: 0 });
+      return;
+    }
+    this.pp = { face, mode: 'linear', t0: this.ppDistance(face), dist: 0 };
     if (this.controls) this.controls.enabled = false;
     this.clearPPHover();
     this.setState({ ppDragging: true, ppDist: 0 });
   }
-  movePushPull() {
+  movePushPull(e) {
     if (!this.pp) return;
+    if (this.pp.mode === 'revolve') {
+      if (!this.pp.rev) return;
+      let angle = Math.max(-360, Math.min(360, Math.round((e.clientX - this.pp.startX) * 0.6 * 10) / 10));
+      this.pp.angle = angle;
+      this.updateRevolveGhost(this.pp.rev, angle);
+      this.setState({ ppAngle: angle });
+      return;
+    }
     let dist = Math.round((this.ppDistance(this.pp.face) - this.pp.t0) * 10) / 10;
     this.pp.dist = dist;
     this.updatePPGhost(this.pp.face, dist);
@@ -1441,10 +1467,89 @@ class Component extends DCLogic {
   endPushPull() {
     const pp = this.pp; this.pp = null;
     if (this.controls) this.controls.enabled = true;
-    this.clearPPGhost();
+    this.clearPPGhost(); this.clearHinge();
     this.setState({ ppDragging: false });
-    if (pp && Math.abs(pp.dist) >= 0.1) this.applyPushPull(pp.face, pp.dist);
+    if (!pp) return;
+    if (pp.mode === 'revolve') {
+      if (pp.rev && Math.abs(pp.angle) >= 1) this.applyRevolve(pp.rev, Math.abs(pp.angle));
+      else this.flashStatus('Revolve cancelled');
+      return;
+    }
+    if (Math.abs(pp.dist) >= 0.1) this.applyPushPull(pp.face, pp.dist);
     else this.flashStatus('Push/pull cancelled');
+  }
+
+  // ---- rotational push/pull: revolve a face about one of its boundary edges ----
+  _ptSegDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1;
+    let t = ((px - ax) * dx + (py - ay) * dy) / L2; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  // pick the boundary edge nearest the click as the hinge axis; express the face as a
+  // rotate_extrude profile (x = radial dist from axis >=0, y = along axis) + a placement matrix
+  buildRevolveData(face, hitWorld) {
+    const THREE = this.THREE;
+    if (!face || !hitWorld) return null;
+    const O = new THREE.Vector3().fromArray(face.origin);
+    const U = new THREE.Vector3().fromArray(face.U);
+    const V = new THREE.Vector3().fromArray(face.V);
+    const N = new THREE.Vector3().fromArray(face.normal).normalize();
+    const toWorld = (u, v) => O.clone().add(U.clone().multiplyScalar(u)).add(V.clone().multiplyScalar(v));
+    const rings = face.rings2D;
+    const area = (r) => { let A = 0; for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; A += a[0] * b[1] - b[0] * a[1]; } return Math.abs(A / 2); };
+    let oi = 0, oa = 0; rings.forEach((r, i) => { const a = area(r); if (a > oa) { oa = a; oi = i; } });
+    const ring = rings[oi];
+    const hp = new THREE.Vector3().fromArray(hitWorld).sub(O);
+    const cu = hp.dot(U), cv = hp.dot(V);
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; const d = this._ptSegDist(cu, cv, a[0], a[1], b[0], b[1]); if (d < bd) { bd = d; best = i; } }
+    const a2 = ring[best], b2 = ring[(best + 1) % ring.length];
+    const Aw = toWorld(a2[0], a2[1]), Bw = toWorld(b2[0], b2[1]);
+    let W = Bw.clone().sub(Aw); if (W.length() < 1e-6) return null; W.normalize();
+    let Xg = new THREE.Vector3().crossVectors(N, W).normalize();
+    // orient so the face interior sits on +Xg (profile x >= 0); flip the axis if not
+    let ccu = 0, ccv = 0; for (const p of ring) { ccu += p[0]; ccv += p[1]; } ccu /= ring.length; ccv /= ring.length;
+    if (toWorld(ccu, ccv).sub(Aw).dot(Xg) < 0) { W.negate(); Xg = new THREE.Vector3().crossVectors(N, W).normalize(); }
+    const Yg = new THREE.Vector3().crossVectors(W, Xg).normalize(); // = +N (outward sweep on +angle)
+    const profile = rings.map(r => r.map(([u, v]) => { const P = toWorld(u, v).sub(Aw); return [Math.max(0, P.dot(Xg)), P.dot(W)]; }));
+    const M = new THREE.Matrix4().makeBasis(Xg, Yg, W).setPosition(Aw);
+    return { profile, M: M.elements.slice(), A: Aw.toArray(), W: W.toArray() };
+  }
+  updateRevolveGhost(rev, angle) {
+    this.clearPPGhost();
+    const a = Math.abs(angle); if (a < 1) return;
+    const geo = this.revolveSolid(rev.profile, { angle: a, $fn: this.gfn() });
+    if (!geo) return;
+    geo.applyMatrix4(new this.THREE.Matrix4().fromArray(rev.M));
+    const mesh = new this.THREE.Mesh(geo, new this.THREE.MeshStandardMaterial({ color: 0x46d39a, transparent: true, opacity: 0.45, roughness: 0.6, metalness: 0, depthWrite: false, side: this.THREE.DoubleSide }));
+    mesh.renderOrder = 4; this.ppGhost = mesh; this.scene.add(mesh);
+  }
+  showHinge(rev) {
+    this.clearHinge();
+    const THREE = this.THREE;
+    const A = new THREE.Vector3().fromArray(rev.A), W = new THREE.Vector3().fromArray(rev.W);
+    let ymin = Infinity, ymax = -Infinity; for (const r of rev.profile) for (const p of r) { if (p[1] < ymin) ymin = p[1]; if (p[1] > ymax) ymax = p[1]; }
+    if (!isFinite(ymin)) { ymin = -20; ymax = 20; }
+    const len = Math.max(2, ymax - ymin) + 6;
+    const mid = A.clone().add(W.clone().multiplyScalar((ymin + ymax) / 2));
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, len, 8), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), W);
+    mesh.position.copy(mid); mesh.renderOrder = 6;
+    this.ppHinge = mesh; this.scene.add(mesh);
+  }
+  clearHinge() { if (this.ppHinge) { this.scene.remove(this.ppHinge); this.disposeGroup(this.ppHinge); this.ppHinge = null; } }
+  applyRevolve(rev, angle) {
+    const F = (n) => this.fmt(n);
+    const e = rev.M;
+    const rows = [0, 1, 2, 3].map(r => '[' + [e[r], e[r + 4], e[r + 8], e[r + 12]].map(F).join(', ') + ']');
+    let pts = [], paths = [], k = 0;
+    for (const ring of rev.profile) { const idx = []; for (const p of ring) { pts.push('[' + F(Math.max(0, p[0])) + ', ' + F(p[1]) + ']'); idx.push(k++); } paths.push('[' + idx.join(', ') + ']'); }
+    const stmt = `multmatrix([${rows.join(', ')}])\n  rotate_extrude(angle = ${F(angle)}, $fn = ${this.gfn()})\n  polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
+    const code = ((this._codeArea ? this._codeArea.value : this.state.code) || '').replace(/\s+$/, '');
+    const next = code + '\n\n// push/pull revolve (' + F(angle) + '\u00b0)\n' + stmt + '\n';
+    if (this._codeArea) this._codeArea.value = next;
+    this.setState({ code: next }, () => this.runCode());
+    this.flashStatus('Revolved ' + F(angle) + '\u00b0 \u2014 read-only');
   }
   // emit the picked face as a polygon on its plane, extruded |dist| along the (maybe flipped) normal
   buildPrismScad(face, dist, inward) {
@@ -1641,7 +1746,7 @@ class Component extends DCLogic {
     if (this.tc && this.tc.dragging) return;
     this.ndc(e);
     if (this.state.tool === 'pushpull') {
-      if (this.pp) { this.movePushPull(); }
+      if (this.pp) { this.movePushPull(e); }
       else {
         const face = this.pickFaceAtPointer();
         if (face) { this.showFaceOverlay(face); this.renderer.domElement.style.cursor = 'crosshair'; }
@@ -1666,7 +1771,7 @@ class Component extends DCLogic {
     this.ndc(e);
     if (this.state.tool === 'pushpull') {
       const face = this.pickFaceAtPointer();
-      if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {} this.startPushPull(face); }
+      if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {} this.startPushPull(face, e); }
       return;
     }
     this.raycaster.setFromCamera(this.pointer, this.cam);
@@ -4716,9 +4821,10 @@ class Component extends DCLogic {
   }
 
   // ============ TOOLS / UI ============
-  pickSelect = () => this.setState({ tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); });
-  pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.updateGizmo(); });
+  pickSelect = () => this.setState({ tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); });
+  pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.updateGizmo(); });
   pickPush = () => { this.clearEdge(); this.selectShape(null); this.setState({ tool: 'pushpull' }); };
+  setPPMode = (m) => this.setState({ ppMode: m }, () => { this.clearPPGhost(); this.clearHinge(); });
   toggleDrawer = () => this.setState({ drawerOpen: !this.state.drawerOpen });
 
   // ---- global $fn picker (status bar) ----
@@ -4748,6 +4854,9 @@ class Component extends DCLogic {
   }
 
   // ============ RENDER VALUES ============
+  ppModeBtn(active) {
+    return `background:${active ? '#1C3251' : 'transparent'};border:1px solid ${active ? '#2C4D78' : '#2C3037'};color:${active ? '#9CC2F5' : '#8A9099'};font:inherit;font-size:11.5px;padding:5px 12px;border-radius:7px;cursor:pointer;`;
+  }
   toolBtn(active) {
     return `display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:9px;border:1px solid ${active ? '#2C4D78' : 'transparent'};background:${active ? '#1C3251' : 'transparent'};color:${active ? '#79AEF5' : '#9AA3AE'};cursor:pointer;transition:background .12s,color .12s;`;
   }
@@ -4940,6 +5049,11 @@ class Component extends DCLogic {
       btnMove: this.toolBtn(st.gizmoMode === 'translate' && !!st.selectedShapeId && !sel),
       btnPush: this.toolBtn(st.tool === 'pushpull'),
       pickPush: this.pickPush,
+      ppToolActive: st.tool === 'pushpull',
+      ppLinear: () => this.setPPMode('linear'),
+      ppRevolve: () => this.setPPMode('revolve'),
+      ppLinearBtn: this.ppModeBtn(st.ppMode !== 'revolve'),
+      ppRevolveBtn: this.ppModeBtn(st.ppMode === 'revolve'),
       btnDelete: this.toolBtn(false),
       btnParams: this.toolBtn(st.paramsOpen),
       pickSelect: this.pickSelect, addCuboid: this.addCuboid, addCylinder: this.addCylinder, addSphere: this.addSphere,
@@ -5050,7 +5164,7 @@ class Component extends DCLogic {
       groupHull: () => this.groupSelection('hull'),
       ctxOpen: !!ctx, ctxItems, ctxStyle, closeCtx: this.closeCtx,
 
-      statusHint: st.statusMsg || (st.tool === 'pushpull' ? (st.ppDragging ? ((st.ppDist >= 0 ? 'Pulling +' : 'Pushing ') + this.fmt(st.ppDist) + 'mm \u2014 ' + (st.ppDist >= 0 ? 'add' : 'cut') + ', release to apply') : 'Push/pull \u2014 drag a face out to add material, in to cut') : (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it'))),
+      statusHint: st.statusMsg || (st.tool === 'pushpull' ? (st.ppMode === 'revolve' ? (st.ppDragging ? 'Revolving ' + this.fmt(Math.abs(st.ppAngle || 0)) + '\u00b0 about the hinge edge \u2014 release to apply' : 'Revolve \u2014 drag a face (near an edge) to sweep it around that edge') : (st.ppDragging ? ((st.ppDist >= 0 ? 'Pulling +' : 'Pushing ') + this.fmt(st.ppDist) + 'mm \u2014 ' + (st.ppDist >= 0 ? 'add' : 'cut') + ', release to apply') : 'Push/pull \u2014 drag a face out to add material, in to cut')) : (sel ? 'Edge selected \u2014 click fillet or chamfer (again to remove)' : (st.selectedShapeId ? 'Drag the gizmo to ' + (st.gizmoMode === 'scale' ? 'resize' : 'move') + ' \u00b7 or type exact values' : 'Hover an edge \u00b7 click to treat it'))),
       fnVal: st.fn > 0 ? st.fn : 'auto',
       fnMenuOpen: st.fnMenuOpen,
       toggleFnMenu: this.toggleFnMenu,

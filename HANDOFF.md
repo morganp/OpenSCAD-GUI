@@ -1,3 +1,27 @@
+# HANDOFF — Slice 6: Face push/pull — ✅ SHIPPED (linear v0.25.0, revolve v0.26.0)
+# REVOLVE (v0.26.0): the push/pull tool now has a Linear | Revolve toggle (floating segmented
+# control, top-center, when the tool is active; state.ppMode). In Revolve mode, press-drag a face
+# near one of its boundary edges: the nearest boundary edge becomes the hinge axis (highlighted as a
+# yellow rod) and horizontal drag sweeps the face around it (0.6°/px, ±360°) — live green ghost +
+# live angle readout; release applies a union of the swept solid.
+#   - buildRevolveData(face, hitWorld): outer ring's nearest boundary segment → hinge A,W; build a
+#     frame Xg = N×W (radial, flipped so the face interior is +Xg ⇒ profile x≥0), Yg = W×Xg (= +N, so
+#     +angle sweeps OUTWARD), Zg = W. Face points → profile [x=rel·Xg, y=rel·W]. Returns {profile,
+#     M(=makeBasis(Xg,Yg,W)@A), A, W}.
+#   - updateRevolveGhost (revolveSolid(profile,{angle,$fn}) · applyMatrix4(M)), showHinge/clearHinge.
+#   - applyRevolve: append `multmatrix(M) rotate_extrude(angle=θ,$fn) polygon(points,paths)` (x clamped
+#     ≥0; one path per ring → holes) → union via top-level implicit union → runCode → read-only.
+#   - movePushPull/startPushPull/endPushPull branch on pp.mode ('linear'|'revolve'); onPointerMove/Down
+#     pass the event through for the pixel-delta angle.
+# VERIFIED via eval_js: top face of a 40³ cube, hinge = its +X edge (axis W=[0,1,0] ✓), profile x
+# 0..40 ✓; revolve 90° → green ghost bbox z 40→80 (flap sweeps up/out); applied → engine 0 errors/
+# warnings, render bbox → [-20,-20,0]..[20,20,80], 2 meshes, code carries multmatrix+rotate_extrude(90).
+# REVOLVE DEFERRED v2: revolve-as-cut (currently add/union only); explicit edge pick (uses nearest
+# boundary segment, so a heavily raster-simplified curved outline gives a coarse hinge); angle
+# snapping / numeric entry; direction toggle.
+#
+# ---------------------------------------------------------------------------------------------------
+#
 # HANDOFF — Slice 6: Face push/pull (linear) — ✅ SHIPPED v1 (v0.25.0)
 # Pick any face of the rendered solid and drag along its normal: out = add material (union),
 # in = cut a pocket (difference). Works on BOTH simple-GUI solids and the advanced evaluated
@@ -244,7 +268,7 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
    analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
    common case of two-primitive intersections.)
-6. **[~] Slice 6 — Face push/pull extrude (linear DONE v0.25.0; rotational deferred)**: pick a face of the evaluated
+6. **[x] Slice 6 — Face push/pull extrude (linear v0.25.0 + revolve v0.26.0)**: pick a face of the evaluated
    solid, drag to **linear-extrude** it along its normal (outward → union, inward → difference) or
    **rotate-extrude** it around a chosen edge/axis. Exports cleanly: the picked face becomes a
    `polygon()` placed on the face plane via `multmatrix`, wrapped in `linear_extrude`/`rotate_extrude`,
