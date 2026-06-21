@@ -485,7 +485,9 @@
         const g = execStmt(s.stmt, scope, ctx, childGeom);
         const arr = g ? (Array.isArray(g)?g:[g]) : [];
         arr.forEach(n => { tagMod(n, s.mod); });
-        if (s.mod === 'root') { arr.__root = true; }
+        // '!' root/show-only: tag each node so the renderer can show ONLY this subtree.
+        // (Tagging the array object was lost by the parent's `out.push(...g)` spread.)
+        if (s.mod === 'root') { arr.__root = true; arr.forEach(n => { if (n) n.__root = true; }); }
         return arr;
       }
       case 'letblock': {

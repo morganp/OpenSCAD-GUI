@@ -1,3 +1,45 @@
+# HANDOFF — Render regression harness + file render-check — ✅ SHIPPED (v0.28.0)
+#
+# CAUGHT A REAL BUG: the `!` (root/show-only) modifier never actually suppressed siblings in the
+# render — the engine set `arr.__root = true` on the returned ARRAY, which the parent block's
+# `out.push(...g)` spread silently discarded. Conformance missed it (its `!` case only asserts the
+# subtree renders, not that others are hidden). Fix: engine now tags each NODE `n.__root = true`,
+# and both render paths (finishAdvanced + measureRender) filter ALL `__root` nodes. Verified:
+# render battery 36/36, conformance still 113/113.
+#
+# WHY: conformance.js (Phase 13) checks ENGINE output only (geom-node kinds/counts, echo strings).
+# It never realizes geometry, so a regression in the editor's render pipeline (realizeNode / CSG /
+# extrude / 2D / hull) would pass conformance while producing nothing or wrong-sized meshes. This
+# adds a RENDER-level battery: each .scad case is run through the FULL pipeline (engine → realize →
+# THREE meshes) and asserted on mesh count, triangle count, and world bounding-box extents. Plus a
+# "check a .scad file" action: load any OpenSCAD file and report whether/how fully it renders.
+#
+# PIECES
+# 1. public/render-tests.js  →  window.ScadRenderTests = { cases, run(editor, globalOpts) }.
+#    - add(section, name, src, expect[, opts]); expect = {
+#        mesh:Nmin (default 1), meshMax, tris:Nmin, noErr:true(default),
+#        box:[[xmin,ymin,zmin],[xmax,ymax,zmax]] + tol (default 0.6), box2d:[[xmin,ymin],[xmax,ymax]]
+#        (checks x/y only — bare 2D slabs), nonEmpty:true (just needs a non-empty bbox), empty:true
+#        (asserts 0 meshes — e.g. *disable). }
+#    - run() is ASYNC (rendering + font shaping); awaits editor.measureRender per case; returns the
+#      SAME report shape as conformance (passed/total/failed/coveragePct/sections[].cases[]).
+# 2. Editor.measureRender(src, opts) [async]  — pure, does NOT touch editor UI state:
+#    ScadEngine.run → attach svg-store rings + shape text (await ensureFont) → realizeNode each geom
+#    into a throwaway THREE.Group → measure {meshCount, tris, bbox(setFromObject)} → disposeGroup →
+#    return { meshCount, tris, bbox, errors, warnings, echos }.
+# 3. UI: a "render" button in the bottom status bar (next to "run tests") → runRenderTests() →
+#    results panel mirroring the conformance panel (state: renderOpen/renderReport/renderExpanded;
+#    handlers runRenderTests/closeRender/toggleRenderSection/loadRenderCase). Failing rows show the
+#    bbox/mesh DETAIL (not just src). Panel header has "Check a .scad file…" → hidden file input →
+#    measureRender(fileText) → one-row report (filename · N meshes · N tris · bbox · warnings) in
+#    state.renderFileResult, shown atop the panel. Does not disturb the live model.
+# 4. Badge + VERSION → 0.28.0; helmet loads render-tests.js after conformance.js.
+#
+# VERIFY: run the battery (expect all pass); drop a known .scad (e.g. a difference) via Check-a-file
+# and confirm the reported bbox matches. Then cut the release snapshot.
+#
+# ---------------------------------------------------------------------------------------------------
+#
 # HANDOFF — Binary STL export — ✅ SHIPPED (v0.27.0)
 # The tool could import meshes (STL/OFF/3MF/AMF) and save .scad text, but had no way to get the
 # RENDERED model out for 3D printing/slicing. New top-menu "Export STL" button (next to Save .scad)
