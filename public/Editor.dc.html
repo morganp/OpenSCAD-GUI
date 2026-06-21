@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.22.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.23.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -2217,6 +2217,32 @@ class Component extends DCLogic {
     s.dims.pts = pts.concat([[+(((a[0] + b[0]) / 2)).toFixed(2), +(((a[1] + b[1]) / 2)).toFixed(2)]]);
     this.afterPolyEdit(s);
   };
+  _cloneForDup(n, ctr) {
+    ctr.i = (ctr.i || 0) + 1;
+    const nid = 'dup' + Date.now() + '_' + ctr.i;
+    if (this.isGroup(n)) {
+      const f = { id: nid, op: n.op, label: (n.label || 'Group') + ' copy', children: (n.children || []).map(c => this._cloneForDup(c, ctr)) };
+      if (n.dims) f.dims = JSON.parse(JSON.stringify(n.dims));
+      f.pos = (n.pos || [0, 0, 0]).slice(); if (n.rot) f.rot = n.rot.slice();
+      return f;
+    }
+    const f = { id: nid, type: n.type, label: (n.label || 'Shape') + ' copy', dims: JSON.parse(JSON.stringify(n.dims || {})), pos: (n.pos || [0, 0, 0]).slice(), treatments: JSON.parse(JSON.stringify(n.treatments || {})) };
+    if (n.rot) f.rot = n.rot.slice();
+    if (n.expr) f.expr = { ...n.expr };
+    return f;
+  }
+  duplicateById = (id) => {
+    const node = this.findNode(id); if (!node) return;
+    const arr = this.parentArrayOf(id); if (!arr) return;
+    const idx = arr.indexOf(node);
+    const copy = this._cloneForDup(node, { i: 0 });
+    if (this.isTopLevel(id) && copy.pos) { copy.pos[0] += 14; copy.pos[1] += 14; }
+    arr.splice(idx + 1, 0, copy);
+    this.reindex();
+    this.setState({ selectedShapeId: copy.id, selectedIds: [copy.id], ctxMenu: null },
+      () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  };
+  duplicateSelected = () => { if (this.state.selectedShapeId) this.duplicateById(this.state.selectedShapeId); };
   ungroupById = (id) => {
     const node = this.findNode(id); if (!this.isGroup(node)) return;
     const arr = this.parentArrayOf(id); const idx = arr.indexOf(node);
@@ -4269,6 +4295,8 @@ class Component extends DCLogic {
   onKey(e) {
     if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
     const k = e.key.toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && k === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
+    if (e.metaKey || e.ctrlKey) return;
     if (k === 'v') this.pickSelect();
     else if (k === 'b') this.addCuboid();
     else if (k === 'c') this.addCylinder();
@@ -4369,6 +4397,7 @@ class Component extends DCLogic {
         if (pidx < parr.length - 1) items.push(mk('\u2193', 'Move down', () => this.moveNodeBy(ctx.id, 1)));
         items.push(sep);
       }
+      items.push(mk('\u29c9', 'Duplicate', () => this.duplicateById(ctx.id)));
       items.push(mk('\u2715', 'Delete', () => this.deleteShapeById(ctx.id), { danger: true, color: '#E0736B' }));
       ctxItems = items;
       const mx = Math.min(ctx.x, window.innerWidth - 200);

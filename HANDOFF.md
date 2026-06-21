@@ -1,3 +1,8 @@
+# HANDOFF — Duplicate (v0.23.0): `Cmd/Ctrl+D` or right-click → Duplicate deep-clones the selected
+# shape or group (`_cloneForDup` regenerates ids recursively, copies dims/pos/rot/treatments/expr,
+# skips THREE refs), inserts after the original (top-level copies offset +14,+14 XY), selects + renders
+# it. Verified: prim + group (deep, distinct child ids) duplicate, copies render, codegen updates.
+
 # HANDOFF — Rotation gizmo + movable/rotatable groups + group hull — IN PROGRESS (v0.17.0)
 
 ## Feature (restated)
