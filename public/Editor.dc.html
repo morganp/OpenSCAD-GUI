@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.20.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.21.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -284,6 +284,13 @@
           </div>
         </div>
       </sc-for>
+      <sc-if value="{{ sshIs2D }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin:4px 0 7px;">Extrude to 3D</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button onClick="{{ doLinearExtrude }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:11.5px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">↥ Linear</button>
+          <button onClick="{{ doRotateExtrude }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:11.5px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">↻ Rotate</button>
+        </div>
+      </sc-if>
       <button onClick="{{ placeOnFloor }}" style="width:100%;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">Rest base on floor</button>
     </div>
   </sc-if>
@@ -312,6 +319,28 @@
       </div>
       </sc-if>
 
+      <sc-if value="{{ sshIsExtrude }}" hint-placeholder-val="{{ false }}">
+      <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Extrude</div>
+      <sc-for list="{{ extrudeSections }}" as="sec" hint-placeholder-count="1">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:9px;">
+          <div style="width:58px;flex:none;">
+            <div style="font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#8A9099;line-height:1.2;">{{ sec.title }}</div>
+            <div style="font-size:9px;color:#5B616B;font-family:'IBM Plex Mono',monospace;margin-top:1px;">{{ sec.unit }}</div>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;gap:6px;align-items:flex-start;">
+            <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="1">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;">
+                <span style="font-size:9px;color:#6B7280;font-family:'IBM Plex Mono',monospace;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:11px;">{{ f.label }}</span>
+                <input value="{{ f.inputValue }}" onFocus="{{ f.onFocus }}" onChange="{{ f.onInput }}" onKeyDown="{{ f.onKeyDown }}" onBlur="{{ f.onBlur }}" placeholder="{{ f.placeholder }}" spellcheck="false" style="{{ f.inputStyle }}" />
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+      <div style="height:6px;"></div>
+      </sc-if>
+
+      <sc-if value="{{ sshIsBool }}" hint-placeholder-val="{{ true }}">
       <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px;">Operation</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;">
         <button onClick="{{ setGroupUnion }}" style="{{ groupUnionTab }}">∪ Union</button>
@@ -319,6 +348,7 @@
         <button onClick="{{ setGroupInt }}" style="{{ groupIntTab }}">∩ Intersect</button>
         <button onClick="{{ setGroupHull }}" style="{{ groupHullTab }}">⬢ Hull</button>
       </div>
+      </sc-if>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
         <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Members</span>
@@ -339,7 +369,7 @@
       </div>
       <button onClick="{{ ungroupCurrent }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:12px;padding:7px;border-radius:8px;cursor:pointer;" style-hover="background:#2B3036;">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 6V3.5h2.5M13 6V3.5h-2.5M3 10v2.5h2.5M13 10v2.5h-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Ungroup
+        {{ ungroupLabel }}
       </button>
     </div>
   </sc-if>
@@ -607,7 +637,7 @@ class Component extends DCLogic {
   shapes = [];             // FLAT mirror of all primitive leaves (rebuilt by reindex())
   _rendered = [];          // nodes currently added to the scene (for teardown)
   vars = [];               // [{ name, value }] ordered
-  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, group: 0 };
+  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
 
   componentDidMount() {
     this._onKey = (e) => this.onKey(e);
@@ -988,6 +1018,7 @@ class Component extends DCLogic {
 
   // ============ TREE HELPERS ============
   isGroup(n) { return !!(n && n.op && n.children); }
+  isExtrude(n) { return !!(n && n.children && (n.op === 'linear_extrude' || n.op === 'rotate_extrude')); }
   reindex() {
     const prims = [];
     const walk = (arr, parent) => { for (const n of arr) { n.parent = parent ? parent.id : null; if (this.isGroup(n)) walk(n.children, n); else prims.push(n); } };
@@ -1111,6 +1142,15 @@ class Component extends DCLogic {
       const b = new Brush(this.solidGeometry(node));
       b.position.set(node.pos[0], node.pos[1], node.pos[2]);
       this.setEuler(b, node.rot);
+      b.updateMatrixWorld(true);
+      return b;
+    }
+    if (this.isExtrude(node)) {
+      const geom = this.extrudeGeometry(node);
+      if (!geom) return null;
+      const b = new Brush(geom);
+      const gp = node.pos || [0, 0, 0];
+      b.position.set(gp[0], gp[1], gp[2]); this.setEuler(b, node.rot);
       b.updateMatrixWorld(true);
       return b;
     }
@@ -1599,7 +1639,7 @@ class Component extends DCLogic {
   };
   placeOnFloor = () => {
     const s = this.selShape(); if (!s || this.isGroup(s)) return;
-    const target = s.type === 'cuboid' ? s.dims.z / 2 : s.type === 'sphere' ? s.dims.r : s.dims.h / 2;
+    const target = this.restingPos(s)[2];
     this.setFieldValueRespectingBinding(s, 'pz', target);
   };
   rebuildShape(s) {
@@ -1834,6 +1874,10 @@ class Component extends DCLogic {
     if (key === 'ringd') return (s.dims.ring || 0) * 2;
     if (key === 'tubed') return (s.dims.tube || 0) * 2;
     if (key === 'di') return (s.dims.ri || 0) * 2;
+    if (key === 'height') return s.dims.height == null ? 30 : s.dims.height;
+    if (key === 'twist') return s.dims.twist || 0;
+    if (key === 'escale') return s.dims.escale == null ? 1 : s.dims.escale;
+    if (key === 'angle') return s.dims.angle == null ? 360 : s.dims.angle;
     if (key === 'h') return s.dims.h;
     if (key === 'px') return s.pos[0];
     if (key === 'py') return s.pos[1];
@@ -1851,6 +1895,10 @@ class Component extends DCLogic {
     else if (key === 'ringd') s.dims.ring = Math.max(0.5, n / 2);
     else if (key === 'tubed') s.dims.tube = Math.max(0.2, n / 2);
     else if (key === 'di') s.dims.ri = Math.max(0, n / 2);
+    else if (key === 'height') s.dims.height = Math.max(0.1, n);
+    else if (key === 'twist') s.dims.twist = n;
+    else if (key === 'escale') s.dims.escale = Math.max(0.01, n);
+    else if (key === 'angle') s.dims.angle = Math.max(1, Math.min(360, n));
     else if (key === 'h') s.dims.h = Math.max(1, n);
     else if (key === 'px') s.pos[0] = n;
     else if (key === 'py') s.pos[1] = n;
@@ -1863,7 +1911,7 @@ class Component extends DCLogic {
   clearExpr(s, key) { if (s.expr) { delete s.expr[key]; if (!Object.keys(s.expr).length) delete s.expr; } }
   rebuildField(s) {
     this.clampTreatments(s);
-    if (this.isTopLevel(s.id)) {            // fast path: solo primitive, rebuild just it
+    if (this.isTopLevel(s.id) && !this.isGroup(s)) {            // fast path: solo primitive, rebuild just it
       this.buildGroup(s);
       const se = this.state.selectedEdge;
       if (se && se.shapeId === s.id) this.selectEdgeAfterRebuild(se);
@@ -2119,6 +2167,20 @@ class Component extends DCLogic {
     this.setState({ selectedShapeId: gnode.id, selectedIds: [gnode.id], expanded: { ...this.state.expanded, [gnode.id]: true }, ctxMenu: null },
       () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
   };
+  extrudeSelection = (mode, id) => {
+    id = id || this.state.selectedShapeId;
+    const node = this.findNode(id);
+    if (!node || this.isGroup(node) || !['circle', 'square', 'polygon'].includes(node.type)) { this.flashStatus('Select a 2D shape to extrude'); this.setState({ ctxMenu: null }); return; }
+    const arr = this.parentArrayOf(id); const idx = arr.indexOf(node);
+    arr.splice(idx, 1);
+    this.seq.extrude = (this.seq.extrude || 0) + 1;
+    const dims = mode === 'rotate_extrude' ? { angle: 360 } : { height: 30, twist: 0, escale: 1 };
+    const en = { id: 'ex' + Date.now() + this.seq.extrude, op: mode, label: (mode === 'rotate_extrude' ? 'Rotate-extrude ' : 'Linear-extrude ') + this.seq.extrude, children: [node], dims, pos: [0, 0, 0], rot: [0, 0, 0] };
+    arr.splice(idx, 0, en);
+    this.reindex();
+    this.setState({ selectedShapeId: en.id, selectedIds: [en.id], expanded: { ...this.state.expanded, [en.id]: true }, ctxMenu: null },
+      () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  };
   ungroupById = (id) => {
     const node = this.findNode(id); if (!this.isGroup(node)) return;
     const arr = this.parentArrayOf(id); const idx = arr.indexOf(node);
@@ -2262,7 +2324,13 @@ class Component extends DCLogic {
       const gp = node.pos || [0, 0, 0];
       if (gp[0] || gp[1] || gp[2]) out.push(pad + `translate([${this.fmt(gp[0])}, ${this.fmt(gp[1])}, ${this.fmt(gp[2])}])`);
       const rl = this.rotLine(node, pad); if (rl) out.push(rl);
-      out.push(pad + node.op + '() {');
+      let header;
+      if (this.isExtrude(node)) {
+        const d = node.dims || {};
+        if (node.op === 'rotate_extrude') header = `rotate_extrude(angle = ${this.fmt(d.angle == null ? 360 : d.angle)}, $fn = ${this.gfn()})`;
+        else { const tw = d.twist || 0, esc = (d.escale == null ? 1 : d.escale), dyn = (tw !== 0 || esc !== 1); header = `linear_extrude(height = ${this.fmt(d.height == null ? 30 : d.height)}${tw ? `, twist = ${this.fmt(tw)}` : ''}${esc !== 1 ? `, scale = ${this.fmt(esc)}` : ''}${dyn ? `, slices = ${Math.max(8, Math.ceil(Math.abs(tw) / 6))}` : ''})`; }
+      } else header = node.op + '()';
+      out.push(pad + header + ' {');
       for (const c of node.children) this.emitNode(c, level + 1, out);
       out.push(pad + '}');
       return;
@@ -2377,7 +2445,7 @@ class Component extends DCLogic {
     // wipe and rebuild
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
     this._rendered = [];
-    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, group: 0 };
+    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
     this.vars = parsed.vars.map(v => ({ name: v.name, value: v.value }));
     this.tree = (parsed.tree || []).map(p => this.buildNodeFromParsed(p));
     this.reindex();
@@ -2866,6 +2934,42 @@ class Component extends DCLogic {
     const merged = new THREE.BufferGeometry(); merged.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); return merged;
   }
   ringsToSolid(rings, mode, params) { return mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params); }
+
+  // ---- authoring-tree 2D -> rings -> extrude solid (Slice 4) ----
+  ringsForType(node) {
+    if (node.type === 'circle') { const n = Math.max(8, this.gfn()), r = Math.max(0.2, node.dims.r), pts = []; for (let i = 0; i < n; i++) { const a = 2 * Math.PI * i / n; pts.push([r * Math.cos(a), r * Math.sin(a)]); } return [pts]; }
+    if (node.type === 'square') { const hx = Math.max(0.5, node.dims.x) / 2, hy = Math.max(0.5, node.dims.y) / 2; return [[[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]]]; }
+    if (node.type === 'polygon') { const pts = (node.dims.pts && node.dims.pts.length >= 3) ? node.dims.pts : [[-20, -20], [20, -20], [20, 20]]; return [pts.map(p => [p[0], p[1]])]; }
+    return [];
+  }
+  xform2D(rings, node) {
+    const t = node.pos || [0, 0, 0], rz = (((node.rot && node.rot[2]) || 0)) * Math.PI / 180;
+    const ca = Math.cos(rz), sa = Math.sin(rz);
+    return rings.map(r => r.map(([x, y]) => [x * ca - y * sa + (t[0] || 0), x * sa + y * ca + (t[1] || 0)]));
+  }
+  collectAuthored2DRings(arr, out) {
+    for (const n of (arr || [])) {
+      if (this.isGroup(n)) this.collectAuthored2DRings(n.children, out);
+      else if (n.type === 'circle' || n.type === 'square' || n.type === 'polygon') { for (const r of this.xform2D(this.ringsForType(n), n)) out.push(r); }
+    }
+  }
+  extrudeGeometry(node) {
+    const THREE = this.THREE;
+    const rings = []; this.collectAuthored2DRings(node.children, rings);
+    if (!rings.length) return null;
+    const d = node.dims || {};
+    let geom;
+    if (node.op === 'rotate_extrude') {
+      geom = this.revolveSolid(rings, { angle: (d.angle == null ? 360 : d.angle), $fn: this.gfn() });
+    } else {
+      const twist = d.twist || 0, esc = (d.escale == null ? 1 : d.escale);
+      const dynamic = (twist !== 0 || esc !== 1);
+      const slices = dynamic ? Math.max(8, Math.ceil(Math.max(Math.abs(twist) / 6, 24 * Math.abs(esc - 1) + 8))) : 1;
+      geom = this.linearSolid(rings, { height: Math.max(0.1, d.height == null ? 30 : d.height), twist, scale: [esc, esc], slices, center: false });
+    }
+    if (geom && !geom.attributes.uv) { const c = geom.attributes.position.count; geom.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(c * 2), 2)); }
+    return geom;
+  }
 
   linearSolid(rings, params) {
     const THREE = this.THREE; const shapes = this.ringsToShapes(rings); if (!shapes.length) return null;
@@ -4155,13 +4259,13 @@ class Component extends DCLogic {
     const flat = [];
     const walk = (rows) => { for (const r of rows) { flat.push(r); if (r.kind === 'group' && expanded[r.id] !== false) walk(r.children); } };
     walk(st.tree || []);
-    const opGlyph = (op) => op === 'union' ? '\u222a' : op === 'difference' ? '\u2212' : op === 'hull' ? '\u2b22' : op === 'minkowski' ? '\u2295' : op === 'group' ? '\u25a1' : '\u2229';
+    const opGlyph = (op) => op === 'union' ? '\u222a' : op === 'difference' ? '\u2212' : op === 'hull' ? '\u2b22' : op === 'minkowski' ? '\u2295' : op === 'group' ? '\u25a1' : op === 'linear_extrude' ? '\u21a5' : op === 'rotate_extrude' ? '\u21bb' : '\u2229';
     const treeRows = flat.map(r => {
       const isGroup = r.kind === 'group';
       const isSel = r.id === st.selectedShapeId || selIds.includes(r.id);
       const isOpen = expanded[r.id] !== false;
       const ord = selIds.length > 1 ? selIds.indexOf(r.id) : -1;
-      const meta = isGroup ? (r.op + ' \u00b7 ' + r.count + ' shape' + (r.count !== 1 ? 's' : '')) : (r.meta + (r.treated ? '  \u00b7  ' + r.treated + ' edge' + (r.treated > 1 ? 's' : '') : ''));
+      const meta = isGroup ? ((r.op === 'linear_extrude' ? 'linear extrude' : r.op === 'rotate_extrude' ? 'rotate extrude' : r.op) + ' \u00b7 ' + r.count + ' shape' + (r.count !== 1 ? 's' : '')) : (r.meta + (r.treated ? '  \u00b7  ' + r.treated + ' edge' + (r.treated > 1 ? 's' : '') : ''));
       return {
         id: r.id, label: r.label, meta,
         hasCaret: isGroup, noCaret: !isGroup,
@@ -4215,6 +4319,12 @@ class Component extends DCLogic {
         items.push(sep);
         items.push(mk('\u2922', 'Ungroup', () => this.ungroupById(ctx.id)));
       }
+      const nIs2D = node && !nIsGroup && ['circle', 'square', 'polygon'].includes(node.type);
+      if (nIs2D) {
+        if (items.length) items.push(sep);
+        items.push(mk('\u21a5', 'Linear extrude', () => this.extrudeSelection('linear_extrude', ctx.id)));
+        items.push(mk('\u21bb', 'Rotate extrude', () => this.extrudeSelection('rotate_extrude', ctx.id)));
+      }
       if (items.length) items.push(sep);
       const parr = this.parentArrayOf(ctx.id);
       const pidx = parr ? parr.indexOf(node) : -1;
@@ -4236,6 +4346,7 @@ class Component extends DCLogic {
     const applied = (sel && selShapeObj && selShapeObj.treatments) ? selShapeObj.treatments[sel.edgeName] : null;
     const ssh = st.selectedShapeId ? this.findNode(st.selectedShapeId) : null;
     const sshIsGroup = this.isGroup(ssh);
+    const sshIsExtrude = this.isExtrude(ssh);
     const sshIsCyl = !!ssh && ssh.type === 'cylinder';
     const sshNested = !!ssh && !sshIsGroup && !this.isTopLevel(ssh.id);
 
@@ -4260,6 +4371,10 @@ class Component extends DCLogic {
       { title: 'Rotation', unit: 'deg', fields: rotFields },
     ];
     const showGizmoTabs = !!ssh && !sshIsGroup;
+    const extrudeSections = !sshIsExtrude ? [] : (ssh.op === 'rotate_extrude'
+      ? [{ title: 'Revolve', unit: 'deg', fields: [this.buildField(ssh, 'angle', 'angle\u00b0')] }]
+      : [{ title: 'Extrude', unit: 'mm', fields: [this.buildField(ssh, 'height', 'height')] },
+         { title: 'Twist', unit: '', fields: [this.buildField(ssh, 'twist', 'twist\u00b0'), this.buildField(ssh, 'escale', 'end scale')] }]);
     const sshRole = sshNested ? this.memberRole(ssh) : null;
     const sshNestedNotice = sshRole === 'cut'
       ? 'Subtracted volume — shown highlighted. Move or resize to reshape the cut.'
@@ -4351,6 +4466,9 @@ class Component extends DCLogic {
       clearEdge: () => this.clearEdge(),
 
       hasShapePanel: !!st.selectedShapeId && !sel && !sshIsGroup,
+      sshIs2D: !!ssh && !sshIsGroup && ['circle', 'square', 'polygon'].includes(ssh.type),
+      doLinearExtrude: () => this.extrudeSelection('linear_extrude'),
+      doRotateExtrude: () => this.extrudeSelection('rotate_extrude'),
       shapePanelLabel: ssh ? ssh.label : '',
       shapeDotStyle: `width:10px;height:10px;border-radius:${sshIsCyl || (ssh && ssh.type === 'sphere') ? '50%' : '2px'};background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,.6);`,
       showGizmoTabs, sshNested, sshNestedNotice,
@@ -4362,6 +4480,10 @@ class Component extends DCLogic {
       setGizmoScale: this.setGizmoScale,
 
       hasGroupPanel: sshIsGroup,
+      sshIsExtrude,
+      sshIsBool: sshIsGroup && !sshIsExtrude,
+      extrudeSections,
+      ungroupLabel: sshIsExtrude ? 'Remove extrude' : 'Ungroup',
       groupGlyph: sshIsGroup ? opGlyph(ssh.op) : '',
       groupPanelLabel: sshIsGroup ? ssh.label : '',
       groupOpLabel: sshIsGroup ? ssh.op : '',

@@ -132,7 +132,15 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    3 branches; tree `meta`/dot + grpMembers badge; flyout "2D · for extrude" section + `mi*`.
    Verified: render (1152/36/60 verts), codegen valid, engine round-trips 4 nodes / 0 errors,
    inspector fields correct. **Remaining for full Slice 3:** polygon point editor.
-4. **[ ] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child).
+4. **[x] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child)
+   (v0.21.0). Modeled as a **group-like node** (`op:'linear_extrude'|'rotate_extrude'` + `children`,
+   params in `dims`) so it reuses ALL group plumbing (reindex/findNode/tree/gizmo move+rotate/
+   emitNode). `isExtrude(n)` gates the special cases. Render: `extrudeGeometry` collects the 2D
+   subtree's rings (`ringsForType`+`xform2D`+`collectAuthored2DRings`, even-odd holes via
+   ringsToShapes) → existing `linearSolid`/`revolveSolid`; zeroed uv added so a nested extrude still
+   feeds three-bvh-csg booleans. Authored from a 2D shape's panel buttons or right-click (Linear /
+   Rotate extrude) — wraps the shape like grouping. Inspector: extrude params (height/twist/end-scale
+   or angle°) via reused field rows + move/rotate gizmo + \"Remove extrude\"; boolean-op buttons hidden.\n   Emits parametric `linear_extrude(height,twist,scale,slices)` / `rotate_extrude(angle,$fn)` →\n   advanced (read-only on code round-trip). `rebuildField` now routes group edits through\n   rebuildScene; `placeOnFloor` uses `restingPos`. Verified: both build geometry (36v / 1728v),\n   height edit → bbox z matches, twist lofts, child editable, engine round-trips 2 nodes / 0 errors.
 5. **[ ] Slice 5 — Boolean-edge fillet/chamfer**: detect convex/concave edges on a union/difference
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
    analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
