@@ -121,7 +121,8 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    `meta`/dot + grpMembers `badge`; add-shape flyout buttons + `mi*` renderVals. Verified via
    eval_js: all three render (1225/245/24 verts), codegen valid, engine round-trips 4 geom nodes /
    0 errors / advanced=true, inspector fields correct.
-3. **[~] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes (v0.20.0).
+3. **[x] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes (v0.20.0, polygon
+   point-editor v0.22.0).
    New authoring-tree types rendered as a thin (0.6mm) ExtrudeGeometry sheet resting on the floor,
    gizmo move/resize/rotate like any solid. Circle (⌀) and square (X/Y) are dim-editable; polygon
    ships a default 6-pt L-outline and is placeable but **point-editing is deferred** (Size panel
@@ -131,7 +132,9 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    branch (Shape→ExtrudeGeometry, absarc circle); `restingPos` (z=0.3); `dimFields`; `baseCall`
    3 branches; tree `meta`/dot + grpMembers badge; flyout "2D · for extrude" section + `mi*`.
    Verified: render (1152/36/60 verts), codegen valid, engine round-trips 4 nodes / 0 errors,
-   inspector fields correct. **Remaining for full Slice 3:** polygon point editor.
+   inspector fields correct. **Slice 3 complete: polygon point-editor shipped v0.22.0** — selecting
+   a polygon shows an editable Points list in the inspector (per-vertex X/Y inputs, delete ×, "+ Add
+   point"; min-3 guard), live-rebuilding the sheet + codegen; works on polygons nested in an extrude.
 4. **[x] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child)
    (v0.21.0). Modeled as a **group-like node** (`op:'linear_extrude'|'rotate_extrude'` + `children`,
    params in `dims`) so it reuses ALL group plumbing (reindex/findNode/tree/gizmo move+rotate/

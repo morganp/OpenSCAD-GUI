@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.21.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.22.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -284,6 +284,23 @@
           </div>
         </div>
       </sc-for>
+      <sc-if value="{{ sshIsPoly }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0 7px;">
+          <span style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;">Points</span>
+          <span style="font-size:9px;color:#5B616B;font-family:'IBM Plex Mono',monospace;">x · y mm</span>
+        </div>
+        <div class="cad-scroll" style="max-height:168px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;margin-bottom:8px;">
+          <sc-for list="{{ polyPoints }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="width:24px;flex:none;font-size:9.5px;color:#6B7280;font-family:'IBM Plex Mono',monospace;">{{ p.label }}</span>
+              <input value="{{ p.xVal }}" onChange="{{ p.onX }}" spellcheck="false" style="flex:1;min-width:0;background:#0F1114;border:1px solid #2C3037;border-radius:6px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 7px;box-sizing:border-box;outline:none;" />
+              <input value="{{ p.yVal }}" onChange="{{ p.onY }}" spellcheck="false" style="flex:1;min-width:0;background:#0F1114;border:1px solid #2C3037;border-radius:6px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 7px;box-sizing:border-box;outline:none;" />
+              <button onClick="{{ p.onDelete }}" title="Delete point" style="flex:none;width:24px;height:26px;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid #2C3037;border-radius:6px;color:#6B7280;cursor:pointer;" style-hover="color:#E0736B;border-color:#5A2E2E;">×</button>
+            </div>
+          </sc-for>
+        </div>
+        <button onClick="{{ addPolyPt }}" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:#23272E;border:1px solid #34393F;color:#C7CCD4;font:inherit;font-size:11.5px;padding:6px;border-radius:8px;cursor:pointer;margin-bottom:10px;" style-hover="background:#2B3036;">+ Add point</button>
+      </sc-if>
       <sc-if value="{{ sshIs2D }}" hint-placeholder-val="{{ false }}">
         <div style="font-size:10px;color:#8A9099;letter-spacing:.05em;text-transform:uppercase;margin:4px 0 7px;">Extrude to 3D</div>
         <div style="display:flex;gap:6px;margin-bottom:10px;">
@@ -2180,6 +2197,25 @@ class Component extends DCLogic {
     this.reindex();
     this.setState({ selectedShapeId: en.id, selectedIds: [en.id], expanded: { ...this.state.expanded, [en.id]: true }, ctxMenu: null },
       () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
+  };
+  afterPolyEdit(s) { this.rebuildField(s); }
+  setPolyPt = (idx, axis, val) => {
+    const s = this.selShape(); if (!s || s.type !== 'polygon') return;
+    const n = parseFloat(val); if (isNaN(n)) return;
+    s.dims.pts = (s.dims.pts || []).map((p, i) => i === idx ? (axis === 0 ? [n, p[1]] : [p[0], n]) : p);
+    this.afterPolyEdit(s);
+  };
+  deletePolyPt = (idx) => {
+    const s = this.selShape(); if (!s || s.type !== 'polygon') return;
+    if ((s.dims.pts || []).length <= 3) { this.flashStatus('A polygon needs at least 3 points'); return; }
+    s.dims.pts = s.dims.pts.filter((_, i) => i !== idx);
+    this.afterPolyEdit(s);
+  };
+  addPolyPt = () => {
+    const s = this.selShape(); if (!s || s.type !== 'polygon') return;
+    const pts = s.dims.pts || []; const a = pts[pts.length - 1] || [0, 0], b = pts[0] || [0, 0];
+    s.dims.pts = pts.concat([[+(((a[0] + b[0]) / 2)).toFixed(2), +(((a[1] + b[1]) / 2)).toFixed(2)]]);
+    this.afterPolyEdit(s);
   };
   ungroupById = (id) => {
     const node = this.findNode(id); if (!this.isGroup(node)) return;
@@ -4467,6 +4503,14 @@ class Component extends DCLogic {
 
       hasShapePanel: !!st.selectedShapeId && !sel && !sshIsGroup,
       sshIs2D: !!ssh && !sshIsGroup && ['circle', 'square', 'polygon'].includes(ssh.type),
+      sshIsPoly: !!ssh && !sshIsGroup && ssh.type === 'polygon',
+      polyPoints: (!!ssh && !sshIsGroup && ssh.type === 'polygon' ? (ssh.dims.pts || []) : []).map((p, i) => ({
+        idx: i, label: 'P' + (i + 1), xVal: this.fmt(p[0]), yVal: this.fmt(p[1]),
+        onX: (e) => this.setPolyPt(i, 0, e.target.value),
+        onY: (e) => this.setPolyPt(i, 1, e.target.value),
+        onDelete: () => this.deletePolyPt(i),
+      })),
+      addPolyPt: this.addPolyPt,
       doLinearExtrude: () => this.extrudeSelection('linear_extrude'),
       doRotateExtrude: () => this.extrudeSelection('rotate_extrude'),
       shapePanelLabel: ssh ? ssh.label : '',
