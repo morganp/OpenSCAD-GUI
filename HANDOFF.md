@@ -110,8 +110,17 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    `cylinderEdges`, `cylWireGeom`, `edgeMaxRadius`, `baseCall`/`dimTok`(r1/r2/$fn), `dimFields`
    (⌀base/⌀top/sides), `fieldNumber`/`applyFieldNumber` (d2/sides), `readPrimitive` (r1/r2/d1/d2/$fn),
    remove the `cylinder r1/r2 → advanced` exclusion in `isAdvanced`.
-2. **[ ] Slice 2 — Torus / Tube / Wedge** solids (new types; live-editable, correct export,
-   read-only on re-run).
+2. **[x] Slice 2 — Torus / Tube / Wedge** solids (v0.19.0). New authoring-tree primitive types,
+   live gizmo-editable with inspector dims (torus ⌀ring/⌀tube, tube ⌀outer/⌀inner/height, wedge
+   x/y/z); render via THREE Torus / Lathe-annulus / Extrude-triangle; emit `rotate_extrude` (torus) /
+   `difference` of two cylinders (tube) / `rotate([90,0,0]) linear_extrude polygon` (wedge) →
+   advanced, so a code round-trip drops them to read-only (engine renders them correctly).
+   Touch-points: `addTorus/addTube/addWedge` + `pickShape` map + `seq`; `solidGeometry` (torus/tube/
+   wedge branches) + buildGroup wire `baseGeom`; `fieldNumber`/`applyFieldNumber` (ringd/tubed/di);
+   `dimFields`; `baseCall` (3 branches) + `emitPrimitive` multiline indent; `restingPos`; tree
+   `meta`/dot + grpMembers `badge`; add-shape flyout buttons + `mi*` renderVals. Verified via
+   eval_js: all three render (1225/245/24 verts), codegen valid, engine round-trips 4 geom nodes /
+   0 errors / advanced=true, inspector fields correct.
 3. **[ ] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes.
 4. **[ ] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child).
 5. **[ ] Slice 5 — Boolean-edge fillet/chamfer**: detect convex/concave edges on a union/difference
