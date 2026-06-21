@@ -121,7 +121,17 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    `meta`/dot + grpMembers `badge`; add-shape flyout buttons + `mi*` renderVals. Verified via
    eval_js: all three render (1225/245/24 verts), codegen valid, engine round-trips 4 geom nodes /
    0 errors / advanced=true, inspector fields correct.
-3. **[ ] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes.
+3. **[~] Slice 3 — 2D primitives** (circle/square/polygon) as flat editable shapes (v0.20.0).
+   New authoring-tree types rendered as a thin (0.6mm) ExtrudeGeometry sheet resting on the floor,
+   gizmo move/resize/rotate like any solid. Circle (⌀) and square (X/Y) are dim-editable; polygon
+   ships a default 6-pt L-outline and is placeable but **point-editing is deferred** (Size panel
+   empty — a future slice adds a point editor). Emit `circle(d,$fn)` / `square([x,y],center)` /
+   `polygon([pts])` → advanced (read-only on code round-trip; engine renders the flat slab).
+   Touch-points: `addCircle2D/addSquare2D/addPolygon2D` + `pickShape`/`seq`; `solidGeometry` 2D
+   branch (Shape→ExtrudeGeometry, absarc circle); `restingPos` (z=0.3); `dimFields`; `baseCall`
+   3 branches; tree `meta`/dot + grpMembers badge; flyout "2D · for extrude" section + `mi*`.
+   Verified: render (1152/36/60 verts), codegen valid, engine round-trips 4 nodes / 0 errors,
+   inspector fields correct. **Remaining for full Slice 3:** polygon point editor.
 4. **[ ] Slice 4 — Extrude operations** (linear_extrude / rotate_extrude wrappers on a 2D child).
 5. **[ ] Slice 5 — Boolean-edge fillet/chamfer**: detect convex/concave edges on a union/difference
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an

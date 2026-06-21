@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.19.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.20.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -129,6 +129,19 @@
         <button onClick="{{ miWedge }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
           <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M3.5 15.4 16.4 15.4 3.5 4.6 3.5 15.4Z" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round"/></svg>
           Wedge
+        </button>
+        <div style="font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:#5B616B;padding:8px 8px 5px;border-top:1px solid #23272E;margin-top:4px;">2D · for extrude</div>
+        <button onClick="{{ miCircle }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="#9AA3AE" stroke-width="1.3" stroke-dasharray="2.2 1.8"/></svg>
+          Circle
+        </button>
+        <button onClick="{{ miSquare }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="1" stroke="#9AA3AE" stroke-width="1.3" stroke-dasharray="2.2 1.8"/></svg>
+          Square
+        </button>
+        <button onClick="{{ miPolygon }}" style="display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:7px 8px;border-radius:8px;cursor:pointer;text-align:left;" style-hover="background:#23272E;">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none"><path d="M4 4 12 4 12 9 16 9 16 16 4 16Z" stroke="#9AA3AE" stroke-width="1.3" stroke-linejoin="round" stroke-dasharray="2.2 1.8"/></svg>
+          Polygon
         </button>
       </div>
     </sc-if>
@@ -594,7 +607,7 @@ class Component extends DCLogic {
   shapes = [];             // FLAT mirror of all primitive leaves (rebuilt by reindex())
   _rendered = [];          // nodes currently added to the scene (for teardown)
   vars = [];               // [{ name, value }] ordered
-  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, group: 0 };
+  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, group: 0 };
 
   componentDidMount() {
     this._onKey = (e) => this.onKey(e);
@@ -1052,6 +1065,22 @@ class Component extends DCLogic {
       shp.moveTo(-hx, -hz); shp.lineTo(hx, -hz); shp.lineTo(-hx, hz); shp.closePath();
       const g = new THREE.ExtrudeGeometry(shp, { depth: hy * 2, bevelEnabled: false });
       g.translate(0, 0, -hy); g.rotateX(Math.PI / 2); g.computeVertexNormals();
+      return g;
+    }
+    if (shape.type === 'circle' || shape.type === 'square' || shape.type === 'polygon') {
+      const T = 0.6;
+      const shp = new THREE.Shape();
+      if (shape.type === 'circle') {
+        shp.absarc(0, 0, Math.max(0.2, shape.dims.r), 0, Math.PI * 2, false);
+      } else if (shape.type === 'square') {
+        const hx = Math.max(0.5, shape.dims.x) / 2, hy = Math.max(0.5, shape.dims.y) / 2;
+        shp.moveTo(-hx, -hy); shp.lineTo(hx, -hy); shp.lineTo(hx, hy); shp.lineTo(-hx, hy); shp.closePath();
+      } else {
+        const pts = (shape.dims.pts && shape.dims.pts.length >= 3) ? shape.dims.pts : [[-20, -20], [20, -20], [20, 20]];
+        shp.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) shp.lineTo(pts[i][0], pts[i][1]); shp.closePath();
+      }
+      const g = new THREE.ExtrudeGeometry(shp, { depth: T, bevelEnabled: false, curveSegments: Math.max(12, this.gfn()) });
+      g.translate(0, 0, -T / 2); g.computeVertexNormals();
       return g;
     }
     const base = new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z);
@@ -1999,9 +2028,27 @@ class Component extends DCLogic {
     const pos = this.nextPos(); pos[2] = dims.z / 2;
     this.addPrimitive({ id: 'wd' + Date.now() + this.seq.wedge, type: 'wedge', label: 'Wedge ' + this.seq.wedge, dims, pos, treatments: {} });
   };
+  addCircle2D = () => {
+    if (!this.scene) return;
+    this.seq.circle = (this.seq.circle || 0) + 1;
+    const dims = { r: 22 };
+    this.addPrimitive({ id: 'c2' + Date.now() + this.seq.circle, type: 'circle', label: 'Circle ' + this.seq.circle, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+  };
+  addSquare2D = () => {
+    if (!this.scene) return;
+    this.seq.square = (this.seq.square || 0) + 1;
+    const dims = { x: 40, y: 40 };
+    this.addPrimitive({ id: 'sq' + Date.now() + this.seq.square, type: 'square', label: 'Square ' + this.seq.square, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+  };
+  addPolygon2D = () => {
+    if (!this.scene) return;
+    this.seq.polygon = (this.seq.polygon || 0) + 1;
+    const dims = { pts: [[-20, -20], [20, -20], [20, -6], [-6, -6], [-6, 20], [-20, 20]] };
+    this.addPrimitive({ id: 'pg' + Date.now() + this.seq.polygon, type: 'polygon', label: 'Polygon ' + this.seq.polygon, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+  };
   pickShape = (n) => {
     this.setState({ shapeMenuOpen: false });
-    const fn = { cuboid: this.addCuboid, cylinder: this.addCylinder, cone: this.addCone, pyramid: this.addPyramid, sphere: this.addSphere, torus: this.addTorus, tube: this.addTube, wedge: this.addWedge }[n];
+    const fn = { cuboid: this.addCuboid, cylinder: this.addCylinder, cone: this.addCone, pyramid: this.addPyramid, sphere: this.addSphere, torus: this.addTorus, tube: this.addTube, wedge: this.addWedge, circle: this.addCircle2D, square: this.addSquare2D, polygon: this.addPolygon2D }[n];
     if (fn) fn();
   };
   toggleShapeMenu = () => this.setState({ shapeMenuOpen: !this.state.shapeMenuOpen });
@@ -2161,6 +2208,9 @@ class Component extends DCLogic {
           : n.type === 'cylinder' ? `\u2300${this.fmt(n.dims.r * 2)} \u00d7 ${this.fmt(n.dims.h)}`
             : n.type === 'torus' ? `\u2300${this.fmt(n.dims.ring * 2)} / \u2300${this.fmt(n.dims.tube * 2)}`
               : n.type === 'tube' ? `\u2300${this.fmt(n.dims.r * 2)} / \u2300${this.fmt((n.dims.ri || 0) * 2)} \u00d7 ${this.fmt(n.dims.h)}`
+                : n.type === 'circle' ? `\u2300${this.fmt(n.dims.r * 2)} \u00b7 2D`
+                : n.type === 'square' ? `${this.fmt(n.dims.x)}\u00d7${this.fmt(n.dims.y)} \u00b7 2D`
+                : n.type === 'polygon' ? `${(n.dims.pts || []).length} pts \u00b7 2D`
                 : `\u2300${this.fmt(n.dims.r * 2)}`,
       };
     };
@@ -2288,6 +2338,12 @@ class Component extends DCLogic {
       const hx = s.dims.x / 2, hz = s.dims.z / 2;
       return `rotate([90, 0, 0])\n  linear_extrude(height = ${this.dimTok(s, 'y')}, center = true)\n  polygon([[${this.fmt(-hx)}, ${this.fmt(-hz)}], [${this.fmt(hx)}, ${this.fmt(-hz)}], [${this.fmt(-hx)}, ${this.fmt(hz)}]])`;
     }
+    if (s.type === 'circle') return `circle(d = ${this.dimTok(s, 'd')}, $fn = ${this.gfn()})`;
+    if (s.type === 'square') return `square([${this.dimTok(s, 'x')}, ${this.dimTok(s, 'y')}], center = true)`;
+    if (s.type === 'polygon') {
+      const pts = (s.dims.pts && s.dims.pts.length >= 3) ? s.dims.pts : [[-20, -20], [20, -20], [20, 20]];
+      return `polygon([${pts.map(p => `[${this.fmt(p[0])}, ${this.fmt(p[1])}]`).join(', ')}])`;
+    }
     const d = s.dims;
     const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : 0;
     const tapered = (d.r2 != null && Math.abs(d.r2 - d.r) > 1e-9) || sides;
@@ -2321,7 +2377,7 @@ class Component extends DCLogic {
     // wipe and rebuild
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
     this._rendered = [];
-    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, group: 0 };
+    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, group: 0 };
     this.vars = parsed.vars.map(v => ({ name: v.name, value: v.value }));
     this.tree = (parsed.tree || []).map(p => this.buildNodeFromParsed(p));
     this.reindex();
@@ -3215,6 +3271,7 @@ class Component extends DCLogic {
     if (node.type === 'wedge') return [0, 0, node.dims.z / 2];
     if (node.type === 'tube') return [0, 0, node.dims.h / 2];
     if (node.type === 'torus') return [0, 0, node.dims.tube];
+    if (node.type === 'circle' || node.type === 'square' || node.type === 'polygon') return [0, 0, 0.3];
     return [0, 0, node.dims.r];
   }
   parseBlock(src) {
@@ -4114,7 +4171,7 @@ class Component extends DCLogic {
         glyph: isGroup ? opGlyph(r.op) : '',
         dotStyle: isGroup
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
-          : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
+          : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
         rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
         onSelect: (e) => { if (st.readOnly) return; this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
         onCtx: (e) => { if (st.readOnly) { e.preventDefault(); return; } this.openCtx(r.id, e); },
@@ -4187,6 +4244,9 @@ class Component extends DCLogic {
       (ssh.type === 'cuboid' || ssh.type === 'wedge') ? [this.buildField(ssh, 'x', 'X'), this.buildField(ssh, 'y', 'Y'), this.buildField(ssh, 'z', 'Z (height)')]
         : ssh.type === 'torus' ? [this.buildField(ssh, 'ringd', '\u2300 ring'), this.buildField(ssh, 'tubed', '\u2300 tube')]
         : ssh.type === 'tube' ? [this.buildField(ssh, 'd', '\u2300 outer'), this.buildField(ssh, 'di', '\u2300 inner'), this.buildField(ssh, 'h', 'Z (height)')]
+        : ssh.type === 'circle' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
+        : ssh.type === 'square' ? [this.buildField(ssh, 'x', 'X'), this.buildField(ssh, 'y', 'Y')]
+        : ssh.type === 'polygon' ? []
         : ssh.type === 'sphere' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
           : cylExtended ? (ssh.dims.sides
             ? [this.buildField(ssh, 'd', '\u2300 base'), this.buildField(ssh, 'd2', '\u2300 top'), this.buildField(ssh, 'h', 'Z (height)'), this.buildField(ssh, 'sides', 'sides')]
@@ -4211,7 +4271,7 @@ class Component extends DCLogic {
     const grpMembers = sshIsGroup ? ssh.children.map((c, idx) => {
       const cg = this.isGroup(c);
       return {
-        label: c.label, badge: cg ? opGlyph(c.op) : (c.type === 'cuboid' ? '\u25a2' : c.type === 'sphere' ? '\u25cf' : c.type === 'wedge' ? '\u25e2' : c.type === 'torus' ? '\u25ce' : c.type === 'tube' ? '\u25cb' : '\u2b2d'),
+        label: c.label, badge: cg ? opGlyph(c.op) : (c.type === 'cuboid' ? '\u25a2' : c.type === 'sphere' ? '\u25cf' : c.type === 'wedge' ? '\u25e2' : c.type === 'torus' ? '\u25ce' : c.type === 'tube' ? '\u25cb' : c.type === 'circle' ? '\u25cc' : c.type === 'square' ? '\u25fb' : c.type === 'polygon' ? '\u2b21' : '\u2b2d'),
         isBase: ssh.op === 'difference' && idx === 0,
         baseTag: (ssh.op === 'difference' && idx === 0) ? 'base' : (ssh.op === 'difference' ? 'cut' : ''),
         onSelect: () => this.selectShape(c.id),
@@ -4258,6 +4318,7 @@ class Component extends DCLogic {
       miCuboid: () => this.pickShape('cuboid'), miCylinder: () => this.pickShape('cylinder'),
       miCone: () => this.pickShape('cone'), miPyramid: () => this.pickShape('pyramid'), miSphere: () => this.pickShape('sphere'),
       miTorus: () => this.pickShape('torus'), miTube: () => this.pickShape('tube'), miWedge: () => this.pickShape('wedge'),
+      miCircle: () => this.pickShape('circle'), miSquare: () => this.pickShape('square'), miPolygon: () => this.pickShape('polygon'),
       pickMove: this.pickMove, deleteSelected: this.deleteSelected,
       toggleParams: this.toggleParams,
 
