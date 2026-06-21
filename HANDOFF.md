@@ -80,11 +80,13 @@
 #   concave-only seams in unions still pickable. Iterate later.
 #
 # ===== KNOWN BUGS (fix later) =====
-# BUG-A: Model Tree panel is not movable (other floating panels drag fine — its drag handle is
-#        likely not wired). Make it draggable like the inspector/console panels.
-# BUG-B: When multiple objects are selected (multi-select, before grouping), the "Hull" option is
-#        missing from the context menu / action menu. Hull only appears AFTER a group exists. It
-#        should be offered for a raw multi-selection too (same as Union/Difference/Intersection).
+# BUG-A: ✅ FIXED v0.25.1 — Model Tree panel is now draggable (header has onMouseDown=dragTree via
+#        startPanelDrag('tree'); container style = panelStyle('tree', base) → treePanelStyle hole).
+# BUG-B: ✅ FIXED v0.25.1 — a raw multi-selection (before grouping) now offers Hull alongside
+#        Union/Difference/Intersection, in the Model-Tree multi-select panel (now a 2×2 grid with a
+#        ⬢ Hull button → groupHull) AND the right-click context menu ("Group as Hull").
+#        groupSelection() label map extended for 'hull'. Verified: 2 cubes → Group as Hull → hull()
+#        group, renders 1 mesh, codegen emits hull(){…}, engine 0 errors.
 # ==================================
 
 # HANDOFF — Duplicate (v0.23.0): `Cmd/Ctrl+D` or right-click → Duplicate deep-clones the selected
