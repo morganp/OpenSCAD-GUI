@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.27.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.27.1</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1438,6 +1438,14 @@ class Component extends DCLogic {
     const denom = 1 - b * b;
     return Math.abs(denom) > 1e-6 ? (b * e - d) / denom : 0;
   }
+  // abort an in-progress push/pull drag without applying (Escape)
+  cancelPushPull() {
+    if (this.pp) { try { this.renderer.domElement.releasePointerCapture(this._ppPointerId); } catch (_) {} }
+    this.pp = null;
+    if (this.controls) this.controls.enabled = true;
+    this.clearPPGhost(); this.clearHinge(); this.clearPPHover();
+    if (this.state.ppDragging) { this.setState({ ppDragging: false }); this.flashStatus('Push/pull cancelled'); }
+  }
   startPushPull(face, e) {
     if (this.state.ppMode === 'revolve') {
       const rev = this.buildRevolveData(face, face.hit);
@@ -1775,7 +1783,7 @@ class Component extends DCLogic {
     this.ndc(e);
     if (this.state.tool === 'pushpull') {
       const face = this.pickFaceAtPointer();
-      if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch (_) {} this.startPushPull(face, e); }
+      if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); this._ppPointerId = e.pointerId; } catch (_) {} this.startPushPull(face, e); }
       return;
     }
     this.raycaster.setFromCamera(this.pointer, this.cam);
@@ -4897,7 +4905,7 @@ class Component extends DCLogic {
     else if (k === 'm') this.pickMove();
     else if (k === 'e') this.pickPush();
     else if (k === 'delete' || k === 'backspace') this.deleteSelected();
-    else if (k === 'escape') { this.clearEdge(); this.selectShape(null); }
+    else if (k === 'escape') { if (this.state.tool === 'pushpull') { this.cancelPushPull(); this.pickSelect(); return; } this.clearEdge(); this.selectShape(null); }
   }
 
   // ============ RENDER VALUES ============
