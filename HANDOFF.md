@@ -1,3 +1,49 @@
+# HANDOFF — Slice 5: Boolean-edge fillet/chamfer (simplest useful v1) — ✅ SHIPPED (v0.24.0)
+# Verified via eval_js: detection on a stacked/L union → 12/15 convex edges (chained); difference
+# notch → 3 concave edges; apply convex fillet r=6 → tris 62→311, bbox preserved (rounds OUTER
+# corner, normals correct); 4-edge fillet keeps bbox −20..20/0..50; generated OpenSCAD
+# (difference(){union(){…} multmatrix edge_fillet}) round-trips through ScadEngine.run → 0 errors;
+# primitive-edge fillet path unchanged (no regression). KNOWN GAP: reentrant concave edges from a
+# *union* are missed (CSG T-junction / mismatched tessellation leaves them as 1-tri boundary edges);
+# concave from *difference* works. Plus the deferred items below.
+#
+# (original plan)
+#
+# GOAL: pick a sharp feature edge CREATED BY a union/difference/intersection group result and apply
+# an analytic fillet (round) or chamfer (flat), live + exported to valid OpenSCAD.
+#
+# APPROACH (reuses the working primitive edge-treatment machinery):
+# - detectGroupEdges(geo): from the group's RAW boolean result geometry (group-local), build an
+#   undirected edge map (quantized verts), find edges shared by 2 faces whose dihedral > 8deg.
+#   convex = dot(nA, apexB - aA) < 0. Per segment store {mid, U=nA, V=nB, len, convex}. The edge
+#   tangent E = U×V (always ⟂ both face normals), matching cuboidMaskGeom's basis convention.
+# - chainEdgeSegs: greedily chain connected segments with same convex flag + tangent continuity
+#   (<35deg) into pickable polylines (straight edges + smooth curves chain; corners split).
+# - RENDER: evalBrush stashes node._rawGeo (pre-treatment), then applyEdgeTreatBrush subtracts the
+#   convex tools / unions the concave tools. Tool per seg = extruded corner profile placed by
+#   basis(U,V,E): convex fillet = square−quarter-disc@origin (subtract); convex chamfer = triangle;
+#   concave fillet = square−disc@(r,r) (union); concave chamfer = corner triangle. uv zeroed for CSG.
+# - PICK: proxies (invisible cylinders per seg, userData{kind:'groupEdgeProxy',shapeId,edgeId})
+#   built for every top-level group, children of node.group, included in allProxies(). Detection runs
+#   off _rawGeo so edge ids stay STABLE across rebuilds (treatments applied after stashing) → toggle
+#   + reselect work. Hover/select highlight = merged cylinders baked to world via group.matrixWorld.
+# - DATA: group.edgeTreatments = { [edgeId]: {type,size,convex,segs:[{mid,U,V,len}]} }. Plain data,
+#   serializes clean (syncShapesState picks fields explicitly). _cloneForDup copies it.
+# - CODEGEN: emitNode wraps the group's op-block — difference(){op; convexTools} and/or
+#   union(){…; concaveTools}, each tool = multmatrix(M) edge_fillet/edge_chamfer/edge_round_in/
+#   edge_chamfer_in. Modules emitted on demand. Renders correctly via the advanced engine.
+# - DEFERRED v1: fillet doesn't follow live child-dimension edits (stored seg geometry goes stale);
+#   group-edge fillets don't GUI-round-trip from a code Run (stay valid OpenSCAD, may drop read-only);
+#   concave-only seams in unions still pickable. Iterate later.
+#
+# ===== KNOWN BUGS (fix later) =====
+# BUG-A: Model Tree panel is not movable (other floating panels drag fine — its drag handle is
+#        likely not wired). Make it draggable like the inspector/console panels.
+# BUG-B: When multiple objects are selected (multi-select, before grouping), the "Hull" option is
+#        missing from the context menu / action menu. Hull only appears AFTER a group exists. It
+#        should be offered for a raw multi-selection too (same as Union/Difference/Intersection).
+# ==================================
+
 # HANDOFF — Duplicate (v0.23.0): `Cmd/Ctrl+D` or right-click → Duplicate deep-clones the selected
 # shape or group (`_cloneForDup` regenerates ids recursively, copies dims/pos/rot/treatments/expr,
 # skips THREE refs), inserts after the original (top-level copies offset +14,+14 XY), selects + renders
@@ -149,7 +195,7 @@ as an editable GUI node only if its emitted OpenSCAD is in the SIMPLE set**. The
    feeds three-bvh-csg booleans. Authored from a 2D shape's panel buttons or right-click (Linear /
    Rotate extrude) — wraps the shape like grouping. Inspector: extrude params (height/twist/end-scale
    or angle°) via reused field rows + move/rotate gizmo + \"Remove extrude\"; boolean-op buttons hidden.\n   Emits parametric `linear_extrude(height,twist,scale,slices)` / `rotate_extrude(angle,$fn)` →\n   advanced (read-only on code round-trip). `rebuildField` now routes group edits through\n   rebuildScene; `placeOnFloor` uses `restingPos`. Verified: both build geometry (36v / 1728v),\n   height edit → bbox z matches, twist lofts, child editable, engine round-trips 2 nodes / 0 errors.
-5. **[ ] Slice 5 — Boolean-edge fillet/chamfer**: detect convex/concave edges on a union/difference
+5. **[x] Slice 5 — Boolean-edge fillet/chamfer** (v0.24.0, simplest useful v1): detect convex/concave edges on a union/difference
    result mesh (EdgesGeometry angle threshold → edge loops), let the user pick one and apply an
    analytic fillet/chamfer. (Hardest — robust filleting of arbitrary CSG edges; may start with the
    common case of two-primitive intersections.)
