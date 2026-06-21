@@ -1,3 +1,19 @@
+# HANDOFF — Binary STL export — ✅ SHIPPED (v0.27.0)
+# The tool could import meshes (STL/OFF/3MF/AMF) and save .scad text, but had no way to get the
+# RENDERED model out for 3D printing/slicing. New top-menu "Export STL" button (next to Save .scad)
+# downloads model.stl (binary). Editor-only.
+#   - exportMeshes(): allSolids() + traverse(_engineGroup) → every rendered solid, EXCLUDING helper
+#     overlays (ghost/hinge/face overlay live on the scene directly, not in those collections).
+#   - exportSTL(): clone each mesh geo, applyMatrix4(matrixWorld) → world tris (indexed + non-indexed),
+#     write 80-byte header + uint32 count + per-tri (computed facet normal + 3 verts + uint16 attr).
+#     Same Z-up space as OpenSCAD. Blob('model/stl') → anchor download.
+# VERIFIED via eval_js (blob captured, download stubbed): GUI cube → 12 tris, size 684 = 84+12·50,
+# round-trips through parseSTL to bbox [-20,-20,0]..[20,20,40]; GUI CSG difference(sphere,cube) →
+# 2348 tris; advanced for-loop of 4 cubes (read-only engine group) → 48 tris. All buffer sizes exact.
+# DEFERRED: ASCII STL, OBJ/3MF export, per-color export, unit/scale options (STL is unitless mm).
+#
+# ---------------------------------------------------------------------------------------------------
+#
 # HANDOFF — Slice 6: Face push/pull — ✅ SHIPPED (linear v0.25.0, revolve v0.26.0)
 # REVOLVE (v0.26.0): the push/pull tool now has a Linear | Revolve toggle (floating segmented
 # control, top-center, when the tool is active; state.ppMode). In Revolve mode, press-drag a face
