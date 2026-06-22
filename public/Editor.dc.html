@@ -44,7 +44,6 @@
 </script>
 <script src="scad-engine.js"></script>
 <script src="conformance.js"></script>
-<script src="render-tests.js"></script>
 <script src="https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js"></script>
 </helmet>
 <div style="position:fixed;inset:0;background:#15171B;color:#C7CCD4;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased;user-select:none;">
@@ -547,7 +546,6 @@
       <span style="{{ csgBadge }}">{{ csgText }}</span>
       <button onClick="{{ toggleConsole }}" title="Console" style="{{ consoleBtnStyle }}">{{ consoleBtnText }}</button>
       <button onClick="{{ runConformance }}" title="Run the language conformance harness (Phase 13)" style="{{ confBtnStyle }}">{{ confBtnText }}</button>
-      <button onClick="{{ runRenderTests }}" title="Run the render regression harness (full pipeline: mesh + bbox)" style="{{ renderBtnStyle }}">{{ renderBtnText }}</button>
       <span style="margin-left:auto;">{{ codeMeta }}</span>
     </div>
   </div>
@@ -620,64 +618,6 @@
     </div>
   </sc-if>
 
-  <sc-if value="{{ renderOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:70;width:600px;max-width:calc(100vw - 40px);max-height:calc(100vh - 80px);display:flex;flex-direction:column;background:rgba(20,22,26,.97);backdrop-filter:blur(18px);border:1px solid #2C3037;border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden;">
-      <div style="display:flex;align-items:center;gap:11px;padding:15px 17px;border-bottom:1px solid #23272E;flex:none;">
-        <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M9 1.6 15.2 5v8L9 16.4 2.8 13V5L9 1.6Z" stroke="#6FA8F5" stroke-width="1.3" stroke-linejoin="round"/><path d="M2.8 5 9 8.5 15.2 5M9 8.5v7.9" stroke="#3A4047" stroke-width="1.1" stroke-linejoin="round"/></svg>
-        <div style="display:flex;flex-direction:column;gap:1px;">
-          <span style="font-weight:600;color:#E6E9EE;font-size:13.5px;">Render regression</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6B7280;">full pipeline · mesh · triangles · bounding box</span>
-        </div>
-        <button onClick="{{ checkRenderFile }}" title="Load any .scad file and report whether it fully renders" style="margin-left:auto;background:transparent;border:1px solid #2C3037;color:#9AA3AE;font:inherit;font-size:10.5px;padding:4px 9px;border-radius:6px;cursor:pointer;" style-hover="border-color:#3B82F6;color:#C7CCD4;">Check a .scad file…</button>
-        <button onClick="{{ closeRender }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:18px;line-height:1;padding:0 2px;" style-hover="color:#C7CCD4;">×</button>
-      </div>
-
-      <sc-if value="{{ hasRenderFile }}" hint-placeholder-val="{{ false }}">
-        <div style="flex:none;padding:11px 17px;border-bottom:1px solid #23272E;background:#16191D;display:flex;align-items:center;gap:10px;">
-          <span style="{{ renderFileDot }}"></span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#C7CCD4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;">{{ renderFileName }}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A929C;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ renderFileInfo }}</span>
-        </div>
-      </sc-if>
-
-      <div style="flex:none;padding:14px 17px 13px;border-bottom:1px solid #23272E;display:flex;flex-direction:column;gap:9px;">
-        <div style="display:flex;align-items:baseline;gap:10px;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#9AA3AE;">{{ renderSummary }}</span>
-          <sc-if value="{{ renderAllPass }}" hint-placeholder-val="{{ false }}">
-            <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5E8C6A;letter-spacing:.05em;padding:1px 7px;border:1px solid #2C4035;border-radius:5px;">ALL PASS</span>
-          </sc-if>
-        </div>
-        <div style="height:6px;border-radius:3px;background:#0F1114;overflow:hidden;"><div style="{{ renderBarStyle }}"></div></div>
-      </div>
-      <div class="cad-scroll" style="flex:1;min-height:0;overflow-y:auto;padding:7px 0 11px;">
-        <sc-for list="{{ renderSections }}" as="s" hint-placeholder-count="0">
-          <div style="margin:1px 0;">
-            <div onClick="{{ s.onToggle }}" style="display:flex;align-items:center;gap:9px;padding:7px 17px;cursor:pointer;" style-hover="background:#1B1E23;">
-              <span style="color:#5B616B;font-size:10px;flex:none;width:9px;">{{ s.caret }}</span>
-              <span style="{{ s.dotStyle }}"></span>
-              <span style="flex:1;color:#C7CCD4;font-size:12.5px;">{{ s.name }}</span>
-              <span style="{{ s.ratioStyle }}">{{ s.ratio }}</span>
-            </div>
-            <sc-if value="{{ s.expanded }}" hint-placeholder-val="{{ false }}">
-              <div style="padding:2px 0 6px;">
-                <sc-for list="{{ s.cases }}" as="c" hint-placeholder-count="0">
-                  <div onClick="{{ c.onClick }}" title="Load this snippet into the editor" style="{{ c.rowStyle }}" style-hover="background:#1B1E23;">
-                    <span style="{{ c.markStyle }}">{{ c.mark }}</span>
-                    <span style="{{ c.nameStyle }}">{{ c.name }}</span>
-                    <span style="{{ c.infoStyle }}">{{ c.info }}</span>
-                  </div>
-                </sc-for>
-              </div>
-            </sc-if>
-          </div>
-        </sc-for>
-      </div>
-      <div style="flex:none;padding:9px 17px;border-top:1px solid #23272E;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;">each case is realized into meshes; pass = mesh count + bounding box within tolerance</div>
-    </div>
-  </sc-if>
-
-  <input ref="{{ setRenderFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onRenderFileChosen }}" style="display:none;" />
-
   <input ref="{{ setFileInput }}" type="file" accept=".scad,.txt" onChange="{{ onFileChosen }}" style="display:none;" />
   <input ref="{{ setImportInput }}" type="file" accept=".stl,.off,.3mf,.amf,.dat,.png,.svg,.dxf" multiple onChange="{{ onImportChosen }}" style="display:none;" />
 </div>
@@ -719,11 +659,6 @@ class Component extends DCLogic {
     confOpen: false,       // conformance harness results panel visibility
     confReport: null,      // last conformance run report
     confExpanded: {},      // { sectionName: true } expanded sections in the conformance panel
-    renderOpen: false,     // render regression harness results panel visibility
-    renderReport: null,    // last render-test run report
-    renderExpanded: {},    // { sectionName: true } expanded sections in the render panel
-    renderRunning: false,  // render battery in progress (async)
-    renderFileResult: null,// { name, meshCount, tris, bbox, warnings, err } from "check a .scad file"
   };
   _panels = {};            // live refs to draggable panel elements
 
@@ -3341,52 +3276,6 @@ class Component extends DCLogic {
     if (this._engineGroup) { this.scene.remove(this._engineGroup); this.disposeGroup(this._engineGroup); this._engineGroup = null; }
   }
 
-  // ============ RENDER REGRESSION MEASUREMENT (render-tests.js) ============
-  // Run a .scad source through the FULL render pipeline (engine -> realize -> THREE meshes) into a
-  // throwaway group, measure {meshCount, tris, world bbox}, dispose, and return the metrics. Does
-  // NOT touch editor UI state / the live scene — safe to call repeatedly from the render harness.
-  async measureRender(src, opts) {
-    opts = opts || {};
-    if (!window.ScadEngine) throw new Error('ScadEngine not loaded');
-    const res = window.ScadEngine.run(src, Object.assign({
-      $fn: this.state.fn,
-      files: this.scadFilesMap ? this.scadFilesMap() : {},
-    }, opts.engine || {}));
-    // attach 2D vector-import rings from the store (sync), if any are loaded
-    const svgs = []; this.collectSvgImportNodes(res.geom, svgs);
-    for (const n of svgs) {
-      const store = this._svg && this._svg.get((n.params.file || '').toLowerCase());
-      if (store) n.rings = store.rings;
-    }
-    // shape text() nodes (needs the font)
-    const texts = []; this.collectTextNodes(res.geom, texts);
-    if (texts.length) {
-      const font = await this.ensureFont();
-      if (font) for (const n of texts) { try { n.rings = this.textToRings(n.params, font); } catch (e) { /* leave empty */ } }
-    }
-    const grp = new this.THREE.Group();
-    let renderErr = null;
-    try {
-      const roots = (res.geom || []).filter(n => n && n.__root);
-      const nodes = roots.length ? roots : (res.geom || []);
-      for (const n of nodes) this.realizeNode(n, this.IDENTITY(), null, grp);
-    } catch (e) { renderErr = e && (e.message || String(e)); }
-    grp.updateMatrixWorld(true);
-    let meshCount = 0, tris = 0;
-    grp.traverse(o => {
-      if (o.isMesh && o.geometry) {
-        meshCount++;
-        const g = o.geometry, idx = g.index, pos = g.attributes && g.attributes.position;
-        tris += idx ? idx.count / 3 : (pos ? pos.count / 3 : 0);
-      }
-    });
-    const box = new this.THREE.Box3().setFromObject(grp);
-    this.disposeGroup(grp);
-    const bbox = box.isEmpty() ? null : { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] };
-    const errors = (res.errors || []).slice();
-    if (renderErr) errors.push({ msg: 'render: ' + renderErr });
-    return { meshCount, tris: Math.round(tris), bbox, errors, warnings: res.warnings || [], echos: res.echos || [] };
-  }
   IDENTITY() { return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]; }
   toM4(flat) { return new this.THREE.Matrix4().fromArray(flat); }
   mul(a, b) { return window.ScadEngine.Mat.multiply(a, b); }
@@ -3981,52 +3870,6 @@ class Component extends DCLogic {
     this.setState({ confOpen: false, code: src }, () => { if (this._codeArea) this._codeArea.value = src; this.runCode(); });
   };
 
-  // ============ RENDER REGRESSION HARNESS (render-tests.js) ============
-  runRenderTests = () => {
-    if (!window.ScadRenderTests) { this.flashStatus('Render harness not loaded'); return; }
-    if (this.state.renderRunning) return;
-    this.setState({ renderRunning: true, renderOpen: true });
-    this.flashStatus('Running render tests\u2026');
-    window.ScadRenderTests.run(this, { $fn: this.state.fn }).then(report => {
-      const expanded = {};
-      for (const s of report.sections) if (s.passed < s.total) expanded[s.name] = true;
-      this.setState({ renderReport: report, renderOpen: true, renderExpanded: expanded, renderRunning: false });
-      this.flashStatus('Render ' + report.passed + '/' + report.total + ' (' + report.coveragePct + '%)');
-    }).catch(e => {
-      this.setState({ renderRunning: false });
-      this.flashStatus('Render harness error: ' + (e && e.message || e));
-    });
-  };
-  closeRender = () => this.setState({ renderOpen: false });
-  toggleRenderSection = (name) => {
-    const e = Object.assign({}, this.state.renderExpanded); e[name] = !e[name];
-    this.setState({ renderExpanded: e });
-  };
-  loadRenderCase = (src) => {
-    this.setState({ renderOpen: false, code: src }, () => { if (this._codeArea) this._codeArea.value = src; this.runCode(); });
-  };
-  // "Check a .scad file" — load any OpenSCAD file and report whether/how fully it renders,
-  // without disturbing the live model.
-  checkRenderFile = () => { if (this._renderFileInput) this._renderFileInput.click(); };
-  setRenderFileInput = (el) => { this._renderFileInput = el; };
-  onRenderFileChosen = (e) => {
-    const file = e.target.files && e.target.files[0]; e.target.value = '';
-    if (!file) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      const src = String(rd.result || '');
-      this.setState({ renderOpen: true, renderFileResult: { name: file.name, pending: true } });
-      this.measureRender(src).then(m => {
-        this.setState({ renderFileResult: {
-          name: file.name, meshCount: m.meshCount, tris: m.tris, bbox: m.bbox,
-          warnings: m.warnings || [], errs: m.errors || [],
-        } });
-      }).catch(err => {
-        this.setState({ renderFileResult: { name: file.name, err: (err && err.message || String(err)) } });
-      });
-    };
-    rd.readAsText(file);
-  };
   buildNodeFromParsed(p) {
     if (p.type === 'group') {
       this.seq.group++;
@@ -5496,78 +5339,6 @@ class Component extends DCLogic {
             srcStyle: 'flex:1;min-width:0;font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;color:#5B616B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
             src: c.src,
             onClick: () => this.loadConfCase(c.src),
-          })),
-        };
-      }),
-      // ---- render regression harness ----
-      runRenderTests: this.runRenderTests,
-      closeRender: this.closeRender,
-      checkRenderFile: this.checkRenderFile,
-      setRenderFileInput: this.setRenderFileInput,
-      onRenderFileChosen: this.onRenderFileChosen,
-      renderOpen: st.renderOpen && (!!st.renderReport || !!st.renderFileResult || st.renderRunning),
-      renderBtnStyle: (() => {
-        const r = st.renderReport;
-        const col = st.renderRunning ? '#6FA8F5' : (!r ? '#5B616B' : (r.failed ? '#D8A24A' : '#5E8C6A'));
-        return `background:transparent;border:1px solid #2C3037;color:${col};font:inherit;font-size:10px;padding:2px 8px;border-radius:6px;cursor:pointer;`;
-      })(),
-      renderBtnText: (() => {
-        if (st.renderRunning) return 'rendering\u2026';
-        const r = st.renderReport; return r ? ('\u25a3 render ' + r.passed + '/' + r.total) : 'render';
-      })(),
-      renderSummary: (() => {
-        if (st.renderRunning) return 'running render battery\u2026';
-        const r = st.renderReport; if (!r) return 'press \u201crender\u201d to run the battery';
-        return r.passed + ' / ' + r.total + ' rendering \u00b7 ' + r.coveragePct + '%' + (r.failed ? ' \u00b7 ' + r.failed + ' failing' : '');
-      })(),
-      renderBarStyle: (() => {
-        const r = st.renderReport; const pct = r ? r.coveragePct : 0;
-        const col = r && r.failed ? '#D8A24A' : '#5E8C6A';
-        return `height:100%;width:${pct}%;background:${col};border-radius:3px;transition:width .3s;`;
-      })(),
-      renderAllPass: !!(st.renderReport && !st.renderReport.failed),
-      hasRenderFile: !!st.renderFileResult,
-      renderFileName: st.renderFileResult ? st.renderFileResult.name : '',
-      renderFileInfo: (() => {
-        const f = st.renderFileResult; if (!f) return '';
-        if (f.pending) return 'rendering\u2026';
-        if (f.err) return 'error: ' + f.err;
-        const fr = n => (Math.round(n * 10) / 10);
-        let s = (f.meshCount || 0) + ' mesh \u00b7 ' + (f.tris || 0) + ' tris';
-        if (f.bbox) s += ' \u00b7 [' + f.bbox.min.map(fr).join(',') + ']\u2026[' + f.bbox.max.map(fr).join(',') + ']';
-        else s += ' \u00b7 empty';
-        const issues = (f.errs && f.errs.length ? f.errs.length + ' err' : '') + (f.warnings && f.warnings.length ? (f.errs && f.errs.length ? ', ' : '') + f.warnings.length + ' warn' : '');
-        if (issues) s += ' \u00b7 ' + issues;
-        return s;
-      })(),
-      renderFileDot: (() => {
-        const f = st.renderFileResult;
-        let col = '#5E8C6A';
-        if (!f || f.pending) col = '#6FA8F5';
-        else if (f.err || (f.errs && f.errs.length) || !f.meshCount) col = '#E0736B';
-        else if (f.warnings && f.warnings.length) col = '#D8A24A';
-        return `width:8px;height:8px;border-radius:50%;flex:none;background:${col};box-shadow:0 0 7px ${col}aa;`;
-      })(),
-      renderSections: (st.renderReport ? st.renderReport.sections : []).map(s => {
-        const exp = !!st.renderExpanded[s.name];
-        const allOk = s.passed === s.total;
-        return {
-          name: s.name,
-          ratio: s.passed + '/' + s.total,
-          ratioStyle: 'font-family:\'IBM Plex Mono\',monospace;font-size:11px;flex:none;color:' + (allOk ? '#5E8C6A' : '#D8A24A') + ';',
-          dotStyle: 'width:7px;height:7px;border-radius:50%;flex:none;background:' + (allOk ? '#5E8C6A' : '#D8A24A') + ';box-shadow:0 0 7px ' + (allOk ? 'rgba(94,140,106,.7)' : 'rgba(216,162,74,.7)') + ';',
-          caret: exp ? '\u25be' : '\u25b8',
-          onToggle: () => this.toggleRenderSection(s.name),
-          expanded: exp,
-          cases: s.cases.map(c => ({
-            name: c.name,
-            mark: c.ok ? '\u2713' : '\u2715',
-            markStyle: 'flex:none;width:14px;text-align:center;color:' + (c.ok ? '#5E8C6A' : '#E0736B') + ';font-size:11px;',
-            rowStyle: 'display:flex;align-items:baseline;gap:8px;padding:3px 12px 3px 26px;cursor:pointer;border-radius:5px;',
-            nameStyle: 'flex:none;color:' + (c.ok ? '#9AA3AE' : '#E2B9B5') + ';font-size:11.5px;',
-            infoStyle: 'flex:1;min-width:0;font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;color:' + (c.ok ? '#5B616B' : '#C9923B') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
-            info: c.info,
-            onClick: () => this.loadRenderCase(c.src),
           })),
         };
       }),
