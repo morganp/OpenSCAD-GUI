@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.33.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.34.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1636,18 +1636,68 @@ class Component extends DCLogic {
     this.setState({ code: next }, () => this.runCode());
     this.flashStatus('Revolved ' + F(angle) + '\u00b0 \u2014 read-only');
   }
-  // emit the picked face as a polygon on its plane, extruded |dist| along the (maybe flipped) normal
+  // emit the picked face as a 2D profile on its plane, extruded |dist| along the (maybe flipped) normal.
+  // Circular boundary rings (cylinder/tube faces, and circular holes) are recognised and emitted as
+  // analytic circle()s so the re-extrude is smooth (honours $fn) instead of a jaggy traced polygon.
   buildPrismScad(face, dist, inward) {
     const F = (n) => this.fmt(n);
     const m = this.frameMat(face, inward).elements;
     const rows = [0, 1, 2, 3].map(r => '[' + [m[r], m[r + 4], m[r + 8], m[r + 12]].map(F).join(', ') + ']');
-    let pts = [], paths = [], k = 0;
-    for (const ring of face.rings2D) {
-      const idxs = [];
-      for (const p of ring) { pts.push('[' + F(p[0]) + ', ' + F(p[1]) + ']'); idxs.push(k++); }
-      paths.push('[' + idxs.join(', ') + ']');
+    const body = this.faceProfileScad(face.rings2D);
+    return `multmatrix([${rows.join(', ')}])\n  linear_extrude(height = ${F(Math.abs(dist))})\n  ${body}`;
+  }
+  // Fit a ring of [x,y] points to a circle. Returns {cx,cy,r} when the ring is a near-perfect
+  // circle (small radial deviation, enough points to span a full turn), else null. Marching-squares
+  // tracing of a true circle deviates <1% radially; a real low-poly polygon (hex/oct) deviates >6%
+  // and stays a polygon, so genuine faceted shapes are preserved.
+  fitCircleRing(ring) {
+    if (!ring || ring.length < 12) return null;
+    let cx = 0, cy = 0;
+    for (const [x, y] of ring) { cx += x; cy += y; }
+    cx /= ring.length; cy /= ring.length;
+    let sum = 0;
+    const rs = ring.map(([x, y]) => { const d = Math.hypot(x - cx, y - cy); sum += d; return d; });
+    const r = sum / rs.length;
+    if (r < 1e-3) return null;
+    let maxDev = 0;
+    for (const ri of rs) { const d = Math.abs(ri - r); if (d > maxDev) maxDev = d; }
+    if (maxDev / r > 0.06) return null;
+    return { cx, cy, r };
+  }
+  // Build the 2D child statement for a linear_extrude from traced boundary rings.
+  // If any ring is circular, emit analytic circle()s (outer minus circular/polygonal holes via
+  // difference); otherwise keep the original single polygon-with-paths emit (exact for polygons).
+  faceProfileScad(rings2D) {
+    const F = (n) => this.fmt(n);
+    const fn = this.gfn();
+    const fits = rings2D.map(r => this.fitCircleRing(r));
+    if (!fits.some(Boolean)) {
+      let pts = [], paths = [], k = 0;
+      for (const ring of rings2D) {
+        const idxs = [];
+        for (const p of ring) { pts.push('[' + F(p[0]) + ', ' + F(p[1]) + ']'); idxs.push(k++); }
+        paths.push('[' + idxs.join(', ') + ']');
+      }
+      return `polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
     }
-    return `multmatrix([${rows.join(', ')}])\n  linear_extrude(height = ${F(Math.abs(dist))})\n  polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
+    const sArea = (r) => { let A = 0; for (let i = 0; i < r.length; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % r.length]; A += x1 * y2 - x2 * y1; } return A / 2; };
+    let oi = 0, oa = 0;
+    rings2D.forEach((r, i) => { const a = Math.abs(sArea(r)); if (a > oa) { oa = a; oi = i; } });
+    const ringExpr = (ring, fit) => {
+      if (fit) {
+        const t = (Math.abs(fit.cx) > 1e-4 || Math.abs(fit.cy) > 1e-4) ? `translate([${F(fit.cx)}, ${F(fit.cy)}]) ` : '';
+        return `${t}circle(r = ${F(fit.r)}, $fn = ${fn})`;
+      }
+      const pts = ring.map(p => `[${F(p[0])}, ${F(p[1])}]`).join(', ');
+      return `polygon(points = [${pts}])`;
+    };
+    const outer = ringExpr(rings2D[oi], fits[oi]);
+    const holes = rings2D.map((r, i) => ({ r, f: fits[i], i })).filter(o => o.i !== oi);
+    if (!holes.length) return outer + ';';
+    let b = 'difference() {\n    ' + outer + ';';
+    for (const h of holes) b += '\n    ' + ringExpr(h.r, h.f) + ';';
+    b += '\n  }';
+    return b;
   }
   applyPushPull(face, dist) {
     const inward = dist < 0;
