@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.31.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.32.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -436,9 +436,18 @@
         </div>
       </sc-for>
       <sc-if value="{{ readOnlyTree }}" hint-placeholder-val="{{ false }}">
-        <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;align-items:center;gap:7px;">
-          <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Top-level items can be deleted; advanced features can't be gizmo-edited.</span>
-          <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
+        <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;flex-direction:column;gap:7px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Select a top-level item to move / rotate / scale it as a group, or delete it. Individual generated instances can't be edited.</span>
+            <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
+          </div>
+          <sc-if value="{{ roXformOn }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
+              <button onClick="{{ setGizmoMove }}" style="{{ roMoveTab }}">Move</button>
+              <button onClick="{{ setGizmoRotate }}" style="{{ roRotateTab }}">Rotate</button>
+              <button onClick="{{ setGizmoScale }}" style="{{ roScaleTab }}">Scale</button>
+            </div>
+          </sc-if>
         </div>
       </sc-if>
       <sc-if value="{{ hasMultiSel }}" hint-placeholder-val="{{ false }}">
@@ -2065,6 +2074,21 @@ class Component extends DCLogic {
   }
   updateGizmo() {
     if (!this.tc) return;
+    // read-only (evaluated) view: gizmo drives the whole top-level sub-group as a group transform
+    if (this.state.readOnly) {
+      const id = this.state.selectedShapeId;
+      const row = id ? this.findTreeRow(this.state.tree, id) : null;
+      const g = (row && row.root && row.srcLines && this._roGroups) ? this._roGroups[row.topIndex] : null;
+      if (g) {
+        g.position.set(0, 0, 0); g.rotation.set(0, 0, 0, 'ZYX'); g.scale.set(1, 1, 1); g.updateMatrix();
+        this._roGizmoRow = row;
+        this._applyGizmoMode(g, true);
+      } else {
+        this._roGizmoRow = null;
+        this.tc.detach(); this.tc.visible = false;
+      }
+      return;
+    }
     const id = this.state.selectedShapeId;
     const n = (!this.state.selectedEdge && id) ? this.findNode(id) : null;
     if (n && this.isGroup(n) && this.isTopLevel(id) && n.group) {
@@ -2086,6 +2110,7 @@ class Component extends DCLogic {
     }
   }
   onGizmoChange() {
+    if (this.state.readOnly) return;       // read-only group transform applies on drag end only
     const node = this.findNode(this.state.selectedShapeId); const obj = this.gizmoObject();
     if (!node || !obj) return;
     const mode = this.state.gizmoMode;
@@ -2119,6 +2144,7 @@ class Component extends DCLogic {
     this.syncVarsState(); this.regenCode(); this.forceUpdate();
   }
   onGizmoEnd() {
+    if (this.state.readOnly) { this.applyReadOnlyGizmo(); return; }
     const s = this.findNode(this.state.selectedShapeId); const obj = this.gizmoObject();
     if (!s) return;
     this._gizmoEnding = true;
@@ -2756,6 +2782,7 @@ class Component extends DCLogic {
     start = Math.max(1, start); end = Math.min(lines.length, end);
     // also swallow a trailing comment line we emit above push/pull statements
     if (start >= 2 && /^\s*\/\/\s*push\/pull/.test(lines[start - 2] || '')) start -= 1;
+    if (start >= 2 && /@scs-xform/.test(lines[start - 2] || '')) start -= 1;
     const kept = lines.filter((_, i) => (i + 1) < start || (i + 1) > end);
     let next = kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
     if (!next.trim()) next = '// (empty)\n';
@@ -2763,6 +2790,62 @@ class Component extends DCLogic {
     this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null, code: next }, () => this.runCode());
     this.flashStatus('Deleted \u201c' + (row.label || 'item') + '\u201d');
   };
+
+  // ===== Read-only GROUP TRANSFORM =====
+  // In the evaluated view, the gizmo drives a top-level item's sub-group as a whole. On release we
+  // read its local matrix (= the applied transform in SCAD space, since the engine group is identity)
+  // and wrap that statement's source lines in a single multmatrix(), composing with any prior wrap.
+  applyReadOnlyGizmo = () => {
+    const row = this._roGizmoRow; const g = this.gizmoObject();
+    if (!row || !g) return;
+    g.updateMatrix();
+    const delta = g.matrix.clone();
+    const e = delta.elements, I = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+    let same = true; for (let i = 0; i < 16; i++) if (Math.abs(e[i] - I[i]) > 1e-6) { same = false; break; }
+    if (same) return;                       // nothing moved
+    this.applyReadOnlyTransform(row, delta);
+  };
+  // THREE.Matrix4 (column-major elements) -> OpenSCAD row-major nested-array literal
+  m4ToScad(m) {
+    const e = m.elements, n = (v) => { let s = (+v).toFixed(6); s = s.replace(/\.?0+$/, ''); return s === '-0' ? '0' : s; };
+    const row = (i) => '[' + [e[i], e[i + 4], e[i + 8], e[i + 12]].map(n).join(',') + ']';
+    return '[' + [row(0), row(1), row(2), row(3)].join(',') + ']';
+  }
+  // parse a `multmatrix([[...],...])` line back to a THREE.Matrix4 (16 row-major numbers expected)
+  parseScsMultmatrix(line) {
+    const nums = (line.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || []).map(Number);
+    if (nums.length < 16) return null;
+    const r = nums.slice(0, 16);
+    return new this.THREE.Matrix4().set(
+      r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
+      r[8], r[9], r[10], r[11], r[12], r[13], r[14], r[15]
+    );
+  }
+  applyReadOnlyTransform(row, deltaM4) {
+    const src = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const lines = src.split('\n');
+    let { start, end } = row.srcLines;       // 1-based inclusive
+    start = Math.max(1, start); end = Math.min(lines.length, end);
+    const markerIdx = start - 2;             // 0-based line just above the statement
+    const hasWrap = markerIdx >= 0 && /@scs-xform/.test(lines[markerIdx] || '') && /multmatrix\s*\(/.test(lines[start - 1] || '');
+    let M = deltaM4.clone(), body, repStart, repEnd;
+    if (hasWrap) {
+      const old = this.parseScsMultmatrix(lines[start - 1]);
+      if (old) M = deltaM4.clone().multiply(old);       // M_new = delta . M_old
+      body = lines.slice(start, end - 1).map(l => l.replace(/^  /, ''));  // dedent the prior wrap's body
+      repStart = markerIdx; repEnd = end - 1;            // replace marker..closing-brace
+    } else {
+      body = lines.slice(start - 1, end);
+      repStart = start - 1; repEnd = end - 1;
+    }
+    const indented = body.map(l => (l.trim() ? '  ' + l : l));
+    const block = ['// @scs-xform', 'multmatrix(' + this.m4ToScad(M) + ') {', ...indented, '}'];
+    const next = lines.slice(0, repStart).concat(block, lines.slice(repEnd + 1)).join('\n');
+    this._roReselectTop = row.topIndex;       // keep the gizmo on this item after re-run
+    if (this._codeArea) this._codeArea.value = next;
+    this.setState({ code: next }, () => this.runCode());
+    this.flashStatus('Transformed \u201c' + (row.label || 'item') + '\u201d');
+  }
 
   // ============ BOOLEAN GROUPS ============
   sameParent(ids) {
@@ -3346,7 +3429,16 @@ class Component extends DCLogic {
     const roots = (res.geom || []).filter(n => n && n.__root); // '!' modifier: render only those subtrees
     const nodes = roots.length ? roots : (res.geom || []);
     const grp = new this.THREE.Group();
-    try { for (const n of nodes) this.realizeNode(n, this.IDENTITY(), null, grp); }
+    this._roGroups = {};   // topIndex -> sub-group, so a top-level item can be gizmo-transformed as a whole
+    try {
+      nodes.forEach((n, i) => {
+        const sub = new this.THREE.Group();
+        sub.userData = { roTopIndex: i };
+        this.realizeNode(n, this.IDENTITY(), null, sub);
+        grp.add(sub);
+        this._roGroups[i] = sub;
+      });
+    }
     catch (e) { res.errors = res.errors.concat([{ msg: 'render: ' + (e.message || e) }]); }
     this._engineGroup = grp; this.scene.add(grp);
     // console
@@ -3361,6 +3453,13 @@ class Component extends DCLogic {
       tree: (roots.length ? roots : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0, true)).filter(Boolean),
       consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
       errorLines,
+    }, () => {
+      // keep the gizmo on the item after a read-only transform re-run
+      if (this._roReselectTop != null) {
+        const ti = this._roReselectTop; this._roReselectTop = null;
+        const row = (this.state.tree || []).find(r => r && r.root && r.topIndex === ti);
+        if (row) this.setState({ selectedShapeId: row.id, selectedIds: [row.id] }, () => this.updateGizmo());
+      }
     });
     this.flashStatus(meshCount ? ('Rendered ' + meshCount + ' object' + (meshCount !== 1 ? 's' : '') + ' \u2014 read-only') : (res.errors.length ? 'Render error \u2014 see console' : 'Nothing to render'));
     // camera write-back: script-assigned $vp* drives the view
@@ -5114,7 +5213,7 @@ class Component extends DCLogic {
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
           : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
         rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
-        onSelect: (e) => { if (st.readOnly) { if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }); return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
+        onSelect: (e) => { if (st.readOnly) { if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }, () => this.updateGizmo()); return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
         onCtx: (e) => { if (st.readOnly) { e.preventDefault(); if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }); return; } this.openCtx(r.id, e); },
         draggable: !st.readOnly,
         onDragStart: (e) => this.onTreeDragStart(r.id, e),
@@ -5376,6 +5475,10 @@ class Component extends DCLogic {
       treeRows,
       isEmpty: treeRows.length === 0,
       readOnlyTree: st.readOnly,
+      roXformOn: st.readOnly && !!(st.selectedShapeId && this.findTreeRow(st.tree, st.selectedShapeId) && this.findTreeRow(st.tree, st.selectedShapeId).root),
+      roMoveTab: this.tab(st.gizmoMode === 'translate'),
+      roRotateTab: this.tab(st.gizmoMode === 'rotate'),
+      roScaleTab: this.tab(st.gizmoMode === 'scale'),
       exitReadOnly: this.exitReadOnly,
       shapeCount: this.shapes.length,
       hasMultiSel: !st.readOnly && selIds.length >= 2,

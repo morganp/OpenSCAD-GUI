@@ -1,4 +1,43 @@
 # ===================================================================================================
+# HANDOFF — Group transform on evaluated (read-only) subtrees — IN PROGRESS (target v0.32.0)
+# ===================================================================================================
+# FEATURE (restated): in the read-only evaluated view, a user can SELECT a top-level item and
+# MOVE / ROTATE / SCALE it as a whole group, even though it came from a for-loop / module / etc.
+# The whole evaluated subtree moves together (no per-instance edit — that would need rewriting the
+# generator). Edits round-trip to source: the statement's lines get wrapped in a single
+# `multmatrix(...)` whose matrix accumulates across repeated drags (no nested-wrapper stacking).
+#
+# WHY THIS IS TRACTABLE (and per-instance isn't): wrapping ONE statement in a transform maps cleanly
+# to wrapping its source lines. Editing one generated instance has no source location to write to.
+#
+# FOUNDATION REUSED: the B2 read-only-delete path already stamps every top-level geom node with a
+# source line span (engine `__src` → tree `row.srcLines = {start,end}`, 1-based inclusive) and
+# splices source + re-runs. This feature reuses srcLines for the wrap, and the existing transform
+# gizmo (this.tc) for the drag.
+#
+# BUILD ORDER (all Editor.dc.html):
+#  1. [x] finishAdvanced: render each TOP-LEVEL evaluated node into its OWN sub-group (was one flat
+#         grp). Tag each sub `userData.roTopIndex`; stash in `this._roGroups[topIndex]`. Indices align
+#         with the tree rows' `topIndex`.
+#  2. [x] updateGizmo: read-only branch — when the selected row is a top-level row with srcLines and
+#         a matching sub-group, reset that group to identity and attach the move/rotate/scale gizmo to
+#         it (`this._roGizmoRow`). Otherwise detach.
+#  3. [x] onGizmoChange/onGizmoEnd: short-circuit in read-only. End → `applyReadOnlyGizmo()`: read the
+#         sub-group's local matrix (= delta in SCAD space, since the engine group is identity); if not
+#         identity, `applyReadOnlyTransform(row, deltaM4)`.
+#  4. [x] applyReadOnlyTransform: find row.srcLines; if those lines are already an `@scs-xform`
+#         `multmatrix([...]) { }` wrapper, parse M_old and emit M_new = delta · M_old replacing it;
+#         else wrap the body in `// @scs-xform\nmultmatrix(M_delta) {\n  <body>\n}`. Set code + re-run.
+#         Reselect the same topIndex after the run so the gizmo stays on the item.
+#  5. [x] Matrix helpers: m4ToScad (column-major THREE elements → OpenSCAD row-major nested array,
+#         trimmed) + parseScsMultmatrix (regex 16 nums → THREE.Matrix4). multmatrix order: M_new =
+#         delta.multiply(M_old).
+#  6. [x] Copy: read-only badge + tree hint updated to say top-level items can be moved/rotated/scaled.
+#  7. [ ] Verify via eval_js: for-loop of cubes → select top row → translate → source gains one
+#         multmatrix wrapper, renders moved, bbox shifts; drag again → SAME wrapper, matrix composed
+#         (no nesting); rotate + scale compose too; delete still works on the wrapped row.
+# ===================================================================================================
+#
 # BACKLOG — Extrude bugs + UX (filed 2026-06-22, not yet scheduled)
 # ===================================================================================================
 # Extrude correctness
