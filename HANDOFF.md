@@ -1,4 +1,33 @@
 # ===================================================================================================
+# BACKLOG — Smooth circular extrudes + model-tree unions (filed 2026-06-24)
+# ===================================================================================================
+# Item 1 — Smooth push/pull of circular faces  ✅ SHIPPED v0.34.0–v0.35.0
+#   Push/pulling a cylinder/tube face used to dump the marching-squares-traced boundary as a raw
+#   polygon → faceted, jaggy re-extrude. Now `faceProfileScad` classifies each boundary ring:
+#     • full circle (fitCircleRing, strict <6% radial dev)  → analytic circle(r,$fn)
+#     • circle bitten by an overlapping object (fitCircleArc, RANSAC over circumcircles + algebraic
+#       refine on inliers) → intersection(){ circle; polygon(bite) } — circular vertices pushed to
+#       1.25·r so the arc stays smooth, bite vertices kept exact. Bails if any vertex protrudes
+#       beyond the circle (added material) or the circular arc spans <180°.
+#     • holes → concentric circle()s subtracted via difference(); else exact polygon-with-paths.
+#   Emitted via a small profile node tree + renderProfile2D (handles nested-block indentation).
+#
+# Item 2 — Model-tree unions for advanced/evaluated shapes  [ ] FUTURE (not started)
+#   Today "Group as Union/Difference/Intersection" only works on simple GUI authoring nodes. When the
+#   scene is read-only (advanced evaluated tree) you can't select arbitrary evaluated rows and union
+#   them. Goal: allow creating a union (and other booleans) from ANY selection — GUI prims, evaluated
+#   subtrees, mixes — by wrapping the selected statements' source-line spans (reuse the `__src` /
+#   row.srcLines splice machinery already used by read-only delete + group-transform) in a
+#   `union() { … }` block and re-running.
+#
+# Item 3 — Nestable unions  [ ] FUTURE (not started)
+#   Unions (and booleans generally) must nest arbitrarily — a union containing a difference containing
+#   a union, etc. The authoring tree already nests groups; the gap is the read-only/advanced path and
+#   making the source-wrap composition (Item 2) recursive so wrapping an already-wrapped selection
+#   produces clean nested blocks rather than flattening or stacking redundant wrappers.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — Group transform on evaluated (read-only) subtrees — IN PROGRESS (target v0.32.0)
 # ===================================================================================================
 # FEATURE (restated): in the read-only evaluated view, a user can SELECT a top-level item and

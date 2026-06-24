@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.34.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.35.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1643,10 +1643,10 @@ class Component extends DCLogic {
     const F = (n) => this.fmt(n);
     const m = this.frameMat(face, inward).elements;
     const rows = [0, 1, 2, 3].map(r => '[' + [m[r], m[r + 4], m[r + 8], m[r + 12]].map(F).join(', ') + ']');
-    const body = this.faceProfileScad(face.rings2D);
+    const body = this.faceProfileScad(face.rings2D).replace(/\n/g, '\n  ');
     return `multmatrix([${rows.join(', ')}])\n  linear_extrude(height = ${F(Math.abs(dist))})\n  ${body}`;
   }
-  // Fit a ring of [x,y] points to a circle. Returns {cx,cy,r} when the ring is a near-perfect
+  // Fit a ring of [x,y] points to a circle. Returns {cx,cy,r} when the WHOLE ring is a near-perfect
   // circle (small radial deviation, enough points to span a full turn), else null. Marching-squares
   // tracing of a true circle deviates <1% radially; a real low-poly polygon (hex/oct) deviates >6%
   // and stays a polygon, so genuine faceted shapes are preserved.
@@ -1664,40 +1664,120 @@ class Component extends DCLogic {
     if (maxDev / r > 0.06) return null;
     return { cx, cy, r };
   }
+  solve3(A, b) { // Gaussian elimination for a 3x3 system A x = b; null if singular
+    const M = [[...A[0], b[0]], [...A[1], b[1]], [...A[2], b[2]]];
+    for (let i = 0; i < 3; i++) {
+      let p = i; for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
+      if (Math.abs(M[p][i]) < 1e-12) return null;
+      [M[i], M[p]] = [M[p], M[i]];
+      for (let r = 0; r < 3; r++) { if (r === i) continue; const f = M[r][i] / M[i][i]; for (let c = i; c < 4; c++) M[r][c] -= f * M[i][c]; }
+    }
+    return [M[0][3] / M[0][0], M[1][3] / M[1][1], M[2][3] / M[2][2]];
+  }
+  // Robustly fit a circle to a ring that may only be PARTLY circular — i.e. a cylinder face that an
+  // overlapping object has bitten into. RANSAC over circumcircles of random vertex triplets finds the
+  // dominant circle despite the non-circular bite points; it's then refined (algebraic least-squares)
+  // on its inliers. Returns {cx,cy,r,flags} only when a big circular arc remains AND nothing protrudes
+  // beyond the circle (added material → not a clipped circle, bail).
+  fitCircleArc(ring) {
+    if (!ring || ring.length < 16) return null;
+    const n = ring.length;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const [x, y] of ring) { if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    const diag = Math.hypot(maxx - minx, maxy - miny) || 1;
+    const circ3 = (a, b, c) => {
+      const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+      if (Math.abs(d) < 1e-9) return null;
+      const a2 = a[0] * a[0] + a[1] * a[1], b2 = b[0] * b[0] + b[1] * b[1], c2 = c[0] * c[0] + c[1] * c[1];
+      const ux = (a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d;
+      const uy = (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d;
+      return { cx: ux, cy: uy, r: Math.hypot(a[0] - ux, a[1] - uy) };
+    };
+    const countInliers = (c) => { const tol = Math.max(c.r * 0.02, 0.05); let k = 0; for (const [x, y] of ring) if (Math.abs(Math.hypot(x - c.cx, y - c.cy) - c.r) < tol) k++; return k; };
+    let best = null, bestK = 0;
+    for (let it = 0; it < 120; it++) {
+      const i = (Math.random() * n) | 0, j = (Math.random() * n) | 0, k = (Math.random() * n) | 0;
+      if (i === j || j === k || i === k) continue;
+      const c = circ3(ring[i], ring[j], ring[k]);
+      if (!c || c.r < diag * 0.1 || c.r > diag * 3) continue;
+      const ki = countInliers(c);
+      if (ki > bestK) { bestK = ki; best = c; }
+    }
+    if (!best || bestK / n < 0.4) return null;
+    // algebraic least-squares refine on the inliers of the best RANSAC circle
+    let tol = Math.max(best.r * 0.02, 0.05);
+    const inPts = ring.filter(([x, y]) => Math.abs(Math.hypot(x - best.cx, y - best.cy) - best.r) < tol);
+    let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, sz = 0, m = inPts.length;
+    for (const [x, y] of inPts) { const z = x * x + y * y; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z; sz += z; }
+    const sol = this.solve3([[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, m]], [-sxz, -syz, -sz]);
+    let cx = best.cx, cy = best.cy, R = best.r;
+    if (sol) { const ncx = -sol[0] / 2, ncy = -sol[1] / 2, nR = Math.sqrt(Math.max(0, ncx * ncx + ncy * ncy - sol[2])); if (isFinite(nR) && nR > 1e-3) { cx = ncx; cy = ncy; R = nR; } }
+    tol = Math.max(R * 0.02, 0.05);
+    let inl = 0, outside = 0; const angs = [];
+    const flags = ring.map(([x, y]) => {
+      const d = Math.hypot(x - cx, y - cy), on = Math.abs(d - R) < tol;
+      if (on) { inl++; angs.push(Math.atan2(y - cy, x - cx)); } else if (d > R + tol) outside++;
+      return on;
+    });
+    if (outside > Math.max(2, n * 0.02)) return null;   // material added beyond the circle → not a clipped circle
+    if (inl / n < 0.4) return null;                      // too little of the boundary is circular
+    angs.sort((a, b) => a - b);
+    let gap = 0;
+    for (let i = 0; i < angs.length; i++) { const a = angs[i], b = (i + 1 < angs.length ? angs[i + 1] : angs[0] + 2 * Math.PI); gap = Math.max(gap, b - a); }
+    if (2 * Math.PI - gap < Math.PI) return null;         // circular part spans < 180° → likely just a gentle curve
+    return { cx, cy, r: R, flags };
+  }
+  // Render a small 2D-profile node tree to a linear_extrude child statement (handles nesting indent).
+  // node: {t:'circle',c,r} | {t:'polygon',pts} | {t:'difference'|'intersection',children:[…]}
+  renderProfile2D(node, ind) {
+    const F = (n) => this.fmt(n), fn = this.gfn();
+    if (node.t === 'circle') {
+      const t = (Math.abs(node.c[0]) > 1e-4 || Math.abs(node.c[1]) > 1e-4) ? `translate([${F(node.c[0])}, ${F(node.c[1])}]) ` : '';
+      return `${ind}${t}circle(r = ${F(node.r)}, $fn = ${fn});`;
+    }
+    if (node.t === 'polygon') return `${ind}polygon(points = [${node.pts.map(p => `[${F(p[0])}, ${F(p[1])}]`).join(', ')}]);`;
+    const kids = node.children.map(c => this.renderProfile2D(c, ind + '  ')).join('\n');
+    return `${ind}${node.t}() {\n${kids}\n${ind}}`;
+  }
+  // Turn one boundary ring into a profile node: full circle, clipped circle (circle ∩ bitten polygon),
+  // or plain polygon. `allowArc` enables the clipped-circle reconstruction (outer ring only).
+  ringToProfileNode(ring, allowArc) {
+    const full = this.fitCircleRing(ring);
+    if (full) return { t: 'circle', c: [full.cx, full.cy], r: full.r };
+    if (allowArc) {
+      const arc = this.fitCircleArc(ring);
+      if (arc) {
+        // keep the bitten (non-circular) vertices in place; push circular vertices well outside the
+        // circle so intersecting with the true circle restores a smooth arc there but preserves the bites.
+        const pts = ring.map(([x, y], i) => {
+          if (!arc.flags[i]) return [x, y];
+          const a = Math.atan2(y - arc.cy, x - arc.cx);
+          return [arc.cx + arc.r * 1.25 * Math.cos(a), arc.cy + arc.r * 1.25 * Math.sin(a)];
+        });
+        return { t: 'intersection', children: [{ t: 'circle', c: [arc.cx, arc.cy], r: arc.r }, { t: 'polygon', pts }] };
+      }
+    }
+    return { t: 'polygon', pts: ring };
+  }
   // Build the 2D child statement for a linear_extrude from traced boundary rings.
-  // If any ring is circular, emit analytic circle()s (outer minus circular/polygonal holes via
-  // difference); otherwise keep the original single polygon-with-paths emit (exact for polygons).
+  // Circular rings → analytic circle()s; a circle bitten by an overlapping object → circle ∩ profile;
+  // holes subtract via difference(); purely polygonal faces keep the exact single polygon-with-paths emit.
   faceProfileScad(rings2D) {
     const F = (n) => this.fmt(n);
-    const fn = this.gfn();
-    const fits = rings2D.map(r => this.fitCircleRing(r));
-    if (!fits.some(Boolean)) {
-      let pts = [], paths = [], k = 0;
-      for (const ring of rings2D) {
-        const idxs = [];
-        for (const p of ring) { pts.push('[' + F(p[0]) + ', ' + F(p[1]) + ']'); idxs.push(k++); }
-        paths.push('[' + idxs.join(', ') + ']');
-      }
-      return `polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
-    }
     const sArea = (r) => { let A = 0; for (let i = 0; i < r.length; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % r.length]; A += x1 * y2 - x2 * y1; } return A / 2; };
     let oi = 0, oa = 0;
     rings2D.forEach((r, i) => { const a = Math.abs(sArea(r)); if (a > oa) { oa = a; oi = i; } });
-    const ringExpr = (ring, fit) => {
-      if (fit) {
-        const t = (Math.abs(fit.cx) > 1e-4 || Math.abs(fit.cy) > 1e-4) ? `translate([${F(fit.cx)}, ${F(fit.cy)}]) ` : '';
-        return `${t}circle(r = ${F(fit.r)}, $fn = ${fn})`;
-      }
-      const pts = ring.map(p => `[${F(p[0])}, ${F(p[1])}]`).join(', ');
-      return `polygon(points = [${pts}])`;
-    };
-    const outer = ringExpr(rings2D[oi], fits[oi]);
-    const holes = rings2D.map((r, i) => ({ r, f: fits[i], i })).filter(o => o.i !== oi);
-    if (!holes.length) return outer + ';';
-    let b = 'difference() {\n    ' + outer + ';';
-    for (const h of holes) b += '\n    ' + ringExpr(h.r, h.f) + ';';
-    b += '\n  }';
-    return b;
+    const outerNode = this.ringToProfileNode(rings2D[oi], true);
+    const holeNodes = rings2D.map((r, i) => ({ r, i })).filter(o => o.i !== oi).map(o => this.ringToProfileNode(o.r, false));
+    // No analytic circle anywhere → keep the exact single polygon-with-paths emit (holes via even-odd paths).
+    const anyCircle = outerNode.t !== 'polygon' || holeNodes.some(h => h.t !== 'polygon');
+    if (!anyCircle) {
+      let pts = [], paths = [], k = 0;
+      for (const ring of rings2D) { const idxs = []; for (const p of ring) { pts.push('[' + F(p[0]) + ', ' + F(p[1]) + ']'); idxs.push(k++); } paths.push('[' + idxs.join(', ') + ']'); }
+      return `polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
+    }
+    const tree = holeNodes.length ? { t: 'difference', children: [outerNode, ...holeNodes] } : outerNode;
+    return this.renderProfile2D(tree, '');
   }
   applyPushPull(face, dist) {
     const inward = dist < 0;
