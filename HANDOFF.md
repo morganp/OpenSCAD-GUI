@@ -33,7 +33,7 @@
 #         trimmed) + parseScsMultmatrix (regex 16 nums → THREE.Matrix4). multmatrix order: M_new =
 #         delta.multiply(M_old).
 #  6. [x] Copy: read-only badge + tree hint updated to say top-level items can be moved/rotated/scaled.
-#  7. [ ] Verify via eval_js: for-loop of cubes → select top row → translate → source gains one
+#  7. [x] Verify via eval_js: for-loop of cubes → select top row → translate → source gains one
 #         multmatrix wrapper, renders moved, bbox shifts; drag again → SAME wrapper, matrix composed
 #         (no nesting); rotate + scale compose too; delete still works on the wrapped row.
 # ===================================================================================================
@@ -41,9 +41,14 @@
 # BACKLOG — Extrude bugs + UX (filed 2026-06-22, not yet scheduled)
 # ===================================================================================================
 # Extrude correctness
-#   [ ] B1. Geometry BELOW the z=0 plane is not extruded. Extrude appears to ignore/clip anything with
-#           negative Z (or the 2D source below the plane). Audit collect2D / the extrude push-down so
-#           profiles at any Z are extruded, not just z>=0.
+#   [x] B1. RESOLVED v0.32.1. The literal report ("geometry below z=0 not extruded") no longer
+#           reproduces — the engine's collect2D `apply2` uses only x,y of each matrix, so a 2D profile
+#           at ANY z extrudes correctly (verified: translate z=-10/-50, center=true, negative height,
+#           rotate below plane, rotate_extrude profiles spanning negative Z — all render with correct
+#           bboxes). The one real adjacent bug found + fixed: the viewport-only z=0.3 resting lift on
+#           authored 2D shapes (so the flat sheet doesn't z-fight the floor) was being BAKED INTO the
+#           generated OpenSCAD as `translate([0,0,0.3])`. emitPrimitive now zeroes the emitted z for
+#           circle/square/polygon (unless a pz expr is bound) — 2D geometry lives at z=0 in code.
 #   [~] B2. Once an extrusion has happened, objects are NO LONGER DELETABLE.
 #           PARTIAL FIX v0.31.0: read-only (evaluated) view now supports deleting any TOP-LEVEL item —
 #           click its Model-Tree row (or select it) and hit delete/trash; the engine stamps each

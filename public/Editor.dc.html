@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.32.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.32.1</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -3145,7 +3145,11 @@ class Component extends DCLogic {
     const F = (n) => this.fmt(n);
     const pad = this.ind(level);
     const treats = Object.entries(s.treatments || {});
-    const pos = `[${this.posTok(s, 'px')}, ${this.posTok(s, 'py')}, ${this.posTok(s, 'pz')}]`;
+    const is2D = s.type === 'circle' || s.type === 'square' || s.type === 'polygon';
+    // 2D shapes carry a small viewport-only z lift (restingPos 0.3) to avoid z-fighting the floor;
+    // never emit it — OpenSCAD 2D geometry lives at z=0 and extrudes ignore the source z anyway.
+    const pzTok = is2D && !(s.expr && s.expr.pz) ? '0' : this.posTok(s, 'pz');
+    const pos = `[${this.posTok(s, 'px')}, ${this.posTok(s, 'py')}, ${pzTok}]`;
     out.push(pad + '// ' + s.label);
     if (s.type === 'cylinder' && treats.length) {
       out.push(pad + '// rims: ' + treats.map(([k, t]) => k.toLowerCase() + ' ' + t.type + ' r=' + F(t.size)).join(', '));
