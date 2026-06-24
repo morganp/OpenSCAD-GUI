@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.32.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.33.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -3042,6 +3042,96 @@ class Component extends DCLogic {
   }
 
   regenCode() {
+    const code = this._programText();
+    const full = code + '\n' + this.treeMarker() + '\n';
+    this.setState({ code: full, dirty: false });
+    if (this._codeArea && document.activeElement !== this._codeArea) this._codeArea.value = full;
+  }
+
+  // ---- authoring-tree snapshot embedded in the saved .scad as a trailing comment.
+  // It lets the GUI reconstruct the EXACT authoring tree on reopen, so the Model Tree is
+  // identical whether you built the model in the GUI or loaded a .scad the GUI wrote. The
+  // snapshot is validated against the code body on load — if you hand-edit the OpenSCAD the
+  // stale snapshot is ignored and the normal parser/evaluator takes over.
+  MARKER = '// @scs-tree ';
+  treeMarker() { return this.MARKER + this.serializeTree(); }
+  serializeTree() {
+    const clean = (n) => {
+      if (this.isGroup(n)) {
+        const o = { op: n.op, label: n.label };
+        if (n.dims) o.dims = n.dims;
+        if (n.pos && (n.pos[0] || n.pos[1] || n.pos[2])) o.pos = n.pos;
+        if (n.rot && (n.rot[0] || n.rot[1] || n.rot[2])) o.rot = n.rot;
+        if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) o.edgeTreatments = n.edgeTreatments;
+        o.children = (n.children || []).map(clean);
+        return o;
+      }
+      const o = { type: n.type, label: n.label, dims: n.dims, pos: n.pos };
+      if (n.rot) o.rot = n.rot;
+      if (n.expr && Object.keys(n.expr).length) o.expr = n.expr;
+      if (n.treatments && Object.keys(n.treatments).length) o.treatments = n.treatments;
+      return o;
+    };
+    return JSON.stringify({ v: 1, fn: this.state.fn, vars: this.vars.map(v => ({ name: v.name, value: v.value })), tree: this.tree.map(clean) });
+  }
+  readTreeSnapshot(txt) {
+    const re = /(^|\n)\/\/ @scs-tree (.+?)[ \t]*$/m;
+    const m = re.exec(txt || ''); if (!m) return null;
+    try { const o = JSON.parse(m[2]); if (o && Array.isArray(o.tree)) return o; } catch (_) {}
+    return null;
+  }
+  stripSnapshot(txt) { return (txt || '').replace(/\n*[ \t]*\/\/ @scs-tree .*$/m, '').replace(/\s+$/, ''); }
+  snapToNodes(arr) { return (arr || []).map(n => this.snapNode(n)); }
+  snapNode(n) {
+    const rid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    if (n.op && Array.isArray(n.children)) {
+      const o = { id: rid('gp'), op: n.op, label: n.label, children: this.snapToNodes(n.children) };
+      if (n.dims) o.dims = JSON.parse(JSON.stringify(n.dims));
+      if (n.pos) o.pos = [...n.pos];
+      if (n.rot) o.rot = [...n.rot];
+      if (n.edgeTreatments) o.edgeTreatments = JSON.parse(JSON.stringify(n.edgeTreatments));
+      return o;
+    }
+    const o = {
+      id: rid(n.type || 'nd'), type: n.type, label: n.label,
+      dims: JSON.parse(JSON.stringify(n.dims || {})),
+      pos: n.pos ? [...n.pos] : this.restingPos(n),
+      treatments: n.treatments ? JSON.parse(JSON.stringify(n.treatments)) : {},
+    };
+    if (n.rot) o.rot = [...n.rot];
+    if (n.expr && Object.keys(n.expr).length) o.expr = JSON.parse(JSON.stringify(n.expr));
+    return o;
+  }
+  // Reconstruct the authoring tree from a snapshot iff it faithfully reproduces the code body.
+  hydrateFromSnapshot(snap, txt) {
+    const prevFn = this.state.fn, prevTree = this.tree, prevVars = this.vars;
+    const fn = (snap.fn != null ? snap.fn : prevFn);
+    const tree = this.snapToNodes(snap.tree);
+    const vars = (snap.vars || []).map(v => ({ name: v.name, value: v.value }));
+    this.state.fn = fn; this.tree = tree; this.vars = vars; this.reindex();
+    const expected = this._programText().replace(/\s+$/, '');
+    const bare = this.stripSnapshot(txt);
+    if (expected !== bare) {                 // stale / hand-edited code -> let the normal path handle it
+      this.state.fn = prevFn; this.tree = prevTree; this.vars = prevVars; this.reindex();
+      return false;
+    }
+    this.clearEngineRender();
+    for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
+    this._rendered = [];
+    this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
+    const vmap = this.varMap();
+    for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
+    this.clampAllTreatments();
+    this.clearEdge();
+    this.setState({ fn, selectedShapeId: null, selectedIds: [], readOnly: false, errorLines: [] }, () => {
+      this.rebuildScene(); this.updateGizmo();
+      this.syncVarsState(); this.syncShapesState(); this.regenCode();
+    });
+    this.flashStatus('Model rebuilt from code');
+    return true;
+  }
+
+  _programText() {
     const F = (n) => this.fmt(n);
     let out = [];
     out.push('// Generated by SCAD Studio');
@@ -3070,9 +3160,7 @@ class Component extends DCLogic {
       out.push('');
     }
     for (const node of this.tree) { this.emitNode(node, 0, out); out.push(''); }
-    const code = out.join('\n');
-    this.setState({ code, dirty: false });
-    if (this._codeArea && document.activeElement !== this._codeArea) this._codeArea.value = code;
+    return out.join('\n');
   }
 
   ind(level) { return '  '.repeat(level); }
@@ -3231,6 +3319,10 @@ class Component extends DCLogic {
   // ============ CODE -> MODEL (base solids; tolerant of our own format) ============
   runCode = () => {
     const txt = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    // --- faithful round-trip: if the file carries a valid authoring-tree snapshot that still
+    // matches the code, rebuild the GUI tree from it so the Model Tree is identical to the GUI ---
+    const snap = this.readTreeSnapshot(txt);
+    if (snap && this.hydrateFromSnapshot(snap, txt)) return;
     // --- decide: simple GUI-editable program, or advanced -> evaluate & render read-only ---
     let advanced = false, ast = null;
     if (window.ScadEngine) {
