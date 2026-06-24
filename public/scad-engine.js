@@ -274,8 +274,9 @@
     function parseProgram() {
       const stmts = [];
       while (!at('eof')) {
+        const startLine = peek().line;
         const s = parseStatement();
-        if (s) stmts.push(s);
+        if (s) { s.span = { start: startLine, end: (toks[p-1] ? toks[p-1].line : startLine) }; s.top = true; stmts.push(s); }
       }
       return { stmts };
     }
@@ -468,7 +469,13 @@
     const out = [];
     for (const s of stmts) {
       const g = execStmt(s, scope, ctx, childGeom);
-      if (g) { if (Array.isArray(g)) out.push(...g); else out.push(g); }
+      if (g) {
+        const arr = Array.isArray(g) ? g : [g];
+        // top-level statements carry a source span; stamp it onto their geom so the
+        // read-only Model Tree can map a row back to its lines and delete it.
+        if (s.span) arr.forEach(n => { if (n && !n.__src) n.__src = s.span; });
+        out.push(...arr);
+      }
     }
     return out;
   }

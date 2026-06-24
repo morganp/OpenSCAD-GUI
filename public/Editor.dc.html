@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.28.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.31.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -437,7 +437,7 @@
       </sc-for>
       <sc-if value="{{ readOnlyTree }}" hint-placeholder-val="{{ false }}">
         <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;align-items:center;gap:7px;">
-          <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Advanced features can't be gizmo-edited.</span>
+          <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Top-level items can be deleted; advanced features can't be gizmo-edited.</span>
           <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
         </div>
       </sc-if>
@@ -509,6 +509,25 @@
       <span style="width:8px;height:8px;border-radius:50%;background:#E0A33B;box-shadow:0 0 8px #E0A33B;flex:none;"></span>
       <span style="font-size:11.5px;color:#E7C98A;">read-only — evaluated from code</span>
       <button onClick="{{ exitReadOnly }}" style="background:transparent;border:none;color:#9C8550;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#E7C98A;">×</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ ppHudOn }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ ppHudStyle }}">
+      <div style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#7FB2F0;margin-bottom:5px;">{{ ppHudLabel }}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input ref="{{ ppInputRef }}" value="{{ ppHudValue }}" onInput="{{ onPpInput }}" onKeyDown="{{ onPpKey }}" onFocus="{{ onPpFocus }}" readOnly="{{ ppHudReadOnly }}" inputmode="decimal" spellcheck="false" style="{{ ppHudInputStyle }}" />
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#9AA3AE;flex:none;">{{ ppHudUnit }}</span>
+        <sc-if value="{{ ppShowConfirm }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ ppCommit }}" title="Apply (Enter)" style="flex:none;width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:#1C7A4A;border:1px solid #25965C;border-radius:7px;color:#D7F5E4;cursor:pointer;" style-hover="background:#22935A;">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button onClick="{{ ppCancel }}" title="Cancel (Esc)" style="flex:none;width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:#23272E;border:1px solid #3A2626;border-radius:7px;color:#C99;cursor:pointer;" style-hover="background:#3A2626;color:#E0736B;">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </sc-if>
+      </div>
+      <div style="font-size:10px;color:#5F6670;margin-top:6px;">{{ ppHudHint }}</div>
     </div>
   </sc-if>
 
@@ -653,6 +672,8 @@ class Component extends DCLogic {
     ctxMenu: null,         // { x, y, id } right-click menu in the tree
     panelPos: {},          // { shape|group|params|edge: {left, top} } dragged panel positions
     readOnly: false,       // true when an advanced program is rendered from the SCAD evaluator
+    ppPending: null,       // { mode:'linear'|'revolve', value } — deferred extrude awaiting confirm/edit
+    ppHudPos: null,        // { x, y } screen anchor for the live extrude dimension box
     consoleOpen: false,    // console panel visibility
     consoleLog: [],        // [{type:'echo'|'warn'|'error', msg, line}]
     errorLines: [],        // 1-based source lines the last run reported an error on (gutter markers)
@@ -1440,6 +1461,7 @@ class Component extends DCLogic {
   }
   // abort an in-progress push/pull drag without applying (Escape)
   cancelPushPull() {
+    if (this._ppPend) { this.ppCancel(); return; }
     if (this.pp) { try { this.renderer.domElement.releasePointerCapture(this._ppPointerId); } catch (_) {} }
     this.pp = null;
     if (this.controls) this.controls.enabled = true;
@@ -1447,49 +1469,91 @@ class Component extends DCLogic {
     if (this.state.ppDragging) { this.setState({ ppDragging: false }); this.flashStatus('Push/pull cancelled'); }
   }
   startPushPull(face, e) {
+    if (this._ppPend) { this._ppPend = null; this.clearPPGhost(); this.clearHinge(); this.setState({ ppPending: null }); }
+    if (e) this._ppScreen = { x: e.clientX, y: e.clientY };
+    const hudPos = this._ppScreen || null;
     if (this.state.ppMode === 'revolve') {
       const rev = this.buildRevolveData(face, face.hit);
       this.pp = { face, rev, mode: 'revolve', startX: e ? e.clientX : 0, angle: 0 };
       if (this.controls) this.controls.enabled = false;
       this.clearPPHover();
       if (rev) this.showHinge(rev);
-      this.setState({ ppDragging: true, ppAngle: 0 });
+      this.setState({ ppDragging: true, ppAngle: 0, ppPending: null, ppHudPos: hudPos });
       return;
     }
     this.pp = { face, mode: 'linear', t0: this.ppDistance(face), dist: 0 };
     if (this.controls) this.controls.enabled = false;
     this.clearPPHover();
-    this.setState({ ppDragging: true, ppDist: 0 });
+    this.setState({ ppDragging: true, ppDist: 0, ppPending: null, ppHudPos: hudPos });
   }
   movePushPull(e) {
     if (!this.pp) return;
+    if (e) this._ppScreen = { x: e.clientX, y: e.clientY };
     if (this.pp.mode === 'revolve') {
       if (!this.pp.rev) return;
       let angle = Math.max(-360, Math.min(360, Math.round((e.clientX - this.pp.startX) * 0.6 * 10) / 10));
       this.pp.angle = angle;
       this.updateRevolveGhost(this.pp.rev, angle);
-      this.setState({ ppAngle: angle });
+      this.setState({ ppAngle: angle, ppHudPos: this._ppScreen });
       return;
     }
     let dist = Math.round((this.ppDistance(this.pp.face) - this.pp.t0) * 10) / 10;
     this.pp.dist = dist;
     this.updatePPGhost(this.pp.face, dist);
-    this.setState({ ppDist: dist });
+    this.setState({ ppDist: dist, ppHudPos: this._ppScreen });
   }
   endPushPull() {
     const pp = this.pp; this.pp = null;
     if (this.controls) this.controls.enabled = true;
-    this.clearPPGhost(); this.clearHinge();
     this.setState({ ppDragging: false });
-    if (!pp) return;
+    if (!pp) { this.clearPPGhost(); this.clearHinge(); return; }
+    // Don't commit yet — hand off to a live, editable dimension box; the ghost preview stays up.
     if (pp.mode === 'revolve') {
-      if (pp.rev && Math.abs(pp.angle) >= 1) this.applyRevolve(pp.rev, Math.abs(pp.angle));
-      else this.flashStatus('Revolve cancelled');
+      if (pp.rev && Math.abs(pp.angle) >= 1) this.enterPending({ mode: 'revolve', rev: pp.rev, angle: Math.abs(pp.angle) });
+      else { this.clearPPGhost(); this.clearHinge(); this.flashStatus('Revolve cancelled'); }
       return;
     }
-    if (Math.abs(pp.dist) >= 0.1) this.applyPushPull(pp.face, pp.dist);
-    else this.flashStatus('Push/pull cancelled');
+    if (Math.abs(pp.dist) >= 0.1) this.enterPending({ mode: 'linear', face: pp.face, dist: pp.dist });
+    else { this.clearPPGhost(); this.flashStatus('Push/pull cancelled'); }
   }
+  // ---- deferred extrude: editable dimension box that live-drives the ghost before committing ----
+  enterPending(d) {
+    this._ppPend = d;
+    if (d.mode === 'linear') this.updatePPGhost(d.face, d.dist);
+    else this.updateRevolveGhost(d.rev, d.angle);
+    const val = d.mode === 'linear' ? d.dist : d.angle;
+    this.setState({ ppPending: { mode: d.mode, value: this.fmt(val) }, ppHudPos: this._ppScreen || null }, () => {
+      setTimeout(() => { if (this._ppInput) { this._ppInput.focus(); this._ppInput.select(); } }, 0);
+    });
+  }
+  onPpFocus = (e) => { try { e.target.select(); } catch (_) {} };
+  onPpInput = (e) => {
+    const d = this._ppPend; if (!d) return;
+    const raw = e.target.value;
+    let v = parseFloat(raw);
+    if (isNaN(v)) v = 0;
+    if (d.mode === 'revolve') { v = Math.max(-360, Math.min(360, v)); d.angle = v; this.updateRevolveGhost(d.rev, Math.abs(v)); }
+    else { d.dist = v; this.updatePPGhost(d.face, v); }
+    this.setState({ ppPending: { ...this.state.ppPending, value: raw } });
+  };
+  onPpKey = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); this.ppCommit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); this.ppCancel(); }
+  };
+  ppCommit = () => {
+    const d = this._ppPend; if (!d) { this.setState({ ppPending: null }); return; }
+    this._ppPend = null;
+    this.clearPPGhost(); this.clearHinge();
+    this.setState({ ppPending: null });
+    if (d.mode === 'revolve') { if (Math.abs(d.angle) >= 1) this.applyRevolve(d.rev, Math.abs(d.angle)); else this.flashStatus('Revolve cancelled'); }
+    else { if (Math.abs(d.dist) >= 0.1) this.applyPushPull(d.face, d.dist); else this.flashStatus('Push/pull cancelled'); }
+  };
+  ppCancel = () => {
+    this._ppPend = null;
+    this.clearPPGhost(); this.clearHinge();
+    this.setState({ ppPending: null });
+    this.flashStatus('Extrude cancelled');
+  };
 
   // ---- rotational push/pull: revolve a face about one of its boundary edges ----
   _ptSegDist(px, py, ax, ay, bx, by) {
@@ -2650,6 +2714,7 @@ class Component extends DCLogic {
     this.syncShapesState();
   }
   deleteShapeById = (id) => {
+    if (this.state.readOnly) { this.deleteReadOnlyRow(id); return; }
     const node = this.findNode(id); if (!node) return;
     const arr = this.parentArrayOf(id); if (!arr) return;
     const idx = arr.indexOf(node); if (idx < 0) return;
@@ -2665,7 +2730,39 @@ class Component extends DCLogic {
       ctxMenu: null,
     }, () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
   };
-  deleteSelected = () => { if (this.state.selectedShapeId) this.deleteShapeById(this.state.selectedShapeId); };
+  deleteSelected = () => {
+    if (this.state.readOnly) {
+      const id = this.state.selectedShapeId;
+      const row = id ? this.findTreeRow(this.state.tree, id) : null;
+      if (row && row.root) this.deleteReadOnlyRow(id);
+      else this.flashStatus('Only top-level items can be deleted in read-only view');
+      return;
+    }
+    if (this.state.selectedShapeId) this.deleteShapeById(this.state.selectedShapeId);
+  };
+  findTreeRow(rows, id) {
+    for (const r of (rows || [])) { if (r.id === id) return r; const f = this.findTreeRow(r.children, id); if (f) return f; }
+    return null;
+  }
+  // Read-only delete: a top-level evaluated row maps to a source line span (engine-stamped
+  // __src). Remove those lines from the code and re-run — keeps advanced programs editable
+  // enough to undo a stray extrude/primitive without leaving read-only mode.
+  deleteReadOnlyRow = (id) => {
+    const row = this.findTreeRow(this.state.tree, id);
+    if (!row || !row.root || !row.srcLines) { this.flashStatus('Can\u2019t delete this item \u2014 not a top-level statement'); return; }
+    const src = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const lines = src.split('\n');
+    let { start, end } = row.srcLines; // 1-based inclusive
+    start = Math.max(1, start); end = Math.min(lines.length, end);
+    // also swallow a trailing comment line we emit above push/pull statements
+    if (start >= 2 && /^\s*\/\/\s*push\/pull/.test(lines[start - 2] || '')) start -= 1;
+    const kept = lines.filter((_, i) => (i + 1) < start || (i + 1) > end);
+    let next = kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
+    if (!next.trim()) next = '// (empty)\n';
+    if (this._codeArea) this._codeArea.value = next;
+    this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null, code: next }, () => this.runCode());
+    this.flashStatus('Deleted \u201c' + (row.label || 'item') + '\u201d');
+  };
 
   // ============ BOOLEAN GROUPS ============
   sameParent(ids) {
@@ -3261,7 +3358,7 @@ class Component extends DCLogic {
     const meshCount = (() => { let c = 0; grp.traverse(o => { if (o.isMesh) c++; }); return c; })();
     this.setState({
       readOnly: true, selectedShapeId: null, selectedIds: [], code: txt,
-      tree: (roots.length ? roots : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0)),
+      tree: (roots.length ? roots : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0, true)).filter(Boolean),
       consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
       errorLines,
     });
@@ -3819,14 +3916,24 @@ class Component extends DCLogic {
     return out.length >= 3 ? out : pts;
   }
 
-  // read-only model-tree serialization from the evaluated geom
-  serializeGeom(node, idx, depth) {
+  // read-only model-tree serialization from the evaluated geom.
+  // Top-level rows pass `root: true` so they can be deleted (splice the matching top-level
+  // statement out of the source) even though there's no authoring node.
+  serializeGeom(node, idx, depth, root) {
+    const raw = this.serializeGeomRaw(node, idx, depth);
+    const row = this.collapseGeomRow(raw, depth);
+    if (row && root) { row.root = true; row.topIndex = idx; row.srcLines = node && node.__src ? node.__src : null; }
+    return row;
+  }
+  serializeGeomRaw(node, idx, depth) {
     if (!node) return null;
     const id = 'g' + depth + '_' + idx;
     if (node.kind === 'extrude' || node.kind === 'offset2d' || node.kind === 'projection' || node.kind === 'resize') {
-      const kids = (node.children || []).map((c, i) => this.serializeGeom(c, i, depth + 1)).filter(Boolean);
+      const kids = (node.children || []).map((c, i) => this.collapseGeomRow(this.serializeGeomRaw(c, i, depth + 1), depth + 1)).filter(Boolean);
       const label = node.kind === 'extrude' ? (node.mode === 'rotate' ? 'Rotate extrude' : 'Linear extrude') : node.kind === 'offset2d' ? 'Offset' : node.kind === 'resize' ? 'Resize' : 'Projection';
-      return { id, kind: 'group', op: 'group', label, depth, count: kids.length, children: kids, readOnly: true };
+      let meta = '';
+      if (node.kind === 'extrude') { const ep = node.params || {}; meta = node.mode === 'rotate' ? (this.fmt(ep.angle != null ? ep.angle : 360) + '\u00b0') : ('h' + this.fmt(ep.height != null ? ep.height : 0)); }
+      return { id, kind: 'extrude', op: 'group', label, meta, depth, count: kids.length, children: kids, readOnly: true };
     }
     if (node.kind === 'import') {
       return { id, kind: 'prim', type: 'cuboid', label: node.params.file || 'import', depth, meta: 'mesh', treated: 0, readOnly: true };
@@ -3836,13 +3943,45 @@ class Component extends DCLogic {
     }
     if (node.kind === 'op' || node.kind === 'group') {
       const op = node.kind === 'op' ? node.op : 'group';
-      const kids = (node.children || []).map((c, i) => this.serializeGeom(c, i, depth + 1)).filter(Boolean);
-      return { id, kind: 'group', op, label: op === 'group' ? 'Group' : (op[0].toUpperCase() + op.slice(1)), depth, count: kids.length, children: kids, readOnly: true };
+      const kids = (node.children || []).map((c, i) => this.collapseGeomRow(this.serializeGeomRaw(c, i, depth + 1), depth + 1)).filter(Boolean);
+      const isColor = node.kind === 'group' && !!node.color;
+      const label = op === 'group' ? (isColor ? 'Color' : 'Group') : (op[0].toUpperCase() + op.slice(1));
+      return { id, kind: 'group', op, structural: op === 'group' && !isColor, label, depth, count: kids.length, children: kids, readOnly: true };
     }
     const typeMap = { cube: 'cuboid', sphere: 'sphere', cylinder: 'cylinder', polyhedron: 'cylinder' };
     const p = node.params || {};
     const meta = node.type === 'cube' ? 'cube' : node.type === 'sphere' ? ('\u2300' + this.fmt((p.r||0)*2)) : node.type === 'cylinder' ? ('h' + this.fmt(p.h||0)) : 'polyhedron';
     return { id, kind: 'prim', type: typeMap[node.type] || 'cuboid', label: node.type, depth, meta, treated: 0, readOnly: true };
+  }
+  // Flatten noise the evaluator introduces (multmatrix wrappers, single-child structural groups,
+  // extrude-of-one-2D-leaf) so the read-only Model Tree reads as one row per real thing.
+  collapseGeomRow(row, depth) {
+    if (!row) return null;
+    // 1. a purely structural group (no color, no boolean op) that has a single child collapses
+    //    into that child — drops anonymous multmatrix / wrap groups.
+    while (row && row.kind === 'group' && row.structural && row.children && row.children.length === 1) {
+      const child = row.children[0];
+      this.reDepth(child, depth);
+      row = child;
+    }
+    // 2. an empty structural group is noise — drop it.
+    if (row && row.kind === 'group' && row.structural && (!row.children || row.children.length === 0)) return null;
+    // 3. an extrude/offset/resize/projection whose children are all leaves (or a single child)
+    //    folds into ONE leaf row — "Linear extrude" with the profile shown as meta, no nesting.
+    if (row && row.kind === 'extrude') {
+      const kids = row.children || [];
+      const allLeaf = kids.length <= 1 || kids.every(k => k.kind === 'prim');
+      if (allLeaf) {
+        const profile = kids.length === 1 ? kids[0].label : (kids.length ? kids.length + ' shapes' : '2D');
+        const meta = (row.meta ? row.meta + ' \u00b7 ' : '') + profile;
+        return { id: row.id, kind: 'prim', type: 'cuboid', label: row.label, depth, meta, treated: 0, readOnly: true };
+      }
+    }
+    return row;
+  }
+  reDepth(row, depth) {
+    if (!row) return; row.depth = depth;
+    for (const c of (row.children || [])) this.reDepth(c, depth + 1);
   }
   exitReadOnly = () => {
     this.clearEngineRender();
@@ -4878,10 +5017,10 @@ class Component extends DCLogic {
   }
 
   // ============ TOOLS / UI ============
-  pickSelect = () => this.setState({ tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); });
-  pickMove = () => this.setState({ gizmoMode: 'translate', tool: 'select' }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.updateGizmo(); });
-  pickPush = () => { this.clearEdge(); this.selectShape(null); this.setState({ tool: 'pushpull' }); };
-  setPPMode = (m) => this.setState({ ppMode: m }, () => { this.clearPPGhost(); this.clearHinge(); });
+  pickSelect = () => { this._ppPend = null; this.setState({ tool: 'select', ppPending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); }); };
+  pickMove = () => { this._ppPend = null; this.setState({ gizmoMode: 'translate', tool: 'select', ppPending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.updateGizmo(); }); };
+  pickPush = () => { this._ppPend = null; this.clearEdge(); this.selectShape(null); this.setState({ tool: 'pushpull', ppPending: null }); };
+  setPPMode = (m) => { this._ppPend = null; this.setState({ ppMode: m, ppPending: null }, () => { this.clearPPGhost(); this.clearHinge(); }); };
   toggleDrawer = () => this.setState({ drawerOpen: !this.state.drawerOpen });
 
   // ---- global $fn picker (status bar) ----
@@ -4924,6 +5063,33 @@ class Component extends DCLogic {
   renderVals() {
     const st = this.state;
     const sel = st.selectedEdge;
+    // ---- live extrude dimension box (push/pull HUD) ----
+    const pend = st.ppPending;
+    const ppHudOn = !!(st.ppDragging || pend);
+    let ppHudValue = '', ppHudUnit = 'mm', ppHudLabel = '', ppHudHint = '';
+    const ppHudReadOnly = !pend;
+    if (pend) {
+      ppHudUnit = pend.mode === 'revolve' ? '\u00b0' : 'mm';
+      ppHudValue = String(pend.value);
+      ppHudLabel = pend.mode === 'revolve' ? 'Revolve angle' : ((parseFloat(pend.value) || 0) < 0 ? 'Cut depth' : 'Pull height');
+      ppHudHint = 'Type a value · Enter to apply · Esc to cancel';
+    } else if (st.ppDragging) {
+      if (st.ppMode === 'revolve') { ppHudUnit = '\u00b0'; ppHudValue = this.fmt(Math.abs(st.ppAngle || 0)); ppHudLabel = 'Revolve angle'; }
+      else { ppHudUnit = 'mm'; ppHudValue = this.fmt(st.ppDist || 0); ppHudLabel = ((st.ppDist || 0) < 0 ? 'Cut depth' : 'Pull height'); }
+      ppHudHint = 'Release to edit the exact value';
+    }
+    const vw = (typeof window !== 'undefined' ? window.innerWidth : 1280);
+    const vh = (typeof window !== 'undefined' ? window.innerHeight : 800);
+    const anchor = st.ppHudPos || { x: vw / 2, y: vh / 2 };
+    const hudLeft = Math.min(Math.max(10, anchor.x + 16), vw - 250);
+    const hudTop = Math.min(Math.max(10, anchor.y - 54), vh - 96);
+    const ppHudStyle = 'position:fixed;left:' + hudLeft + 'px;top:' + hudTop + 'px;z-index:60;'
+      + 'background:rgba(20,26,36,.94);backdrop-filter:blur(14px);border:1px solid #2E5C92;border-radius:11px;'
+      + 'padding:11px 13px;box-shadow:0 10px 30px rgba(0,0,0,.5);min-width:182px;pointer-events:auto;';
+    const ppHudInputStyle = 'flex:1;min-width:0;width:84px;background:#0F1114;border:1px solid '
+      + (pend ? '#3A6FB0' : '#2C3037') + ';border-radius:7px;color:#E6E9EE;'
+      + "font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;padding:6px 9px;outline:none;"
+      + (pend ? '' : 'cursor:default;');
     // ---- flatten the nested tree into rows (respecting expand/collapse) ----
     const expanded = st.expanded || {};
     const selIds = st.selectedIds || [];
@@ -4948,15 +5114,15 @@ class Component extends DCLogic {
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
           : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
         rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
-        onSelect: (e) => { if (st.readOnly) return; this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
-        onCtx: (e) => { if (st.readOnly) { e.preventDefault(); return; } this.openCtx(r.id, e); },
+        onSelect: (e) => { if (st.readOnly) { if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }); return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
+        onCtx: (e) => { if (st.readOnly) { e.preventDefault(); if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }); return; } this.openCtx(r.id, e); },
         draggable: !st.readOnly,
         onDragStart: (e) => this.onTreeDragStart(r.id, e),
         onDragOver: (e) => this.onTreeDragOver(r.id, e),
         onDrop: (e) => this.onTreeDrop(r.id, e),
         onDragEnd: this.onTreeDragEnd,
         onDelete: (e) => { e.stopPropagation(); this.deleteShapeById(r.id); },
-        showDelete: !st.readOnly,
+        showDelete: !st.readOnly || !!r.root,
         hasOrder: ord >= 0,
         order: ord >= 0 ? String(ord + 1) : '',
         orderStyle: `display:flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:5px;background:${ord === 0 ? '#2563EB' : '#2C4D78'};color:#DCE8FB;font-family:'IBM Plex Mono',monospace;font-size:10px;flex:none;`,
@@ -5237,6 +5403,11 @@ class Component extends DCLogic {
       })),
 
       drawerStyle, drawerTab,
+      ppHudOn, ppHudStyle, ppHudValue, ppHudUnit, ppHudLabel, ppHudHint,
+      ppHudReadOnly, ppHudInputStyle, ppShowConfirm: !!pend,
+      ppInputRef: (el) => { this._ppInput = el; },
+      onPpInput: this.onPpInput, onPpKey: this.onPpKey, onPpFocus: this.onPpFocus,
+      ppCommit: this.ppCommit, ppCancel: this.ppCancel,
       toggleDrawer: this.toggleDrawer,
       code: st.code,
       onCodeChange: this.onCodeChange,

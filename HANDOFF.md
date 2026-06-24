@@ -1,3 +1,32 @@
+# ===================================================================================================
+# BACKLOG — Extrude bugs + UX (filed 2026-06-22, not yet scheduled)
+# ===================================================================================================
+# Extrude correctness
+#   [ ] B1. Geometry BELOW the z=0 plane is not extruded. Extrude appears to ignore/clip anything with
+#           negative Z (or the 2D source below the plane). Audit collect2D / the extrude push-down so
+#           profiles at any Z are extruded, not just z>=0.
+#   [~] B2. Once an extrusion has happened, objects are NO LONGER DELETABLE.
+#           PARTIAL FIX v0.31.0: read-only (evaluated) view now supports deleting any TOP-LEVEL item —
+#           click its Model-Tree row (or select it) and hit delete/trash; the engine stamps each
+#           top-level geom node with its source line span (__src) and the editor splices those lines out
+#           and re-runs. Deleting back down to a simple program drops you back into the GUI authoring tree.
+#           STILL TODO: delete of NESTED items inside a boolean/extrude (needs sub-statement provenance).
+# Model-tree cleanliness
+#   [x] B3. Extruding made the Model Tree messy with nested groups. FIXED v0.31.0: serializeGeom now runs
+#           a collapse pass — anonymous single-child structural (multmatrix/wrap) groups collapse into
+#           their child, empty groups drop, and an extrude/offset/resize/projection over a single 2D leaf
+#           folds into ONE leaf row ("Linear extrude  h5 · circle"). One row per real thing.
+# Live dimension editing
+#   [x] B4. linear_extrude: show an EDITABLE dimension box (height) that live-updates as you drag the
+#           extrude, and lets you type an exact value to drive it.  — SHIPPED v0.30.0 (push/pull HUD,
+#           deferred commit: drag previews → release shows editable mm box → type+Enter/✓ applies, Esc/✕ cancels).
+#   [x] B5. rotate_extrude: same, but an EDITABLE degrees box that live-updates while dragging and is
+#           typeable.  — SHIPPED v0.30.0 (same HUD, ° unit, revolve mode).
+# Touch / iPad
+#   [ ] B6. Investigate a touch UX for devices with no native right-click (iPad): replace right-click
+#           context menus / right-drag gestures with long-press, on-screen buttons, or a tool palette.
+# ===================================================================================================
+#
 # HANDOFF — Render regression harness (dev collateral) + `!` modifier fix — ✅ SHIPPED (v0.28.0)
 #
 # The render battery is DEV COLLATERAL — it lives in `tests/` (NOT `public/`) and is not loaded by
