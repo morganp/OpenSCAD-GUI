@@ -1,16 +1,57 @@
 # ===================================================================================================
+# HANDOFF — Model-tree booleans on evaluated (read-only) shapes — IN PROGRESS (target v0.36.0)
+#   (Backlog Items 2 + 3, filed 2026-06-24; tackled 2026-06-25)
+# ===================================================================================================
+# FEATURE (restated): in the read-only/advanced evaluated view, let the user SELECT 2+ arbitrary
+# top-level evaluated rows (GUI prims, evaluated subtrees, mixes) and combine them into a
+# union()/difference()/intersection()/hull() — by wrapping the selected statements' SOURCE-LINE
+# spans in a block and re-running. Item 3 (nestable) falls out for free: a combined block is one
+# top-level call statement, so its __src spans the whole block and re-selecting it + combining again
+# wraps it in a clean OUTER block (nested, not flattened).
+#
+# WHY TRACTABLE: same source-splice machinery as read-only delete (row.srcLines {start,end}, 1-based
+# inclusive) + read-only group-transform (multmatrix wrap). We extract each selected row's line span,
+# remove them, and re-emit them inside one `op() { … }` block at the topmost span's position.
+#
+# ORDER: difference uses SELECTION order (first selected = base); union/intersection/hull use source
+# order. Reordering pure geometry statements is safe (defs/vars stay in place).
+#
+# BUILD ORDER (all Editor.dc.html):
+#  1. [x] Multi-select in read-only: onSelect read-only branch honors meta/ctrl/shift to toggle a root
+#         row (with srcLines) into selectedIds; plain click = single. onCtx keeps an existing multi-sel.
+#  2. [x] updateGizmo: read-only branch detaches the gizmo when selIds.length >= 2 (combine mode).
+#  3. [x] groupReadOnlySelection(op): collect selected root rows' srcLines (absorb preceding
+#         //push/pull + @scs-xform marker lines like delete does), bail on overlap, extract bodies,
+#         remove all spans, insert one `op(){ <indented bodies> }` block at the topmost span start,
+#         re-run. _roReselectTop set so the new combined item re-selects after the run.
+#  4. [x] Read-only combine UI: a panel (reuse comboBtn grid) shown when ≥2 root rows selected, +
+#         context-menu items "Group as Union/Difference/Intersection/Hull". canCombineReadOnly().
+#  5. [x] Copy: read-only badge / tree hint mention multi-select + combine.
+#  6. [x] Verified via eval_js: 2 cubes + linear_extrude → multi-select 2 cubes → Group as Union →
+#         `union(){ cube; translate cube }` wrapping both, renders, still read-only; Difference uses
+#         base-first (selecting cube then sphere → `difference(){ cube; sphere }`); re-select the union
+#         row + extrude → Difference → NESTED `difference(){ union(){…}; linear_extrude… }` (Item 3, not
+#         flattened); delete on the combined Union row removes the whole block. Also fixed a latent bug:
+#         hasShapePanel now gated on !readOnly (selecting a row in read-only no longer pops an empty
+#         shape inspector). SHIPPED v0.36.0.
+#
+# BACKLOG (filed 2026-06-25) — linear_extrude results get NO edge detection for fillet/chamfer.
+#   Slice-5 boolean-edge fillet/chamfer + the primitive edge tools don't enumerate the edges of a
+#   linear_extrude'd solid, so you can't round/chamfer the top rim or side edges of an extruded
+#   profile. Likely: extrude solids aren't fed through detectGroupEdges / don't expose pickable edge
+#   proxies. Investigate edgeProxy generation for isExtrude nodes + read-only evaluated extrude meshes.
+# ===================================================================================================
+
+# ===================================================================================================
 # BACKLOG — Smooth circular extrudes + model-tree unions (filed 2026-06-24)
 # ===================================================================================================
-# Item 1 — Smooth push/pull of circular faces  ✅ SHIPPED v0.34.0–v0.35.0
+# Item 1 — Smooth push/pull of circular faces  ✅ SHIPPED v0.34.0–v0.35.1
 #   Push/pulling a cylinder/tube face used to dump the marching-squares-traced boundary as a raw
-#   polygon → faceted, jaggy re-extrude. Now `faceProfileScad` classifies each boundary ring:
-#     • full circle (fitCircleRing, strict <6% radial dev)  → analytic circle(r,$fn)
-#     • circle bitten by an overlapping object (fitCircleArc, RANSAC over circumcircles + algebraic
-#       refine on inliers) → intersection(){ circle; polygon(bite) } — circular vertices pushed to
-#       1.25·r so the arc stays smooth, bite vertices kept exact. Bails if any vertex protrudes
-#       beyond the circle (added material) or the circular arc spans <180°.
-#     • holes → concentric circle()s subtracted via difference(); else exact polygon-with-paths.
-#   Emitted via a small profile node tree + renderProfile2D (handles nested-block indentation).
+#   polygon → faceted, jaggy re-extrude. v0.34.0–v0.35.0 added analytic circle/arc classification in
+#   `faceProfileScad`. v0.35.1 fixed the ROOT cause: faceData now extracts the EXACT mesh boundary
+#   edge-loops (faceEdgeRings) — clean N-gon, exact radius/centre, no raster bias — and only falls
+#   back to the lossy rasterize+marching-squares trace for non-manifold CSG seams. Low-$fn cylinders
+#   now detect/emit correctly instead of dumping a 250-point jaggy staircase.
 #
 # Item 2 — Model-tree unions for advanced/evaluated shapes  [ ] FUTURE (not started)
 #   Today "Group as Union/Difference/Intersection" only works on simple GUI authoring nodes. When the

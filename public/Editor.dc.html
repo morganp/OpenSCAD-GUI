@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.35.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.36.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -438,7 +438,7 @@
       <sc-if value="{{ readOnlyTree }}" hint-placeholder-val="{{ false }}">
         <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;flex-direction:column;gap:7px;">
           <div style="display:flex;align-items:center;gap:7px;">
-            <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Select a top-level item to move / rotate / scale it as a group, or delete it. Individual generated instances can't be edited.</span>
+            <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">Evaluated view (read-only). Select a top-level item to move / rotate / scale it as a group, or delete it. ⌘/Ctrl-click 2+ items to combine them. Individual generated instances can't be edited.</span>
             <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
           </div>
           <sc-if value="{{ roXformOn }}" hint-placeholder-val="{{ false }}">
@@ -446,6 +446,17 @@
               <button onClick="{{ setGizmoMove }}" style="{{ roMoveTab }}">Move</button>
               <button onClick="{{ setGizmoRotate }}" style="{{ roRotateTab }}">Rotate</button>
               <button onClick="{{ setGizmoScale }}" style="{{ roScaleTab }}">Scale</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ roCanCombine }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:1px;">
+              <span style="font-size:10px;color:#C9A867;line-height:1.4;opacity:.8;">{{ roCombineHint }}</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+                <button onClick="{{ roGroupUnion }}" title="Union" style="{{ roComboBtn }}">∪ Union</button>
+                <button onClick="{{ roGroupDiff }}" title="Difference (first = base)" style="{{ roComboBtn }}">− Diff</button>
+                <button onClick="{{ roGroupInt }}" title="Intersection" style="{{ roComboBtn }}">∩ Int</button>
+                <button onClick="{{ roGroupHull }}" title="Hull (convex wrap)" style="{{ roComboBtn }}">⬢ Hull</button>
+              </div>
             </div>
           </sc-if>
         </div>
@@ -2276,8 +2287,9 @@ class Component extends DCLogic {
     if (!this.tc) return;
     // read-only (evaluated) view: gizmo drives the whole top-level sub-group as a group transform
     if (this.state.readOnly) {
+      const ids = this.state.selectedIds || [];
       const id = this.state.selectedShapeId;
-      const row = id ? this.findTreeRow(this.state.tree, id) : null;
+      const row = (id && ids.length < 2) ? this.findTreeRow(this.state.tree, id) : null;
       const g = (row && row.root && row.srcLines && this._roGroups) ? this._roGroups[row.topIndex] : null;
       if (g) {
         g.position.set(0, 0, 0); g.rotation.set(0, 0, 0, 'ZYX'); g.scale.set(1, 1, 1); g.updateMatrix();
@@ -2931,6 +2943,14 @@ class Component extends DCLogic {
     const primary = ids.length ? ids[ids.length - 1] : null;
     this.setState({ selectedShapeId: primary, selectedIds: ids, selectedEdge: null }, () => { this.refreshSelectionMat(); this.updateGizmo(); });
   };
+  // read-only multi-select: toggle a top-level evaluated row in/out of the combine selection
+  toggleSelectReadOnly = (id) => {
+    let ids = (this.state.selectedIds || []).slice();
+    const k = ids.indexOf(id);
+    if (k >= 0) ids.splice(k, 1); else ids.push(id);
+    const primary = ids.length ? ids[ids.length - 1] : null;
+    this.setState({ selectedShapeId: primary, selectedIds: ids }, () => this.updateGizmo());
+  };
   refreshSelectionMat() {
     for (const n of this.tree) {
       if (!n.solid) continue;
@@ -3046,6 +3066,60 @@ class Component extends DCLogic {
     this.setState({ code: next }, () => this.runCode());
     this.flashStatus('Transformed \u201c' + (row.label || 'item') + '\u201d');
   }
+
+  // ===== Read-only BOOLEAN COMBINE =====
+  // Selected top-level evaluated rows (each mapped to a source line span) get wrapped in one
+  // op(){ … } block and re-run. Reuses the delete/transform source-splice machinery. Item 3
+  // (nesting) is automatic: a combined block is a single statement whose __src spans the whole
+  // block, so re-selecting it + combining again produces a clean OUTER block.
+  canCombineReadOnly() {
+    if (!this.state.readOnly) return false;
+    const ids = this.state.selectedIds || [];
+    if (ids.length < 2) return false;
+    return ids.every(id => { const r = this.findTreeRow(this.state.tree, id); return r && r.root && r.srcLines; });
+  }
+  groupReadOnlySelection = (op) => {
+    const ids = (this.state.selectedIds || []).slice();
+    const rows = ids.map(id => this.findTreeRow(this.state.tree, id)).filter(r => r && r.root && r.srcLines);
+    if (rows.length < 2) { this.flashStatus('Select 2+ top-level items to combine'); this.setState({ ctxMenu: null }); return; }
+    const src = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const lines = src.split('\n');
+    // each row -> {start,end} 1-based inclusive, absorbing a preceding marker/comment line
+    const spans = rows.map(r => {
+      let { start, end } = r.srcLines;
+      start = Math.max(1, start); end = Math.min(lines.length, end);
+      let s = start;
+      if (s >= 2 && /^\s*\/\/\s*push\/pull/.test(lines[s - 2] || '')) s -= 1;
+      if (s >= 2 && /@scs-xform/.test(lines[s - 2] || '')) s -= 1;
+      return { row: r, start: s, end };
+    });
+    const sorted = spans.slice().sort((a, b) => a.start - b.start);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].start <= sorted[i - 1].end) { this.flashStatus('Selection overlaps \u2014 can\u2019t combine'); this.setState({ ctxMenu: null }); return; }
+    }
+    const bodyOf = (sp) => lines.slice(sp.start - 1, sp.end).join('\n');
+    // difference subtracts later children from the first → keep SELECTION order (base first);
+    // union/intersection/hull are order-independent → use source order for a tidy block.
+    const ordered = (op === 'difference') ? spans : sorted;
+    const indent = (txt) => txt.split('\n').map(l => (l.trim() ? '  ' + l : l)).join('\n');
+    const block = op + '() {\n' + ordered.map(sp => indent(bodyOf(sp))).join('\n') + '\n}';
+    const remove = new Set();
+    for (const sp of spans) for (let i = sp.start; i <= sp.end; i++) remove.add(i);
+    const insertAt = sorted[0].start;     // emit the block where the topmost statement was
+    const out = [];
+    for (let i = 1; i <= lines.length; i++) {
+      if (i === insertAt) out.push(block);
+      if (remove.has(i)) continue;
+      out.push(lines[i - 1]);
+    }
+    let next = out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '') + '\n';
+    // the combined block becomes the top-level item at the index = how many top-level statements
+    // precede insertAt; approximate by reselecting the topmost original topIndex after re-run.
+    this._roReselectTop = Math.min(...rows.map(r => r.topIndex));
+    if (this._codeArea) this._codeArea.value = next;
+    this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null, code: next }, () => this.runCode());
+    this.flashStatus('Combined ' + rows.length + ' items as ' + op);
+  };
 
   // ============ BOOLEAN GROUPS ============
   sameParent(ids) {
@@ -5509,8 +5583,8 @@ class Component extends DCLogic {
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
           : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
         rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
-        onSelect: (e) => { if (st.readOnly) { if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }, () => this.updateGizmo()); return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
-        onCtx: (e) => { if (st.readOnly) { e.preventDefault(); if (r.root) this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }); return; } this.openCtx(r.id, e); },
+        onSelect: (e) => { if (st.readOnly) { if (!r.root) return; const mult = e && (e.metaKey || e.ctrlKey || e.shiftKey); if (mult) { this.toggleSelectReadOnly(r.id); } else { this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }, () => this.updateGizmo()); } return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
+        onCtx: (e) => { if (st.readOnly) { e.preventDefault(); if (!r.root) return; const sel = st.selectedIds || []; if (!sel.includes(r.id)) this.setState({ selectedShapeId: r.id, selectedIds: [r.id], ctxMenu: { x: e.clientX, y: e.clientY, id: r.id } }, () => this.updateGizmo()); else this.setState({ ctxMenu: { x: e.clientX, y: e.clientY, id: r.id } }); return; } this.openCtx(r.id, e); },
         draggable: !st.readOnly,
         onDragStart: (e) => this.onTreeDragStart(r.id, e),
         onDragOver: (e) => this.onTreeDragOver(r.id, e),
@@ -5530,6 +5604,28 @@ class Component extends DCLogic {
     const ctx = st.ctxMenu;
     let ctxItems = [], ctxStyle = '';
     if (ctx) {
+      const mkRo = (glyph, label, onClick, opts = {}) => ({
+        isItem: true, isSep: false, glyph, glyphColor: opts.color || '#8A9099', label, checked: false,
+        onClick: () => onClick(),
+        style: `display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:none;color:${opts.danger ? '#E0736B' : '#D5DAE1'};font:inherit;font-size:12px;padding:7px 9px;border-radius:6px;cursor:pointer;`,
+      });
+      if (st.readOnly) {
+        const sepRo = { isItem: false, isSep: true };
+        const items = [];
+        if (this.canCombineReadOnly()) {
+          items.push(mkRo('\u222a', 'Group as Union', () => this.groupReadOnlySelection('union')));
+          items.push(mkRo('\u2212', 'Group as Difference', () => this.groupReadOnlySelection('difference')));
+          items.push(mkRo('\u2229', 'Group as Intersection', () => this.groupReadOnlySelection('intersection')));
+          items.push(mkRo('\u2b22', 'Group as Hull', () => this.groupReadOnlySelection('hull')));
+          items.push(sepRo);
+        }
+        const roRow = this.findTreeRow(st.tree, ctx.id);
+        if (roRow && roRow.root && roRow.srcLines) items.push(mkRo('\u2715', 'Delete', () => this.deleteReadOnlyRow(ctx.id), { danger: true, color: '#E0736B' }));
+        ctxItems = items;
+        const mx = Math.min(ctx.x, window.innerWidth - 200);
+        const my = Math.min(ctx.y, window.innerHeight - (Math.max(1, items.length) * 32 + 24));
+        ctxStyle = items.length ? `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:49;min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;` : '';
+      } else {
       const node = this.findNode(ctx.id);
       const nIsGroup = this.isGroup(node);
       const inSel = selIds.includes(ctx.id) ? selIds : [ctx.id];
@@ -5571,6 +5667,7 @@ class Component extends DCLogic {
       const mx = Math.min(ctx.x, window.innerWidth - 200);
       const my = Math.min(ctx.y, window.innerHeight - (items.length * 32 + 24));
       ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:49;min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;`;
+      }
     }
 
     let radiusMax = 20;
@@ -5714,7 +5811,7 @@ class Component extends DCLogic {
       removeTreatmentBtn: this.removeTreatmentBtn,
       clearEdge: () => this.clearEdge(),
 
-      hasShapePanel: !!st.selectedShapeId && !sel && !sshIsGroup,
+      hasShapePanel: !st.readOnly && !!st.selectedShapeId && !sel && !sshIsGroup,
       sshIs2D: !!ssh && !sshIsGroup && ['circle', 'square', 'polygon'].includes(ssh.type),
       sshIsPoly: !!ssh && !sshIsGroup && ssh.type === 'polygon',
       polyPoints: (!!ssh && !sshIsGroup && ssh.type === 'polygon' ? (ssh.dims.pts || []) : []).map((p, i) => ({
@@ -5771,7 +5868,14 @@ class Component extends DCLogic {
       treeRows,
       isEmpty: treeRows.length === 0,
       readOnlyTree: st.readOnly,
-      roXformOn: st.readOnly && !!(st.selectedShapeId && this.findTreeRow(st.tree, st.selectedShapeId) && this.findTreeRow(st.tree, st.selectedShapeId).root),
+      roXformOn: st.readOnly && (st.selectedIds || []).length < 2 && !!(st.selectedShapeId && this.findTreeRow(st.tree, st.selectedShapeId) && this.findTreeRow(st.tree, st.selectedShapeId).root),
+      roCanCombine: this.canCombineReadOnly(),
+      roCombineHint: (st.selectedIds || []).length + ' selected — first row is the difference base',
+      roComboBtn: `flex:1;display:flex;align-items:center;justify-content:center;gap:3px;padding:6px 4px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;border:1px solid #5A4A22;background:#241d10;color:#E7C98A;`,
+      roGroupUnion: () => this.groupReadOnlySelection('union'),
+      roGroupDiff: () => this.groupReadOnlySelection('difference'),
+      roGroupInt: () => this.groupReadOnlySelection('intersection'),
+      roGroupHull: () => this.groupReadOnlySelection('hull'),
       roMoveTab: this.tab(st.gizmoMode === 'translate'),
       roRotateTab: this.tab(st.gizmoMode === 'rotate'),
       roScaleTab: this.tab(st.gizmoMode === 'scale'),
