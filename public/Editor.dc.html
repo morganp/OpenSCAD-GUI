@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.35.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.35.1</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1359,6 +1359,14 @@ class Component extends DCLogic {
     const V = new THREE.Vector3().crossVectors(normal, U).normalize();
     // project each tri's 3 corners into the (U,V) face frame relative to origin
     const proj = tris.map(t => [0, 1, 2].map(k => { const d = this._triVtx(geo, t, k).sub(origin); return [d.dot(U), d.dot(V)]; }));
+    // Prefer the EXACT boundary edge-loops of the coplanar triangle set: the perimeter edges
+    // (shared by exactly one triangle) chain into clean rings that preserve the source vertices
+    // verbatim — so a circular cap stays a perfect N-gon (no radial bias, exact centre/radius)
+    // and a faceted prism stays an exact polygon. Only fall back to the lossy rasterize +
+    // marching-squares trace when the topology is non-manifold (overlapping CSG seams), which
+    // edge-chaining can't resolve.
+    let rings2D = this.faceEdgeRings(proj);
+    if (!rings2D) {
     let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
     for (const tri of proj) for (const [x, y] of tri) { if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
     if (!isFinite(minx) || maxx <= minx || maxy <= miny) return null;
@@ -1379,7 +1387,8 @@ class Component extends DCLogic {
           if ((w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0)) grid[j * nx + i] = 1;
         } }
     }
-    const rings2D = this.marchSquares(grid, nx, ny, ox, oy, cw, ch);
+    rings2D = this.marchSquares(grid, nx, ny, ox, oy, cw, ch);
+    }
     if (!rings2D || !rings2D.length) return null;
     // outer ring = largest |signed area|; compute area + centroid from it
     const sArea = (r) => { let A = 0; for (let i = 0; i < r.length; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % r.length]; A += x1 * y2 - x2 * y1; } return A / 2; };
@@ -1390,6 +1399,67 @@ class Component extends DCLogic {
     const centerWorld = origin.clone().add(U.clone().multiplyScalar(center2[0])).add(V.clone().multiplyScalar(center2[1]));
     const frame = new THREE.Matrix4().makeBasis(U, V, normal).setPosition(origin);
     return { rings2D, frame: frame.elements.slice(), normal: normal.toArray(), origin: origin.toArray(), U: U.toArray(), V: V.toArray(), area: oa, center: centerWorld.toArray() };
+  }
+  // Exact boundary edge-loops of a coplanar triangle set, in the (U,V) face frame.
+  // Perimeter edges are shared by exactly one triangle; interior edges by two. We chain the
+  // perimeter edges into closed rings, preserving the source vertices verbatim (so a circular
+  // cap stays a perfect N-gon and a faceted prism an exact polygon). Returns null when the
+  // topology is non-manifold (an edge shared by >2 tris, or a ring that won't close) — e.g. an
+  // overlapping CSG seam — so faceData can fall back to the rasterized trace.
+  faceEdgeRings(proj) {
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const tri of proj) for (const [x, y] of tri) { if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+    if (!isFinite(minx) || maxx <= minx || maxy <= miny) return null;
+    const span = Math.max(maxx - minx, maxy - miny) || 1;
+    const q = span * 1e-5;                       // vertex-weld quantum
+    const pts = new Map();                        // key -> representative [x,y] (full precision)
+    const keyOf = (p) => Math.round(p[0] / q) + ',' + Math.round(p[1] / q);
+    const reg = (p) => { const k = keyOf(p); if (!pts.has(k)) pts.set(k, p); return k; };
+    const undirected = new Map();                 // "ka|kb" (sorted) -> count
+    const directed = new Map();                   // "ka>kb" -> count (occurred orientation)
+    for (const tri of proj) {
+      const [a, b, c] = tri;
+      const area = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      if (Math.abs(area) < q * q) continue;       // skip slivers
+      const ka = reg(a), kb = reg(b), kc = reg(c);
+      const add = (k1, k2) => {
+        if (k1 === k2) return;
+        const u = k1 < k2 ? k1 + '|' + k2 : k2 + '|' + k1;
+        undirected.set(u, (undirected.get(u) || 0) + 1);
+        const d = k1 + '>' + k2; directed.set(d, (directed.get(d) || 0) + 1);
+      };
+      add(ka, kb); add(kb, kc); add(kc, ka);
+    }
+    for (const c of undirected.values()) if (c > 2) return null;   // non-manifold seam
+    // directed perimeter edges (the orientation that actually occurred on the lone triangle)
+    const adj = new Map(); let nb = 0;
+    for (const [u, c] of undirected) {
+      if (c !== 1) continue;
+      const [k1, k2] = u.split('|');
+      const from = directed.get(k1 + '>' + k2) ? k1 : k2, to = from === k1 ? k2 : k1;
+      if (!adj.has(from)) adj.set(from, []);
+      adj.get(from).push(to); nb++;
+    }
+    if (nb < 3) return null;
+    const used = new Set(), eid = (a, b) => a + '>' + b, rings = [];
+    for (const start of adj.keys()) {
+      for (const first of (adj.get(start) || [])) {
+        if (used.has(eid(start, first))) continue;
+        const ring = [start]; let cur = first, prev = start, ok = false, guard = 0;
+        used.add(eid(prev, cur));
+        while (guard++ < nb + 4) {
+          if (cur === start) { ok = true; break; }
+          ring.push(cur);
+          const outs = (adj.get(cur) || []).filter(n => !used.has(eid(cur, n)));
+          if (!outs.length) break;
+          const nx = outs[0]; used.add(eid(cur, nx)); prev = cur; cur = nx;
+        }
+        if (!ok || ring.length < 3) return null;   // open chain -> bail to raster
+        rings.push(ring.map(k => pts.get(k)));
+      }
+    }
+    if (used.size !== nb || !rings.length) return null;   // leftover edges -> bail
+    return rings;
   }
   // convenience: face under a raycast-hit triangle index
   pickFace(geo, triIndex) {
