@@ -1,4 +1,103 @@
 # ===================================================================================================
+# BACKLOG — GitHub library import + BOSL2 preset + Thread menu (filed 2026-06-25) — [ ] NOT STARTED
+#   (Advanced-mode feature; depends on the Basic/Advanced toggle above)
+# ===================================================================================================
+# FEATURE (restated): import OpenSCAD libraries straight from a **GitHub repo** so `use`/`include`
+# resolve against them. Ship a one-click **"Include BOSL2"** preset (Belfry OpenSCAD Library v2).
+# With BOSL2 loaded, expose a curated **Thread / Screws menu** that inserts BOSL2 calls
+# (`threaded_rod`, `screw`, `nut`, `screw_hole`, …). All of this lives in **Advanced mode** only.
+#
+# WHY TRACTABLE: the Phase-10 include/use engine already resolves library files from an in-memory
+# `_scadFiles` store (`opts.files`); this feature just FILLS that store from GitHub instead of (only)
+# drag-drop, and adds curated insert UI on top.
+#
+# KEY CAVEAT (must fix first): the current resolver keys files by **lowercased basename**. BOSL2 uses
+# subfolder include paths (`include <BOSL2/std.scad>`) and ~100 interdependent files, so the
+# include/use resolver + `_scadFiles` map must become **path-aware** (key by normalized relative
+# path, fall back to basename) before BOSL2 links. Engine `resolveImports` keying changes too.
+#
+# BUILD ORDER:
+#  1. [ ] Path-aware library store: `_scadFiles` keyed by normalized rel-path (e.g. `bosl2/std.scad`)
+#         with basename fallback; engine `resolveImports` matches `<dir/file.scad>` against it.
+#  2. [ ] GitHub fetcher: given owner/repo[/ref], fetch the file tree (GitHub API or a pinned release
+#         tarball) and pull every `.scad` via `raw.githubusercontent.com` (CORS-OK) into the store.
+#         Show progress; cache in memory for the session. Handle rate limits / large repos gracefully.
+#  3. [ ] Library panel UI (Advanced only): "Add from GitHub…" (owner/repo/ref field) + an
+#         **Include BOSL2** preset button (pinned to a known-good tag). Lists loaded libs w/ remove.
+#  4. [ ] Thread / Screws insert menu (Advanced + BOSL2 loaded): curated parametric inserts that emit
+#         `include <BOSL2/std.scad> include <BOSL2/threading.scad>` (once) + the chosen call with a
+#         small param form (diameter, pitch, length, …). Renders read-only via the engine.
+#  5. [ ] Copy + version badge + VERSION bump; release snapshot.
+#
+# OPEN Q' for the user: (a) which libraries to preset beyond BOSL2 (e.g. NopSCADlib, Round-Anything)?
+#   (b) fetch live at runtime each session, or vendor a pinned BOSL2 snapshot into the project so it
+#   works offline? (Live = always current but needs network + risks rate limits; vendored = offline +
+#   deterministic but adds repo weight.) (c) how deep should the Thread menu go — just threaded rods,
+#   or full screws/nuts/washers? RECOMMEND: vendor a pinned BOSL2 for reliability; rods+screws+nuts v1.
+# ===================================================================================================
+
+# ===================================================================================================
+# BACKLOG — Basic / Advanced authoring mode (filed 2026-06-25) — [ ] NOT STARTED
+# ===================================================================================================
+# FEATURE (restated): a global **Basic | Advanced** mode toggle in the top bar.
+#   - BASIC (default): the editor shows only 3D solids. The Add-shape flyout's `2D · for extrude`
+#     section is hidden, and the "Linear extrude" / "Rotate extrude" actions (2D shape panel buttons
+#     + tree context-menu items) are hidden. Keeps newcomers in a pure solid-modeling workflow.
+#   - ADVANCED: reveals the 2D primitives (circle / square / polygon) and the extrude operations.
+#
+# MENU STRUCTURE DECISION (answer to "should the shape menu be 3D, + a 2D menu for extrusions?"):
+#   YES. The current Add-shape flyout stays the **3D menu** (cuboid/cylinder/sphere/cone/pyramid/
+#   torus/tube/wedge). The existing `2D · for extrude` flyout section becomes the **2D menu**, shown
+#   only in Advanced. 2D shapes only exist to feed `linear_extrude` / `rotate_extrude`, so they live
+#   next to / gated with the extrude actions. One toggle gates all 2D+extrude affordances.
+#
+# BUILD ORDER (Editor.dc.html):
+#  1. [ ] State `mode: 'basic'` (persist if other prefs persist). Top-bar segmented Basic|Advanced.
+#  2. [ ] Add-shape flyout: wrap the `2D · for extrude` section in `mode === 'advanced'`.
+#  3. [ ] Shape panel: hide the Linear/Rotate extrude buttons in Basic; tree context menu: gate the
+#         two `extrudeSelection` items on Advanced (the `nIs2D` block).
+#  4. [ ] Edge case: a loaded .scad / code that already contains 2D+extrudes still renders (engine
+#         path is unaffected) — Basic only hides AUTHORING affordances, never hides existing geometry
+#         or the read-only evaluated view. Optionally auto-switch to Advanced when such a doc loads.
+#  5. [ ] Copy + version badge + VERSION bump; release snapshot.
+#
+# OPEN Q' for the user: should loading a doc that already uses 2D/extrudes auto-flip to Advanced, or
+#   just render read-only while the toggle stays on Basic? (Recommend: auto-flip to Advanced.)
+# ===================================================================================================
+
+# ===================================================================================================
+# HANDOFF — Touch / iPad UX (Backlog B6) — IN PROGRESS (target v0.38.0)
+# ===================================================================================================
+# FEATURE (restated): the editor's only right-click-dependent surface is the **Model-Tree context
+# menu** (group/op/extrude/move/duplicate/delete). On iPad there is no right-click, so that menu —
+# and therefore most structural editing — is unreachable. The 3D viewport already works on touch
+# (OrbitControls = 1-finger orbit / 2-finger pan+zoom; gizmo + push/pull run on Pointer Events;
+# there is NO viewport right-click menu to replace). Floating-panel drag is mouse-only. Make all of
+# this touch-usable WITHOUT regressing desktop.
+#
+# SCOPE (v1):
+#  1. [ ] Kebab (⋮) actions button on every actionable tree row — always-visible on-screen
+#         affordance that opens the SAME context menu, anchored to the button. Universal (mouse +
+#         touch), needs no gesture timing. (normal rows: always; read-only rows: only `root` rows.)
+#  2. [ ] Long-press a tree row (touch/pen only) → opens the context menu at the touch point
+#         (~480ms, cancel on >8px move or early release; light haptic if available). Mouse keeps
+#         right-click. closeCtx ignores a close within 350ms of opening so the release-tap on the
+#         full-screen backdrop doesn't instantly dismiss the just-opened menu.
+#  3. [ ] Floating panels draggable on touch: startPanelDrag → Pointer Events (pointermove/up/
+#         cancel on window) instead of mouse events; the 5 panel headers switch onMouseDown→
+#         onPointerDown and get `touch-action:none`.
+#  4. [ ] Touch-aware copy: coarse-pointer detection (`matchMedia('(pointer: coarse)')`) → the tree
+#         footer hint says "long-press or ⋮ for actions" on touch (reorder via the menu's Move
+#         up/down, since HTML5 drag-reorder doesn't fire on touch); right-click wording on desktop.
+#  5. [ ] Factor `showCtxFor(id, x, y)` so right-click, kebab, and long-press all open the menu the
+#         same way (handles read-only + normal branches); onCtx/openCtx delegate to it.
+#  6. [ ] Version badge + VERSION → 0.38.0; release snapshot OpenSCAD-GUI-v0.38.0.
+#
+# DEFERRED (v2): native touch drag-to-reorder in the tree (rebuild HTML5 DnD on pointer events);
+# a dedicated mobile tool palette / bottom sheet; hover-only face overlay hint on touch.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — Model-tree booleans on evaluated (read-only) shapes — IN PROGRESS (target v0.36.0)
 #   (Backlog Items 2 + 3, filed 2026-06-24; tackled 2026-06-25)
 # ===================================================================================================
