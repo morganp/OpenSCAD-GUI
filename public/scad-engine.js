@@ -160,6 +160,9 @@
         else if (at('(') && (x.e === 'ident' || x.e === 'paren')) { // call on a name
           const name = x.name; const args = parseArgs(); x = { e:'call', name, args };
         }
+        else if (at('(')) { // call on any other expression value (function-valued list entry, curried call, …)
+          const args = parseArgs(); x = { e:'callexpr', callee:x, args };
+        }
         else break;
       }
       return x;
@@ -177,6 +180,16 @@
     }
     function parsePrimary() {
       const tok = peek();
+      // echo(...) expr  /  assert(...) expr  — echo/assert in EXPRESSION position evaluate for
+      // their side effect (console / error) then pass through the trailing expression. Used
+      // pervasively by libraries like BOSL2 (e.g. `cond ? echo("warn") true : true`).
+      if (tok.t === 'ident' && (tok.v === 'echo' || tok.v === 'assert') && peek(1).t === '(') {
+        next(); const args = parseArgs();
+        const term = peek().t;
+        const body = (term === ':' || term === ',' || term === ')' || term === ']' || term === ';' || term === '}')
+          ? { e:'undef' } : parseExpr(0);
+        return { e: tok.v === 'echo' ? 'echoexpr' : 'assertexpr', args, body };
+      }
       switch (tok.t) {
         case 'num': next(); return { e:'num', v:tok.v };
         case 'str': next(); return { e:'str', v:tok.v };
@@ -194,22 +207,25 @@
     function parseVectorOrRange() {
       expect('[');
       if (at(']')) { next(); return { e:'vector', items:[] }; }
-      // list comprehension?  [ for (...) ... ] or [ each ... ] or [ if(...) ... ]
-      if (at('for') || at('each') || at('if') || at('let')) {
-        const body = parseListCompBody();
+      // A vector literal is a comma-separated list of ELEMENTS; each element is either a plain
+      // expression or a comprehension element (for / each / if / let), in ANY position and freely
+      // interleaved — e.g. [a, each list, if (c) d, for (i=r) i]. (OpenSCAD unifies the two.)
+      if (!(at('for') || at('each') || at('if') || at('let'))) {
+        const first = parseExpr(0);
+        if (at(':')) {
+          next(); const second = parseExpr(0);
+          if (at(':')) { next(); const third = parseExpr(0); expect(']'); return { e:'range', start:first, step:second, end:third }; }
+          expect(']'); return { e:'range', start:first, step:null, end:second };
+        }
+        const vitems = [first];
+        while (at(',')) { next(); if (at(']')) break; vitems.push(parseVecItem()); }
         expect(']');
-        return { e:'listcomp', body };
+        return { e:'vector', items: vitems };
       }
-      const first = parseExpr(0);
-      if (at(':')) {
-        next(); const second = parseExpr(0);
-        if (at(':')) { next(); const third = parseExpr(0); expect(']'); return { e:'range', start:first, step:second, end:third }; }
-        expect(']'); return { e:'range', start:first, step:null, end:second };
-      }
-      const items = [first];
-      while (at(',')) { next(); if (at(']')) break; items.push(parseExpr(0)); }
+      const citems = [parseVecItem()];
+      while (at(',')) { next(); if (at(']')) break; citems.push(parseVecItem()); }
       expect(']');
-      return { e:'vector', items };
+      return { e:'vector', items: citems };
     }
     // list comprehension generator body (subset): for / if / let / each / bare expr
     function parseListCompBody() {
@@ -240,6 +256,26 @@
       const first = parseExpr(0);
       if (at(',')) { const items = [first]; while (at(',')) { next(); if (at(']')) break; items.push(parseListCompBody()); } return { c:'seq', items }; }
       return { c:'expr', expr:first };
+    }
+    // a single vector element: a comprehension element (for/each/if/let) or a plain expression.
+    function parseVecItem() {
+      if (at('for') || at('each') || at('if') || at('let')) return parseCompElem();
+      return parseExpr(0);
+    }
+    function parseCompElem() {
+      if (at('for')) {
+        next(); expect('(');
+        const gens = parseForGenerators();
+        if (at(';')) { next(); const cond = parseExpr(0); expect(';'); const updates = parseForGenerators(); expect(')'); return { c:'cfor', inits: gens, cond, updates, body: parseVecItemBody() }; }
+        expect(')'); return { c:'for', gens, body: parseVecItemBody() };
+      }
+      if (at('let')) { next(); expect('('); const assigns = parseAssignList(); expect(')'); return { c:'let', assigns, body: parseVecItemBody() }; }
+      if (at('if')) { next(); expect('('); const cond = parseExpr(0); expect(')'); const then = parseVecItemBody(); let els = null; if (at('else')) { next(); els = parseVecItemBody(); } return { c:'if', cond, then, els }; }
+      next(); return { c:'each', expr: parseVecItemBody() }; // each
+    }
+    function parseVecItemBody() {
+      if (at('for') || at('each') || at('if') || at('let')) return parseCompElem();
+      return { c:'expr', expr: parseExpr(0) };
     }
     function parseAssignList() {
       const assigns = [];
@@ -785,7 +821,11 @@
         const v = scope.get(e.name);
         return v;
       }
-      case 'vector': return e.items.map(it => evalExpr(it, scope, ctx));
+      case 'vector': {
+        const out = [];
+        for (const it of e.items) { if (it && it.c) runComp(it, scope, ctx, out); else out.push(evalExpr(it, scope, ctx)); }
+        return out;
+      }
       case 'range': return { __range:true, start:num(evalExpr(e.start,scope,ctx)), step: e.step?num(evalExpr(e.step,scope,ctx)):null, end:num(evalExpr(e.end,scope,ctx)) };
       case 'index': {
         const o = evalExpr(e.obj, scope, ctx); const idx = evalExpr(e.idx, scope, ctx);
@@ -809,9 +849,20 @@
       case 'ternary': return truthy(evalExpr(e.c, scope, ctx)) ? evalExpr(e.a, scope, ctx) : evalExpr(e.b, scope, ctx);
       case 'binary': return evalBinary(e.op, evalExpr(e.a, scope, ctx), evalExpr(e.b, scope, ctx));
       case 'let': { const sc = scope.child(); for (const a of e.assigns) sc.vars.set(a.name, evalExpr(a.expr, sc, ctx)); return evalExpr(e.body, sc, ctx); }
+      case 'echoexpr': { ctx.echos.push({ msg: e.args.map(a => echoStr(evalExpr(a.expr, scope, ctx))).join(', ') }); return evalExpr(e.body, scope, ctx); }
+      case 'assertexpr': {
+        const cond = e.args[0] ? truthy(evalExpr(e.args[0].expr, scope, ctx)) : true;
+        if (!cond) { const m = e.args[1] ? echoStr(evalExpr(e.args[1].expr, scope, ctx)) : 'assertion failed'; ctx.errors.push({ msg: 'assert: ' + m }); }
+        return evalExpr(e.body, scope, ctx);
+      }
       case 'lambda': return { __fn:true, params:e.params, body:e.body, closure:scope };
       case 'listcomp': { const out = []; runComp(e.body, scope, ctx, out); return out; }
       case 'call': return evalFnCall(e, scope, ctx);
+      case 'callexpr': {
+        const fnv = evalExpr(e.callee, scope, ctx);
+        if (isFn(fnv)) { const sc = fnv.closure.child(); bindParams(fnv.params, e.args, scope, sc, ctx); return evalExpr(fnv.body, sc, ctx); }
+        return undefined;
+      }
       default: return UNDEF;
     }
   }

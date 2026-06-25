@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.39.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.40.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -85,8 +85,40 @@
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.6 11 5.6M8 2.6 5 5.6M8 2.6V10" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5v1.8A1.2 1.2 0 0 0 4.2 13.5h7.6a1.2 1.2 0 0 0 1.2-1.2v-1.8" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round"/></svg>
         Import mesh
       </button>
+      <sc-if value="{{ advancedMode }}" hint-placeholder-val="{{ false }}">
+        <div style="width:1px;height:18px;background:#2C3037;margin:0 1px;"></div>
+        <button onClick="{{ toggleLib }}" title="Import an OpenSCAD library from a GitHub repo (used by include &lt;…&gt; / use &lt;…&gt;)" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M9.5 2.2 3.2 8.5a1.6 1.6 0 0 0 0 2.3l2 2a1.6 1.6 0 0 0 2.3 0l6.3-6.3M9.5 2.2l4.3 4.3M9.5 2.2 11.6.1l4.3 4.3-2.1 2.1M5.5 9.5l3 3" stroke="#9AA3AE" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Library
+        </button>
+      </sc-if>
     </div>
   </div>
+
+  <sc-if value="{{ libOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeLib }}" style="position:fixed;inset:0;z-index:44;"></div>
+    <div style="position:absolute;top:108px;left:16px;z-index:45;width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="#9CC2F5"><path d="M8 .6a7.4 7.4 0 0 0-2.34 14.42c.37.07.5-.16.5-.36v-1.26c-2.06.45-2.5-.99-2.5-.99-.34-.86-.82-1.09-.82-1.09-.67-.46.05-.45.05-.45.74.05 1.13.76 1.13.76.66 1.13 1.73.8 2.15.61.07-.48.26-.8.47-.99-1.64-.19-3.37-.82-3.37-3.65 0-.81.29-1.47.76-1.99-.08-.18-.33-.93.07-1.94 0 0 .62-.2 2.03.76a7.05 7.05 0 0 1 3.7 0c1.4-.96 2.02-.76 2.02-.76.4 1.01.15 1.76.07 1.94.48.52.76 1.18.76 1.99 0 2.84-1.73 3.46-3.38 3.64.27.23.5.68.5 1.37v2.03c0 .2.14.44.51.36A7.4 7.4 0 0 0 8 .6Z"/></svg>
+        <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">GitHub library</span>
+        <button onClick="{{ closeLib }}" style="margin-left:auto;background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#C7CCD4;">×</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input value="{{ libSpec }}" onInput="{{ setLibSpec }}" onKeyDown="{{ onLibKey }}" placeholder="owner/repo  ·  owner/repo@tag  ·  URL" spellcheck="false" style="flex:1;min-width:0;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 9px;outline:none;box-sizing:border-box;" />
+        <button onClick="{{ fetchLib }}" style="{{ libFetchStyle }}">{{ libFetchLabel }}</button>
+      </div>
+      <div style="font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#5B616B;margin:2px 0 7px;">Presets</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px;">
+        <sc-for list="{{ libPresets }}" as="p" hint-placeholder-count="0">
+          <button onClick="{{ p.onClick }}" title="{{ p.title }}" style="background:#1B2530;border:1px solid #2C4D78;color:#9CC2F5;font:inherit;font-size:11px;padding:5px 10px;border-radius:7px;cursor:pointer;" style-hover="background:#21303f;">{{ p.label }}</button>
+        </sc-for>
+      </div>
+      <sc-if value="{{ hasLibMsg }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:11px;color:#9AA3AE;line-height:1.45;margin-bottom:9px;">{{ libMsg }}</div>
+      </sc-if>
+      <div style="font-size:10.5px;color:#5B616B;line-height:1.5;border-top:1px solid #23272E;padding-top:9px;">Files load into the include / use store; reference them in code, e.g. <span style="font-family:'IBM Plex Mono',monospace;color:#8A9099;">include &lt;BOSL2/std.scad&gt;</span>. Very large libraries with deep recursion (e.g. BOSL2) may exceed the engine's current limits.</div>
+    </div>
+  </sc-if>
 
   <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:5px;z-index:30;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:13px;padding:7px;box-shadow:0 10px 30px rgba(0,0,0,.45);">
     <button onClick="{{ pickSelect }}" title="Select &amp; edges (V)" style="{{ btnSelect }}">
@@ -687,6 +719,10 @@ class Component extends DCLogic {
     ready: false,
     tool: 'select',
     mode: (() => { try { return localStorage.getItem('scad-mode') === 'advanced' ? 'advanced' : 'basic'; } catch (_) { return 'basic'; } })(),  // 'basic' hides params / 2D / extrude affordances
+    libOpen: false,        // GitHub library importer popover
+    libSpec: '',           // owner/repo[@ref][/subdir] or GitHub URL being typed
+    libBusy: false,        // a fetch is in flight
+    libMsg: '',            // importer status / error line
     ppMode: 'linear',         // push/pull sub-mode: 'linear' | 'revolve'
     shapes: [],            // serializable mirror for the tree
     selectedShapeId: null,
@@ -4895,6 +4931,61 @@ class Component extends DCLogic {
     this.forceUpdate(); this.runCode();
   }
   removeScad(key) { if (this._scadFiles) this._scadFiles.delete(key); this.forceUpdate(); this.runCode(); }
+
+  // ============ GITHUB LIBRARY IMPORT (Advanced) ============
+  // Fetch a GitHub repo's .scad files into the include/use store (_scadFiles, keyed by lowercased
+  // basename — the same key the engine resolver uses, so `include <Repo/file.scad>` resolves).
+  toggleLib = () => this.setState({ libOpen: !this.state.libOpen, libMsg: '' });
+  closeLib = () => this.setState({ libOpen: false });
+  setLibSpec = (e) => this.setState({ libSpec: e.target.value });
+  onLibKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); this.fetchGithubLib(); } else if (e.key === 'Escape') { this.closeLib(); } };
+  parseGithubSpec(s) {
+    s = (s || '').trim(); if (!s) return null;
+    let m = s.match(/github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?(?:\/tree\/([^/\s]+)(?:\/([^?#\s]+))?)?[/?#]?$/i);
+    if (m) return { owner: m[1], repo: m[2], ref: m[3] || '', subdir: m[4] || '' };
+    m = s.match(/^([^/\s]+)\/([^/@\s]+)(?:@([^/\s]+))?(?:\/(.+))?$/);
+    if (m) return { owner: m[1], repo: m[2], ref: m[3] || '', subdir: (m[4] || '').trim() };
+    return null;
+  }
+  async resolveRef(owner, repo, ref) {
+    if (ref) return ref;
+    try { const r = await fetch('https://api.github.com/repos/' + owner + '/' + repo); if (r.ok) { const j = await r.json(); return j.default_branch || 'main'; } } catch (_) {}
+    return 'main';
+  }
+  async fetchGithubLib(spec) {
+    if (this.state.libBusy) return;
+    const s = this.parseGithubSpec(spec != null ? spec : this.state.libSpec);
+    if (!s) { this.setState({ libMsg: 'Enter owner/repo, owner/repo@tag, or a GitHub URL' }); return; }
+    this.setState({ libBusy: true, libMsg: 'Resolving ' + s.owner + '/' + s.repo + '\u2026' });
+    try {
+      const ref = await this.resolveRef(s.owner, s.repo, s.ref);
+      const tr = await fetch('https://api.github.com/repos/' + s.owner + '/' + s.repo + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1');
+      if (!tr.ok) throw new Error(tr.status === 404 ? 'repo or branch not found' : (tr.status === 403 ? 'GitHub rate limit \u2014 try again shortly' : 'GitHub error ' + tr.status));
+      const tree = await tr.json();
+      let blobs = (tree.tree || []).filter(n => n.type === 'blob' && /\.scad$/i.test(n.path));
+      if (s.subdir) { const d = s.subdir.replace(/^\/+|\/+$/g, '').toLowerCase() + '/'; blobs = blobs.filter(n => n.path.toLowerCase().startsWith(d)); }
+      if (!blobs.length) throw new Error('no .scad files found' + (s.subdir ? ' under ' + s.subdir : ''));
+      const truncated = blobs.length > 500; if (truncated) blobs = blobs.slice(0, 500);
+      this.setState({ libMsg: 'Fetching ' + blobs.length + ' file' + (blobs.length !== 1 ? 's' : '') + '\u2026' });
+      if (!this._scadFiles) this._scadFiles = new Map();
+      let ok = 0;
+      await Promise.all(blobs.map(async n => {
+        try {
+          const res = await fetch('https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + ref + '/' + n.path.split('/').map(encodeURIComponent).join('/'));
+          if (!res.ok) return;
+          const src = await res.text();
+          const base = (n.path.split('/').pop() || n.path).toLowerCase();
+          this._scadFiles.set(base, { name: s.repo + '/' + (n.path.split('/').pop() || n.path), key: base, source: src, lines: src.split('\n').length, repo: s.owner + '/' + s.repo, ref });
+          ok++;
+        } catch (_) {}
+      }));
+      this.setState({ libBusy: false, libSpec: '', libMsg: 'Loaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo + (truncated ? ' (capped at 500)' : '') + '. Reference with include <\u2026>.' });
+      this.flashStatus('Imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo);
+      this.forceUpdate(); this.runCode();
+    } catch (e) {
+      this.setState({ libBusy: false, libMsg: 'Failed: ' + (e && e.message ? e.message : String(e)) });
+    }
+  }
   loadImportFiles(files) {
     files = (files || []).filter(Boolean); if (!files.length) return;
     if (!this._imports) this._imports = new Map();
@@ -5860,6 +5951,16 @@ class Component extends DCLogic {
       btnDelete: this.toolBtn(false),
       btnParams: this.toolBtn(st.paramsOpen),
       advancedMode: st.mode === 'advanced',
+      libOpen: st.libOpen, libSpec: st.libSpec, libMsg: st.libMsg, hasLibMsg: !!st.libMsg,
+      toggleLib: this.toggleLib, closeLib: this.closeLib, setLibSpec: this.setLibSpec, onLibKey: this.onLibKey,
+      fetchLib: () => this.fetchGithubLib(),
+      libFetchLabel: st.libBusy ? '\u2026' : 'Fetch',
+      libFetchStyle: `flex:none;background:${st.libBusy ? '#1A1D22' : '#2563EB'};border:none;color:${st.libBusy ? '#5B616B' : '#fff'};font:inherit;font-size:12px;font-weight:500;padding:7px 14px;border-radius:7px;cursor:${st.libBusy ? 'default' : 'pointer'};`,
+      libPresets: [
+        { label: 'BOSL2', title: 'BelfrySCAD/BOSL2 — Belfry OpenSCAD Library v2', spec: 'BelfrySCAD/BOSL2' },
+        { label: 'Round-Anything', title: 'Irev-Dev/Round-Anything', spec: 'Irev-Dev/Round-Anything' },
+        { label: 'NopSCADlib', title: 'nophead/NopSCADlib', spec: 'nophead/NopSCADlib' },
+      ].map(p => ({ label: p.label, title: p.title, onClick: () => { this.setState({ libSpec: p.spec }); this.fetchGithubLib(p.spec); } })),
       showParamsBtn: st.mode === 'advanced' || this.vars.length > 0,
       setBasic: () => this.setMode('basic'),
       setAdvanced: () => this.setMode('advanced'),

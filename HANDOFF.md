@@ -1,39 +1,48 @@
 # ===================================================================================================
-# BACKLOG — GitHub library import + BOSL2 preset + Thread menu (filed 2026-06-25) — [ ] NOT STARTED
-#   (Advanced-mode feature; depends on the Basic/Advanced toggle above)
+# HANDOFF — GitHub library import + engine grammar extensions — ✅ SHIPPED v0.40.0 (importer);
+#   BOSL2 full-render + Thread menu DEFERRED (engine recursion wall — see below)
+#   (Advanced-mode feature; depends on the Basic/Advanced toggle)
 # ===================================================================================================
-# FEATURE (restated): import OpenSCAD libraries straight from a **GitHub repo** so `use`/`include`
-# resolve against them. Ship a one-click **"Include BOSL2"** preset (Belfry OpenSCAD Library v2).
-# With BOSL2 loaded, expose a curated **Thread / Screws menu** that inserts BOSL2 calls
-# (`threaded_rod`, `screw`, `nut`, `screw_hole`, …). All of this lives in **Advanced mode** only.
+# SHIPPED v0.40.0 — "Library" button in the top bar (Advanced only) opens a GitHub importer popover:
+# type `owner/repo`, `owner/repo@tag`, or a full GitHub URL (tree/branch/subdir parsed), or click a
+# preset (BOSL2 / Round-Anything / NopSCADlib). It resolves the default branch, lists the repo tree
+# via the GitHub API, fetches every `.scad` over `raw.githubusercontent.com` (CORS-OK, ~0.4s for 56
+# files), and stores them in the existing include/use `_scadFiles` map keyed by lowercased BASENAME —
+# which is exactly what the engine resolver strips `<BOSL2/std.scad>` down to, so includes link with
+# NO engine resolver change. Loaded files appear in the existing top-left chip strip (remove ×) and
+# re-run the model. Verified: BelfrySCAD/BOSL2 → 67 files loaded; spec parsing handles URL + @ref +
+# subdir. Methods (Editor.dc.html): parseGithubSpec, resolveRef, fetchGithubLib + state libOpen/
+# libSpec/libBusy/libMsg + the popover UI + renderVals.
 #
-# WHY TRACTABLE: the Phase-10 include/use engine already resolves library files from an in-memory
-# `_scadFiles` store (`opts.files`); this feature just FILLS that store from GitHub instead of (only)
-# drag-drop, and adds curated insert UI on top.
+# ENGINE GRAMMAR EXTENSIONS (scad-engine.js, shipped same release, conformance still 113/113):
+#  - echo(...) / assert(...) in EXPRESSION position (`cond ? echo("…") v : v`) → parsePrimary emits
+#    echoexpr/assertexpr, evaluator runs the side effect then returns the trailing expr.
+#  - Interleaved comprehension elements in a vector literal: `[a, each list, if(c) d, for(i=r) i]`
+#    (previously only a comprehension at the START of `[…]` parsed). New parseVecItem/parseCompElem/
+#    parseVecItemBody; `case 'vector'` now expands `.c` (comp) items via runComp. Verified
+#    `[1, each [2,3], if(true) 4, for(i=[5:6]) i, 7]` → [1..7].
+#  - Calling a function-VALUE expression: `geom[5](anchor)`, curried `f(a)(b)` → parsePostfix emits
+#    `callexpr` on any non-ident callee; evaluator applies the `__fn`. Verified `f[0](5)`.
 #
-# KEY CAVEAT (must fix first): the current resolver keys files by **lowercased basename**. BOSL2 uses
-# subfolder include paths (`include <BOSL2/std.scad>`) and ~100 interdependent files, so the
-# include/use resolver + `_scadFiles` map must become **path-aware** (key by normalized relative
-# path, fall back to basename) before BOSL2 links. Engine `resolveImports` keying changes too.
+# WHY BOSL2 STILL WON'T RENDER (and the Thread menu is deferred): after the three grammar fixes,
+# BOSL2 parses much further but evaluation hits **"Maximum call stack size exceeded"** — BOSL2's
+# deep functional recursion overflows the engine's RECURSIVE tree-walking evaluator. That is an
+# ARCHITECTURAL limit: fixing it needs either (a) trampolining/CPS the evaluator (large), or (b) the
+# openscad-wasm fallback (the long-deferred Phase 10/13 escape hatch) to render BOSL2 at 100%
+# fidelity. A couple of niche parse gaps also remain (`(each a)` grouped comp element in parens;
+# attachable() never registers because attachments.scad still has one unparsed line). The importer
+# itself is fully shipped and works for libraries within the engine's coverage.
 #
-# BUILD ORDER:
-#  1. [ ] Path-aware library store: `_scadFiles` keyed by normalized rel-path (e.g. `bosl2/std.scad`)
-#         with basename fallback; engine `resolveImports` matches `<dir/file.scad>` against it.
-#  2. [ ] GitHub fetcher: given owner/repo[/ref], fetch the file tree (GitHub API or a pinned release
-#         tarball) and pull every `.scad` via `raw.githubusercontent.com` (CORS-OK) into the store.
-#         Show progress; cache in memory for the session. Handle rate limits / large repos gracefully.
-#  3. [ ] Library panel UI (Advanced only): "Add from GitHub…" (owner/repo/ref field) + an
-#         **Include BOSL2** preset button (pinned to a known-good tag). Lists loaded libs w/ remove.
-#  4. [ ] Thread / Screws insert menu (Advanced + BOSL2 loaded): curated parametric inserts that emit
-#         `include <BOSL2/std.scad> include <BOSL2/threading.scad>` (once) + the chosen call with a
-#         small param form (diameter, pitch, length, …). Renders read-only via the engine.
-#  5. [ ] Copy + version badge + VERSION bump; release snapshot.
-#
-# OPEN Q' for the user: (a) which libraries to preset beyond BOSL2 (e.g. NopSCADlib, Round-Anything)?
-#   (b) fetch live at runtime each session, or vendor a pinned BOSL2 snapshot into the project so it
-#   works offline? (Live = always current but needs network + risks rate limits; vendored = offline +
-#   deterministic but adds repo weight.) (c) how deep should the Thread menu go — just threaded rods,
-#   or full screws/nuts/washers? RECOMMEND: vendor a pinned BOSL2 for reliability; rods+screws+nuts v1.
+# NEXT STEPS for the Thread menu (pick one, ask the user):
+#  A. Native thread generator — emit engine-renderable OpenSCAD (helical thread via
+#     `linear_extrude(height, twist=…) translate([r,0]) polygon(profile)`, which the engine already
+#     renders) for a self-contained Thread/Screws menu that needs NO BOSL2. Lowest risk, ships now.
+#  B. openscad-wasm fallback — run advanced/unsupported programs (incl. BOSL2) through the real
+#     OpenSCAD compiled to WASM for 100% fidelity; then the BOSL2 Thread menu works as originally
+#     envisioned. Bigger lift; also closes the deferred Phase-13 differential-fidelity item.
+# DEFERRED: path-aware library store (NOT needed for BOSL2 — it's flat + basename strip works; only
+# needed if two libs collide on a basename). Live-fetch chosen over vendoring (fetch is ~0.4s, CORS
+# is fine, keeps repo light).
 # ===================================================================================================
 
 # ===================================================================================================
