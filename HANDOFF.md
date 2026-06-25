@@ -36,10 +36,18 @@
 #         shape inspector). SHIPPED v0.36.0.
 #
 # BACKLOG (filed 2026-06-25) — linear_extrude results get NO edge detection for fillet/chamfer.
-#   Slice-5 boolean-edge fillet/chamfer + the primitive edge tools don't enumerate the edges of a
-#   linear_extrude'd solid, so you can't round/chamfer the top rim or side edges of an extruded
-#   profile. Likely: extrude solids aren't fed through detectGroupEdges / don't expose pickable edge
-#   proxies. Investigate edgeProxy generation for isExtrude nodes + read-only evaluated extrude meshes.
+#   ✅ FIXED v0.37.0. Root cause: evalBrush's extrude branch never set node._rawGeo, so
+#   buildGroupEdges bailed (`if (!node._rawGeo) return`) → no edges, no pick proxies; and emitNode
+#   hard-coded `isExtrude(node) ? []` so even a stored treatment wouldn't codegen. Fix (Editor.dc.html):
+#   (1) extrude branch of evalBrush now sets `node._rawGeo = geom` and runs applyEdgeTreatBrush when
+#   treatments exist (before placement); (2) emitNode reads edgeTreatments for extrudes too, routing
+#   through emitGroupWithEdges → `difference(){ linear_extrude(...){profile} edge_fillet/chamfer }`.
+#   scanET already walked extrude (group) nodes so the edge_* module defs emit. Verified: a square
+#   linear_extrude exposes 12 edges (4 top rim + 4 bottom rim + 4 vertical corners), filleting a corner
+#   rebuilds the rounded solid and emits a clean difference that round-trips through ScadEngine.run with
+#   0 errors. KNOWN LIMIT (shared with boolean edges): a circle extrude's faceted side seams (>8°
+#   dihedral) register as extra pickable verticals; rims still chain into one edge. Nested extrudes
+#   (inside a boolean) don't expose edges — only top-level, same as boolean groups.
 # ===================================================================================================
 
 # ===================================================================================================

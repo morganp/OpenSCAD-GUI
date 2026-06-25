@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.36.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.37.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
@@ -1223,7 +1223,14 @@ class Component extends DCLogic {
     if (this.isExtrude(node)) {
       const geom = this.extrudeGeometry(node);
       if (!geom) return null;
-      const b = new Brush(geom);
+      let b = new Brush(geom);
+      b.updateMatrixWorld(true);
+      // Slice 5 for extrudes: stash the raw extruded geometry so buildGroupEdges can detect its
+      // rim / side feature edges, then apply any fillet/chamfer treatments before placement.
+      node._rawGeo = geom;
+      if (node.edgeTreatments && Object.keys(node.edgeTreatments).length) {
+        try { b = this.applyEdgeTreatBrush(b, node); } catch (e) { console.warn('extrude edge treatment failed', e); }
+      }
       const gp = node.pos || [0, 0, 0];
       b.position.set(gp[0], gp[1], gp[2]); this.setEuler(b, node.rot);
       b.updateMatrixWorld(true);
@@ -3450,7 +3457,7 @@ class Component extends DCLogic {
         if (node.op === 'rotate_extrude') header = `rotate_extrude(angle = ${this.fmt(d.angle == null ? 360 : d.angle)}, $fn = ${this.gfn()})`;
         else { const tw = d.twist || 0, esc = (d.escale == null ? 1 : d.escale), dyn = (tw !== 0 || esc !== 1); header = `linear_extrude(height = ${this.fmt(d.height == null ? 30 : d.height)}${tw ? `, twist = ${this.fmt(tw)}` : ''}${esc !== 1 ? `, scale = ${this.fmt(esc)}` : ''}${dyn ? `, slices = ${Math.max(8, Math.ceil(Math.abs(tw) / 6))}` : ''})`; }
       } else header = node.op + '()';
-      const ets = this.isExtrude(node) ? [] : Object.values(node.edgeTreatments || {});
+      const ets = Object.values(node.edgeTreatments || {});
       if (!ets.length) {
         out.push(pad + header + ' {');
         for (const c of node.children) this.emitNode(c, level + 1, out);
