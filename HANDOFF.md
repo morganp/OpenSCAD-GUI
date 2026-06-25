@@ -37,32 +37,21 @@
 # ===================================================================================================
 
 # ===================================================================================================
-# BACKLOG — Basic / Advanced authoring mode (filed 2026-06-25) — [ ] NOT STARTED
+# BACKLOG — Basic / Advanced authoring mode (filed 2026-06-25) — ✅ SHIPPED v0.39.0
 # ===================================================================================================
-# FEATURE (restated): a global **Basic | Advanced** mode toggle in the top bar.
-#   - BASIC (default): the editor shows only 3D solids. The Add-shape flyout's `2D · for extrude`
-#     section is hidden, and the "Linear extrude" / "Rotate extrude" actions (2D shape panel buttons
-#     + tree context-menu items) are hidden. Keeps newcomers in a pure solid-modeling workflow.
-#   - ADVANCED: reveals the 2D primitives (circle / square / polygon) and the extrude operations.
-#
-# MENU STRUCTURE DECISION (answer to "should the shape menu be 3D, + a 2D menu for extrusions?"):
-#   YES. The current Add-shape flyout stays the **3D menu** (cuboid/cylinder/sphere/cone/pyramid/
-#   torus/tube/wedge). The existing `2D · for extrude` flyout section becomes the **2D menu**, shown
-#   only in Advanced. 2D shapes only exist to feed `linear_extrude` / `rotate_extrude`, so they live
-#   next to / gated with the extrude actions. One toggle gates all 2D+extrude affordances.
-#
-# BUILD ORDER (Editor.dc.html):
-#  1. [ ] State `mode: 'basic'` (persist if other prefs persist). Top-bar segmented Basic|Advanced.
-#  2. [ ] Add-shape flyout: wrap the `2D · for extrude` section in `mode === 'advanced'`.
-#  3. [ ] Shape panel: hide the Linear/Rotate extrude buttons in Basic; tree context menu: gate the
-#         two `extrudeSelection` items on Advanced (the `nIs2D` block).
-#  4. [ ] Edge case: a loaded .scad / code that already contains 2D+extrudes still renders (engine
-#         path is unaffected) — Basic only hides AUTHORING affordances, never hides existing geometry
-#         or the read-only evaluated view. Optionally auto-switch to Advanced when such a doc loads.
-#  5. [ ] Copy + version badge + VERSION bump; release snapshot.
-#
-# OPEN Q' for the user: should loading a doc that already uses 2D/extrudes auto-flip to Advanced, or
-#   just render read-only while the toggle stays on Basic? (Recommend: auto-flip to Advanced.)
+# A top-bar **Basic | Advanced** segmented toggle (persisted to localStorage, defaults Basic). BASIC
+# hides the Parameters toolbar button, the Add-shape flyout's `2D · for extrude` section, and the
+# extrude actions (2D shape-panel "Extrude to 3D" buttons + the tree context-menu Linear/Rotate
+# extrude items). ADVANCED reveals all of it. Anything that already EXISTS stays editable: the
+# Parameters button still shows in Basic when `this.vars.length > 0`, and a loaded program's geometry
+# always renders (Basic only hides AUTHORING affordances, never geometry or the read-only view).
+# Touch-points (Editor.dc.html): state `mode`; `setMode`; renderVals `advancedMode`/`showParamsBtn`/
+# `sshShowExtrude`/`setBasic`/`setAdvanced`/`basicTabStyle`/`advTabStyle`; template gates on the
+# params button, the flyout 2D section, the shape-panel extrude block; ctx-menu `nIs2D && advanced`.
+# DEFERRED: auto-flip to Advanced on loading a 2D/extrude/param doc (chose "keep params button when
+# params exist" instead — simpler, no surprise mode switches).
+# ===================================================================================================
+
 # ===================================================================================================
 
 # ===================================================================================================
