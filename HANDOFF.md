@@ -1,4 +1,22 @@
 # ===================================================================================================
+# BACKLOG — Undo (≥1 level) (filed 2026-06-26) — ✅ SHIPPED v0.44.0 (multi-level)
+# ===================================================================================================
+# Cmd/Ctrl-Z = undo, Shift-Cmd/Ctrl-Z (or Ctrl-Y) = redo, plus toolbar undo/redo buttons (disabled
+# when their stack is empty). Snapshots the CODE STRING (the single source of truth), so it works
+# uniformly across GUI authoring AND advanced read-only edits, and across the boundary between them
+# (verified: GUI add → generate thread (advanced) → undo returns to the GUI authoring state).
+# IMPLEMENTATION (Editor.dc.html):
+#  - Stacks `_undo`/`_redo` (cap 40) + `_pushHist(prev)` (dedupes + 500ms coalescing so a gizmo
+#    drag's stream of regens collapses to one entry) + `_restoreCode()` + `undo`/`redo`.
+#  - GUI chokepoint: regenCode() records the pre-edit code. Rebuild paths that ALSO call regenCode
+#    (hydrateFromSnapshot, runCode-simple-rebuild) set `_suppressHist=true` so they don't self-record;
+#    regenCode clears the flag after reading it. runAdvanced clears it too (it never calls regenCode).
+#  - Advanced mutations bypass regenCode (they set state.code directly): _pushHist() added before the
+#    5 code-overwrite sites (push/pull add, revolve, read-only delete, transform, combine) + thread gen.
+#  - Code-editor typing keeps the browser's native textarea undo (onKey early-returns inside inputs).
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — Bolts + thread-as-boolean-tool + CSG uv fix — ✅ SHIPPED v0.43.0
 # ===================================================================================================
 # 1) CSG uv BUG FIXED (the one filed under v0.42.0): ringsToSolid() now zero-fills a `uv` attribute on
@@ -54,28 +72,6 @@
 # ===================================================================================================
 
 # ===================================================================================================
-# BACKLOG — Undo (≥1 level) (filed 2026-06-26) — [ ] NOT STARTED
-# ===================================================================================================
-# FEATURE: at least a single-level undo (Cmd/Ctrl-Z), ideally a small history stack. The model's
-# single source of truth is the SCAD code string (`state.code` / `_codeArea.value`) — every mutation
-# (add shape, transform, delete, combine, push/pull, extrude, GUI param edits → regenCode) ends by
-# setting `code` and calling runCode()/rebuild. So undo can be a snapshot stack of the code string
-# (+ enough selection context to re-focus). Build order:
-#  1. [ ] history stack `_undo = []` (cap ~25) + `_redo = []`. Push the PRE-mutation code snapshot at
-#         the start of each mutating action (one helper `pushHistory()` from the mutation entry
-#         points: addShape/pickShape commit, applyMove/afterMove, delete*, combine/group,
-#         applyPushPull/applyRevolve, extrudeSelection, param add/rename/value). Coalesce rapid
-#         numeric-field drags into one entry (only push on first change since last commit).
-#  2. [ ] Cmd/Ctrl-Z → pop _undo, push current onto _redo, load snapshot via the open-file path
-#         (`_codeArea.value = snap; setState({code}, runCode)`); Shift-Cmd-Z / Ctrl-Y → redo.
-#  3. [ ] Small toolbar undo/redo buttons (disabled when stacks empty) + a status flash.
-#  4. [ ] GUI authoring tree re-hydrates from restored code (rebuildFromCode already exists for
-#         simple programs); advanced/read-only snapshots restore read-only.
-# NOTE: snapshotting the code string is O(text) and dead-simple vs. diffing the live three.js scene —
-# strongly prefer it. The set-code→runCode→rebuild infra is already battle-tested by open-file,
-# delete, combine, push/pull, so undo is mostly plumbing + choosing the right push points.
-# ===================================================================================================
-
 # ===================================================================================================
 # HANDOFF — GitHub library import + engine grammar extensions — ✅ SHIPPED v0.40.0 (importer);
 #   BOSL2 full-render + Thread menu DEFERRED (engine recursion wall — see below)

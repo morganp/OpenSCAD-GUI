@@ -61,13 +61,20 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.43.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.44.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
       <button onClick="{{ setAdvanced }}" title="Advanced — parameters, 2D shapes & extrudes" style="{{ advTabStyle }}">Advanced</button>
     </div>
     <div style="display:flex;align-items:center;gap:5px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:6px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
+      <button onClick="{{ undo }}" title="Undo (\u2318/Ctrl-Z)" style="{{ undoBtnStyle }}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M6 4.5 3 7.5l3 3M3.2 7.5H10a3 3 0 0 1 0 6H7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button onClick="{{ redo }}" title="Redo (\u21e7\u2318/Ctrl-Z)" style="{{ redoBtnStyle }}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M10 4.5 13 7.5l-3 3M12.8 7.5H6a3 3 0 0 0 0 6h2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div style="width:1px;height:18px;background:#2C3037;margin:0 1px;"></div>
       <button onClick="{{ openFile }}" style="display:flex;align-items:center;gap:7px;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;" style-hover="background:#262A30;">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.7l1.2 1.5H12.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12V4.5Z" stroke="#9AA3AE" stroke-width="1.2"/></svg>
         Open
@@ -1878,6 +1885,7 @@ class Component extends DCLogic {
     const stmt = `multmatrix([${rows.join(', ')}])\n  rotate_extrude(angle = ${F(angle)}, $fn = ${this.gfn()})\n  polygon(points = [${pts.join(', ')}], paths = [${paths.join(', ')}]);`;
     const code = ((this._codeArea ? this._codeArea.value : this.state.code) || '').replace(/\s+$/, '');
     const next = code + '\n\n// push/pull revolve (' + F(angle) + '\u00b0)\n' + stmt + '\n';
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = next;
     this.setState({ code: next }, () => this.runCode());
     this.flashStatus('Revolved ' + F(angle) + '\u00b0 \u2014 read-only');
@@ -2036,6 +2044,7 @@ class Component extends DCLogic {
     } else {
       next = code + '\n\n// push/pull add (' + this.fmt(dist) + 'mm)\n' + prism + '\n';
     }
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = next;
     this.setState({ code: next }, () => this.runCode());
     this.flashStatus((inward ? 'Cut ' : 'Added ') + this.fmt(Math.abs(dist)) + 'mm \u2014 read-only');
@@ -3175,6 +3184,7 @@ class Component extends DCLogic {
     const kept = lines.filter((_, i) => (i + 1) < start || (i + 1) > end);
     let next = kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
     if (!next.trim()) next = '// (empty)\n';
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = next;
     this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null, code: next }, () => this.runCode());
     this.flashStatus('Deleted \u201c' + (row.label || 'item') + '\u201d');
@@ -3231,6 +3241,7 @@ class Component extends DCLogic {
     const block = ['// @scs-xform', 'multmatrix(' + this.m4ToScad(M) + ') {', ...indented, '}'];
     const next = lines.slice(0, repStart).concat(block, lines.slice(repEnd + 1)).join('\n');
     this._roReselectTop = row.topIndex;       // keep the gizmo on this item after re-run
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = next;
     this.setState({ code: next }, () => this.runCode());
     this.flashStatus('Transformed \u201c' + (row.label || 'item') + '\u201d');
@@ -3285,6 +3296,7 @@ class Component extends DCLogic {
     // the combined block becomes the top-level item at the index = how many top-level statements
     // precede insertAt; approximate by reselecting the topmost original topIndex after re-run.
     this._roReselectTop = Math.min(...rows.map(r => r.topIndex));
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = next;
     this.setState({ selectedShapeId: null, selectedIds: [], ctxMenu: null, code: next }, () => this.runCode());
     this.flashStatus('Combined ' + rows.length + ' items as ' + op);
@@ -3525,11 +3537,54 @@ class Component extends DCLogic {
     return '[' + rows.map(r => '[' + r.map(n => this.fmt(n)).join(', ') + ']').join(', ') + ']';
   }
 
+  // ============ UNDO / REDO (snapshot the code string — the single source of truth) ============
+  _undo = []; _redo = []; _suppressHist = false; _lastHistAt = 0;
+  _curCode() { return (this._codeArea ? this._codeArea.value : this.state.code) || ''; }
+  _pushHist(prev) {
+    if (this._suppressHist) return;
+    const c = prev != null ? prev : this._curCode();
+    if (this._undo.length && this._undo[this._undo.length - 1] === c) return;
+    const now = Date.now();
+    // coalesce rapid changes (e.g. a gizmo drag's stream of regens) into one entry
+    if (now - this._lastHistAt < 500 && this._undo.length) { this._lastHistAt = now; return; }
+    this._lastHistAt = now;
+    this._undo.push(c); if (this._undo.length > 40) this._undo.shift();
+    this._redo = [];
+    this.setState({ canUndo: true, canRedo: false });
+  }
+  _restoreCode(code) {
+    this._suppressHist = true;                 // cleared by the rebuild path (regenCode / runAdvanced)
+    if (this._codeArea) this._codeArea.value = code;
+    this.setState({ code, ctxMenu: null }, () => this.runCode());
+  }
+  undo = () => {
+    if (!this._undo.length) { this.flashStatus('Nothing to undo'); return; }
+    const cur = this._curCode();
+    const prev = this._undo.pop();
+    this._redo.push(cur); if (this._redo.length > 40) this._redo.shift();
+    this._restoreCode(prev);
+    this.flashStatus('Undo');
+    this.setState({ canUndo: this._undo.length > 0, canRedo: true });
+  };
+  redo = () => {
+    if (!this._redo.length) { this.flashStatus('Nothing to redo'); return; }
+    const cur = this._curCode();
+    const next = this._redo.pop();
+    this._undo.push(cur); if (this._undo.length > 40) this._undo.shift();
+    this._restoreCode(next);
+    this.flashStatus('Redo');
+    this.setState({ canUndo: true, canRedo: this._redo.length > 0 });
+  };
+
   regenCode() {
+    const prev = this.state.code;
     const code = this._programText();
     const full = code + '\n' + this.treeMarker() + '\n';
     this.setState({ code: full, dirty: false });
     if (this._codeArea && document.activeElement !== this._codeArea) this._codeArea.value = full;
+    // record history for GUI edits; rebuild paths (hydrate / runCode-simple) set _suppressHist
+    if (this._suppressHist) { this._suppressHist = false; }
+    else if (prev != null && prev !== full) this._pushHist(prev);
   }
 
   // ---- authoring-tree snapshot embedded in the saved .scad as a trailing comment.
@@ -3607,6 +3662,7 @@ class Component extends DCLogic {
     for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
     this.clampAllTreatments();
     this.clearEdge();
+    this._suppressHist = true;        // rebuild from code, not a user edit — don't record history
     this.setState({ fn, selectedShapeId: null, selectedIds: [], readOnly: false, errorLines: [] }, () => {
       this.rebuildScene(); this.updateGizmo();
       this.syncVarsState(); this.syncShapesState(); this.regenCode();
@@ -3830,6 +3886,7 @@ class Component extends DCLogic {
     const vmap = this.varMap();
     for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
     this.clearEdge();
+    this._suppressHist = true;        // rebuilt from code text, not a user GUI edit
     this.setState({ selectedShapeId: null, selectedIds: [], readOnly: false, errorLines: [] }, () => {
       this.rebuildScene(); this.updateGizmo();
       this.syncVarsState(); this.syncShapesState(); this.regenCode();
@@ -3910,6 +3967,7 @@ class Component extends DCLogic {
   }
 
   runAdvanced(txt) {
+    this._suppressHist = false;       // advanced render never calls regenCode; clear any restore guard
     this._readsViewport = /\$vp[rtdf]/.test(txt);
     const res = window.ScadEngine.run(txt, {
       $fn: this.state.fn,
@@ -5194,6 +5252,7 @@ union() {
   }
   insertThread = () => {
     const code = this.buildThreadScad();
+    this._pushHist();
     if (this._codeArea) this._codeArea.value = code;
     this.setState({ code, threadOpen: false }, () => this.runCode());
     const t = this.state.thread;
@@ -5889,6 +5948,8 @@ union() {
   onKey(e) {
     if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
     const k = e.key.toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); if (e.shiftKey) this.redo(); else this.undo(); return; }
+    if ((e.metaKey || e.ctrlKey) && k === 'y') { e.preventDefault(); this.redo(); return; }
     if ((e.metaKey || e.ctrlKey) && k === 'd') { e.preventDefault(); this.duplicateSelected(); return; }
     if (e.metaKey || e.ctrlKey) return;
     if (k === 'v') this.pickSelect();
@@ -6170,6 +6231,9 @@ union() {
       btnDelete: this.toolBtn(false),
       btnParams: this.toolBtn(st.paramsOpen),
       advancedMode: st.mode === 'advanced',
+      undo: this.undo, redo: this.redo,
+      undoBtnStyle: `display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:${this._undo.length ? '#C7CCD4' : '#454B54'};padding:6px 8px;border-radius:7px;cursor:${this._undo.length ? 'pointer' : 'default'};` + (this._undo.length ? '' : 'pointer-events:none;'),
+      redoBtnStyle: `display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:${this._redo.length ? '#C7CCD4' : '#454B54'};padding:6px 8px;border-radius:7px;cursor:${this._redo.length ? 'pointer' : 'default'};` + (this._redo.length ? '' : 'pointer-events:none;'),
       libOpen: st.libOpen, libSpec: st.libSpec, libMsg: st.libMsg, hasLibMsg: !!st.libMsg,
       toggleLib: this.toggleLib, closeLib: this.closeLib, setLibSpec: this.setLibSpec, onLibKey: this.onLibKey,
       fetchLib: () => this.fetchGithubLib(),
