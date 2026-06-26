@@ -1,4 +1,27 @@
 # ===================================================================================================
+# BACKLOG — Undo (≥1 level) (filed 2026-06-26) — [ ] NOT STARTED
+# ===================================================================================================
+# FEATURE: at least a single-level undo (Cmd/Ctrl-Z), ideally a small history stack. The model's
+# single source of truth is the SCAD code string (`state.code` / `_codeArea.value`) — every mutation
+# (add shape, transform, delete, combine, push/pull, extrude, GUI param edits → regenCode) ends by
+# setting `code` and calling runCode()/rebuild. So undo can be a snapshot stack of the code string
+# (+ enough selection context to re-focus). Build order:
+#  1. [ ] history stack `_undo = []` (cap ~25) + `_redo = []`. Push the PRE-mutation code snapshot at
+#         the start of each mutating action (one helper `pushHistory()` from the mutation entry
+#         points: addShape/pickShape commit, applyMove/afterMove, delete*, combine/group,
+#         applyPushPull/applyRevolve, extrudeSelection, param add/rename/value). Coalesce rapid
+#         numeric-field drags into one entry (only push on first change since last commit).
+#  2. [ ] Cmd/Ctrl-Z → pop _undo, push current onto _redo, load snapshot via the open-file path
+#         (`_codeArea.value = snap; setState({code}, runCode)`); Shift-Cmd-Z / Ctrl-Y → redo.
+#  3. [ ] Small toolbar undo/redo buttons (disabled when stacks empty) + a status flash.
+#  4. [ ] GUI authoring tree re-hydrates from restored code (rebuildFromCode already exists for
+#         simple programs); advanced/read-only snapshots restore read-only.
+# NOTE: snapshotting the code string is O(text) and dead-simple vs. diffing the live three.js scene —
+# strongly prefer it. The set-code→runCode→rebuild infra is already battle-tested by open-file,
+# delete, combine, push/pull, so undo is mostly plumbing + choosing the right push points.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — GitHub library import + engine grammar extensions — ✅ SHIPPED v0.40.0 (importer);
 #   BOSL2 full-render + Thread menu DEFERRED (engine recursion wall — see below)
 #   (Advanced-mode feature; depends on the Basic/Advanced toggle)
