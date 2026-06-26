@@ -1,4 +1,29 @@
 # ===================================================================================================
+# HANDOFF — v0.45.1 bug fixes (evaluated-tree drop, Run hidden) + menu plan
+# ===================================================================================================
+# FIX 1 — "evaluated view keeps dropping all components": adding a GUI primitive (Add cuboid, etc.)
+# while in READ-ONLY/advanced view called addPrimitive → this.tree.push + regenCode, but in read-only
+# this.tree IS the evaluated geom tree, so regenCode serialized garbage and WIPED the threads. FIX:
+# addPrimitive now detects readOnly and routes to appendPrimitiveCode() — emits the shape as OpenSCAD
+# (emitNode) and APPENDS it to the document (tagged [scs-part]) + re-runs, so it joins the evaluated
+# parts instead of wiping them. Verified: thread (1 row) + Add cuboid → 2 rows, both in code, still RO.
+# FIX 2 — render robustness: finishAdvanced wrapped the whole realize loop in ONE try/catch, so a
+# single failing part (heavy CSG) aborted ALL parts. Now each node has its OWN try/catch.
+# FIX 3 — "Run button hidden in advanced view": the code-drawer header (model.scad / Run / Copy) sat
+# at top:0 and was COVERED by the top toolbar's right end (Import mesh). FIX: drawer dropped to
+# top:64px (below the toolbar); read-only badge moved to top:74 / right:436-when-open so it clears
+# both. Thread popover got max-height + overflow-y. Verified Run is no longer covered.
+#
+# ===== MENU ACCESSIBILITY PLAN (the "larger menus need a better plan" request — phased, not built) =====
+#  1. [ ] Condense the top toolbar: collapse Open/Save/Export/Import into a "File ▾" menu and
+#         Library/Thread into an "Insert ▾"/"Hardware ▾" menu — frees ~400px of top strip.
+#  2. [ ] Make the Library/Thread popovers DRAGGABLE (reuse panelPos + startPanelDrag).
+#  3. [ ] Make the Model Tree panel resizable (bottom-edge drag → stored height).
+#  4. [ ] Move the read-only badge into the drawer header (chip next to model.scad).
+#  5. [ ] Surface Delete for the current selection globally (not only via a Model-Tree selection).
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — Thread/bolt polish (chamfer lead-in, hole cutter, washer, hex nut) + APPEND fix — ✅ SHIPPED v0.45.0
 # ===================================================================================================
 # APPEND FIX (the reported bug): insertThread now READS the current code and APPENDS the new part
