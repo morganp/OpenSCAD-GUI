@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.44.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.45.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -136,12 +136,12 @@
     <div style="position:absolute;top:108px;left:16px;z-index:45;width:360px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M5 1.5h6M5 14.5h6M5.5 1.5c0 2 5 2.4 5 4.3 0 1.9-5 2.3-5 4.2 0 1.9 5 2.3 5 3" stroke="#9CC2F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">ISO metric thread</span>
+        <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">Thread &amp; hardware</span>
         <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9CC2F5;">{{ threadDesignation }}</span>
         <button onClick="{{ closeThread }}" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#C7CCD4;">×</button>
       </div>
 
-      <div style="display:flex;gap:6px;margin-bottom:11px;">
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px;">
         <button onClick="{{ setThreadRod }}" style="{{ threadRodStyle }}">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="1.5" width="5" height="13" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 4h5M5.5 6.4h5M5.5 8.8h5M5.5 11.2h5" stroke="currentColor" stroke-width="1"/></svg>
           Rod
@@ -154,6 +154,14 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4.5 2.7h7l3 5.3-3 5.3h-7l-3-5.3 3-5.3Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.8" stroke="currentColor" stroke-width="1.2"/></svg>
           Nut
         </button>
+        <button onClick="{{ setThreadWasher }}" style="{{ threadWasherStyle }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2.6" stroke="currentColor" stroke-width="1.2"/></svg>
+          Washer
+        </button>
+        <button onClick="{{ setThreadHole }}" style="{{ threadHoleStyle }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2.5 5.5h11M2.5 5.5v7h11v-7M5 5.5v-2h6v2M5.5 8.5h5M6.3 11h3.4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Hole
+        </button>
       </div>
 
       <sc-if value="{{ threadIsBolt }}" hint-placeholder-val="{{ false }}">
@@ -164,6 +172,34 @@
             <button onClick="{{ setHeadSocket }}" style="{{ headSocketStyle }}">Socket cap</button>
             <button onClick="{{ setHeadCsk }}" style="{{ headCskStyle }}">Countersunk</button>
           </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ threadCanChamfer }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ toggleChamfer }}" style="{{ chamferStyle }}">
+          <span style="{{ chamferDot }}"></span>
+          Chamfered lead-in {{ chamferState }}
+        </button>
+      </sc-if>
+
+      <sc-if value="{{ threadIsNut }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:11px;">
+          <div style="font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#6B7280;margin-bottom:5px;">Outer shape</div>
+          <div style="display:flex;gap:5px;">
+            <button onClick="{{ setNutRound }}" style="{{ nutRoundStyle }}">Round</button>
+            <button onClick="{{ setNutHex }}" style="{{ nutHexStyle }}">Hex</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ threadIsHole }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:11px;">
+          <div style="font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#6B7280;margin-bottom:5px;">Recess for head</div>
+          <div style="display:flex;gap:5px;">
+            <button onClick="{{ setHoleCbore }}" style="{{ holeCboreStyle }}">Counterbore</button>
+            <button onClick="{{ setHoleCsink }}" style="{{ holeCsinkStyle }}">Countersink</button>
+          </div>
+          <div style="font-size:9.5px;color:#5B616B;margin-top:6px;line-height:1.4;">A cutter solid \u2014 subtract it from your part: <span style="font-family:'IBM Plex Mono',monospace;color:#8A9099;">difference(){ part; cutter; }</span></div>
         </div>
       </sc-if>
 
@@ -830,7 +866,7 @@ class Component extends DCLogic {
     libBusy: false,        // a fetch is in flight
     libMsg: '',            // importer status / error line
     threadOpen: false,     // Thread generator popover
-    thread: { kind: 'rod', size: 'M12', fine: false, pitch: 1.75, len: 16, lh: false, tol: 0.0, head: 'hex' },
+    thread: { kind: 'rod', size: 'M12', fine: false, pitch: 1.75, len: 16, lh: false, tol: 0.0, head: 'hex', chamfer: false, nutHex: false, hole: 'counterbore' },
     ppMode: 'linear',         // push/pull sub-mode: 'linear' | 'revolve'
     shapes: [],            // serializable mirror for the tree
     selectedShapeId: null,
@@ -5173,34 +5209,32 @@ class Component extends DCLogic {
     this.setState({ thread: t });
   }
   threadNominal() { return parseFloat((this.state.thread.size || 'M12').replace(/^M/i, '')) || 12; }
-  buildThreadScad() {
-    const t = this.state.thread, d = this.threadNominal(), p = t.pitch, len = t.len, internal = t.kind === 'nut';
+  // Assemble a self-contained, appendable part. Reads the CURRENT code so it APPENDS (offset in +X)
+  // instead of replacing, and de-dupes the helper modules.
+  buildThreadScad(cur) {
+    cur = cur != null ? cur : ((this._codeArea ? this._codeArea.value : this.state.code) || '');
+    const t = this.state.thread, d = this.threadNominal(), p = t.pitch, len = t.len, lh = t.lh, tol = t.tol;
     const F = (n) => (Math.round(n * 1000) / 1000).toString();
-    const kindLabel = t.kind === 'bolt' ? 'bolt (' + t.head + ' head)' : t.kind === 'nut' ? 'internal (nut)' : 'external (rod)';
-    const desc = t.size + ' \u00d7 ' + F(p) + ' \u2014 ' + kindLabel + ', ' + (t.lh ? 'left' : 'right') + '-hand';
-    // ISO-ish head defaults derived from nominal diameter
-    const headAF = +(1.5 * d).toFixed(2);     // hex across-flats
+    const partN = (cur.match(/\[scs-part\]/g) || []).length;
+    const off = partN === 0 ? 0 : partN * Math.max(30, Math.round(3.2 * d));
+    const T = (s) => `translate([${off}, 0, 0]) ${s}`;
+    const seg = 64;
+    const c = F(Math.max(0.4, 0.6 * p));          // chamfer size
+    const headAF = +(1.5 * d).toFixed(2);
     const headDia = t.head === 'countersunk' ? +(2 * d).toFixed(2) : +(1.5 * d).toFixed(2);
     const headH = t.head === 'countersunk' ? +(0.5 * d).toFixed(2) : t.head === 'socket' ? +(1.0 * d).toFixed(2) : +(0.65 * d).toFixed(2);
     const headParam = t.head === 'hex' ? headAF : headDia;
+    const cos30 = Math.cos(Math.PI / 6);
 
-    const common = `// \u2500\u2500\u2500 ISO metric thread \u00b7 ${desc} \u2500\u2500\u2500
-// Generated by SCAD Studio \u2014 fully parametric, edit the values below.
-nominal_d = ${F(d)};      // nominal major diameter (mm)
-pitch     = ${F(p)};      // thread pitch (mm)
-length    = ${F(len)};      // threaded length (mm)
-fit_tol   = ${F(t.tol)};      // radial fit clearance (mm) \u2014 larger = looser fit
-left_hand = ${t.lh};    // thread direction
-seg       = 64;      // facets per revolution
-
-// V-tooth = polar profile swept by linear_extrude twist (a circle is twist-invariant, so a nut's
-// outer wall stays straight while the bore threads). depth = 0.6134*p is the ISO engagement depth.
+    // ---- helper modules (each emitted only if not already in the document) ----
+    const need = (sig, block) => cur.includes(sig) ? '' : block;
+    const HELP_THREAD = need('module iso_thread', `// V-tooth swept by linear_extrude twist (a circle is twist-invariant, so a nut's wall stays
+// straight while the bore threads). depth = 0.6134*p is the ISO engagement depth.
 function vee(Rmin, Rmaj, beta, n) =
   concat(
     [ for (i = [0:n])   let(a = -beta + 2*beta*i/n, r = Rmaj - (Rmaj-Rmin)*abs(a)/beta) [r*cos(a), r*sin(a)] ],
     [ for (i = [1:n-1]) let(a =  beta + (360-2*beta)*i/n) [Rmin*cos(a), Rmin*sin(a)] ]
   );
-
 module iso_thread(d, p, len, tol=0, internal=false, lh=false, wall=3, seg=64, beta=95) {
   depth = 0.6134 * p;
   Rmaj  = d/2 + (internal ? tol : -tol);
@@ -5213,50 +5247,94 @@ module iso_thread(d, p, len, tol=0, internal=false, lh=false, wall=3, seg=64, be
     op = [ for (i = [0:seg-1]) let(a = 360*i/seg) [Ro*cos(a), Ro*sin(a)] ];
     ip = vee(Rmin, Rmaj, beta, 24);
     linear_extrude(height=len, twist=dir*360*turns, slices=slices, convexity=10)
-      polygon(points = concat(op, ip),
-              paths  = [ [ for (i = [0:len(op)-1]) i ], [ for (i = [0:len(ip)-1]) len(op)+i ] ]);
+      polygon(points = concat(op, ip), paths = [ [ for (i=[0:len(op)-1]) i ], [ for (i=[0:len(ip)-1]) len(op)+i ] ]);
   } else {
     linear_extrude(height=len, twist=dir*360*turns, slices=slices, convexity=10)
       polygon(vee(Rmin, Rmaj, beta, 24));
   }
 }
-`;
-    if (t.kind === 'nut') {
-      return common + `wall = 3;       // nut wall thickness\n\niso_thread(nominal_d, pitch, length, fit_tol, true, left_hand, wall, seg);\n`;
-    }
-    if (t.kind === 'bolt') {
-      return common + `head_type = "${t.head}";   // "hex" | "socket" | "countersunk"
-head_size = ${F(headParam)};   // hex across-flats, or head diameter
-head_h    = ${F(headH)};
-shank     = 0;          // unthreaded length below the thread (0 = fully threaded)
-
-module bolt_head(type, hs, hh, d, seg) {
+// chamfered lead-in: clip the crests near both ends to a 45\u00b0 cone (intersection)
+module chamfered_thread(d, p, len, tol, lh, c, seg) {
+  Rmaj = d/2 - tol;
+  intersection() {
+    iso_thread(d, p, len, tol, false, lh, 3, seg);
+    rotate_extrude($fn=seg) polygon([[0,0],[Rmaj-c,0],[Rmaj,c],[Rmaj,len-c],[Rmaj-c,len],[0,len]]);
+  }
+}
+`);
+    const HELP_BOLT = need('module bolt_head', `module bolt_head(type, hs, hh, d, seg) {
   if (type == "hex") cylinder(h=hh, r=hs/2/cos(30), $fn=6);
-  else if (type == "socket")
-    difference() {
-      cylinder(h=hh, r=hs/2, $fn=seg);
-      translate([0,0,hh*0.45]) cylinder(h=hh, r=0.55*d/2/cos(30)*1.6, $fn=6);
-    }
-  else  // countersunk: flat-topped cone, wide at the head face
-    cylinder(h=hh, r1=d/2, r2=hs/2, $fn=seg);
+  else if (type == "socket") difference() { cylinder(h=hh, r=hs/2, $fn=seg); translate([0,0,hh*0.45]) cylinder(h=hh, r=0.42*d, $fn=6); }
+  else cylinder(h=hh, r1=d/2, r2=hs/2, $fn=seg);
 }
+`);
+    const HELP_WASHER = need('module washer', `function ring2(r, n) = [ for (i=[0:n-1]) let(a=360*i/n) [r*cos(a), r*sin(a)] ];
+module washer(od, id, th, seg) {
+  linear_extrude(height=th)
+    polygon(points = concat(ring2(od/2, seg), ring2(id/2, seg)),
+            paths  = [ [ for (i=[0:seg-1]) i ], [ for (i=[0:seg-1]) seg+i ] ]);
+}
+`);
+    const HELP_HOLE = need('module hole_cutter', `// clearance-hole cutter: subtract from your part. counterbore = flat recess (socket/hex head),
+// countersink = conical recess (flat head). One rotate_extrude, no boolean to build it.
+module hole_cutter(d, len, kind, headd, depth, tol, seg) {
+  rh = d/2 + tol;
+  if (kind == "counterbore") rotate_extrude($fn=seg) polygon([[0,0],[rh,0],[rh,len-depth],[headd/2,len-depth],[headd/2,len],[0,len]]);
+  else rotate_extrude($fn=seg) polygon([[0,0],[rh,0],[rh,len-depth],[headd/2,len],[0,len]]);
+}
+`);
 
-union() {
-  bolt_head(head_type, head_size, head_h, nominal_d, seg);
-  if (shank > 0) translate([0,0,head_h]) cylinder(h=shank, r=nominal_d/2 - fit_tol, $fn=seg);
-  translate([0,0,head_h + shank]) iso_thread(nominal_d, pitch, length, fit_tol, false, left_hand, 3, seg);
-}
-`;
+    // ---- the part itself ----
+    let desc, helpers, call;
+    if (t.kind === 'washer') {
+      desc = t.size + ' washer';
+      helpers = HELP_WASHER;
+      call = T(`washer(${F(2 * d)}, ${F(d + 2 * tol)}, ${F(Math.max(1, 0.2 * d))}, ${seg});`);
+    } else if (t.kind === 'hole') {
+      const depth = t.hole === 'counterbore' ? +(1.0 * d).toFixed(2) : +(0.5 * d).toFixed(2);
+      const hd = t.hole === 'counterbore' ? +(1.7 * d).toFixed(2) : +(2.0 * d).toFixed(2);
+      const ht = tol > 0 ? tol : 0.4;             // a hole wants clearance even at tol 0
+      desc = t.size + ' ' + t.hole + ' hole cutter';
+      helpers = HELP_HOLE;
+      call = `// subtract this from your part:  difference() { your_part(); <the line below>; }\n` + T(`hole_cutter(${F(d)}, ${F(len)}, "${t.hole}", ${F(hd)}, ${F(depth)}, ${F(ht)}, ${seg});`);
+    } else if (t.kind === 'nut') {
+      helpers = HELP_THREAD;
+      if (t.nutHex) {
+        const AF = +(1.8 * d).toFixed(2), circ = +(AF / 2 / cos30).toFixed(3);
+        desc = t.size + ' hex nut';
+        call = T(`intersection() { iso_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, true, ${lh}, ${F(0.7 * d)}, ${seg}); cylinder(h=${F(len)}, r=${F(circ)}, $fn=6); }`);
+      } else {
+        desc = t.size + ' nut (round)';
+        call = T(`iso_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, true, ${lh}, 3, ${seg});`);
+      }
+    } else if (t.kind === 'bolt') {
+      helpers = HELP_THREAD + HELP_BOLT;
+      const shaft = t.chamfer
+        ? `chamfered_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, ${lh}, ${c}, ${seg})`
+        : `iso_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, false, ${lh}, 3, ${seg})`;
+      desc = t.size + ' bolt (' + t.head + (t.chamfer ? ', chamfered' : '') + ')';
+      call = T(`union() { bolt_head("${t.head}", ${F(headParam)}, ${F(headH)}, ${F(d)}, ${seg}); translate([0,0,${F(headH)}]) ${shaft}; }`);
+    } else { // rod
+      helpers = HELP_THREAD;
+      desc = t.size + ' rod' + (t.chamfer ? ' (chamfered)' : '');
+      call = t.chamfer
+        ? T(`chamfered_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, ${lh}, ${c}, ${seg});`)
+        : T(`iso_thread(${F(d)}, ${F(p)}, ${F(len)}, ${F(tol)}, false, ${lh}, 3, ${seg});`);
     }
-    return common + `iso_thread(nominal_d, pitch, length, fit_tol, false, left_hand, 3, seg);\n`;
+
+    const block = `// ${desc} \u00b7 ${lh ? 'LH' : 'RH'}  [scs-part]\n${helpers}${call}\n`;
+    const prefix = cur.replace(/\s+$/, '');
+    return prefix ? prefix + '\n\n' + block : `// Generated by SCAD Studio \u2014 fully parametric, edit the numbers in the call.\n` + block;
   }
   insertThread = () => {
-    const code = this.buildThreadScad();
+    const cur = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    const code = this.buildThreadScad(cur);
     this._pushHist();
     if (this._codeArea) this._codeArea.value = code;
     this.setState({ code, threadOpen: false }, () => this.runCode());
     const t = this.state.thread;
-    this.flashStatus('Generated ' + t.size + ' ' + t.kind + ' \u2014 read-only');
+    const verb = (cur.match(/\[scs-part\]/g) || []).length ? 'Added' : 'Generated';
+    this.flashStatus(verb + ' ' + t.size + ' ' + t.kind + ' \u2014 read-only');
   };
   loadImportFiles(files) {
     files = (files || []).filter(Boolean); if (!files.length) return;
@@ -6243,9 +6321,23 @@ union() {
       threadSize: st.thread.size, threadSizeOpts: this.threadSizes(),
       threadPitch: this.fmt(st.thread.pitch), threadLen: this.fmt(st.thread.len),
       threadTol: st.thread.tol, threadTolLabel: '\u00b1' + st.thread.tol.toFixed(2) + ' mm',
-      threadDesignation: st.thread.size + ' \u00d7 ' + this.fmt(st.thread.pitch),
+      threadDesignation: (st.thread.kind === 'washer' || st.thread.kind === 'hole') ? st.thread.size : st.thread.size + ' \u00d7 ' + this.fmt(st.thread.pitch),
       threadKindLabel: st.thread.kind === 'nut' ? 'nut' : st.thread.kind,
       threadIsBolt: st.thread.kind === 'bolt',
+      threadIsNut: st.thread.kind === 'nut',
+      threadIsHole: st.thread.kind === 'hole',
+      threadCanChamfer: st.thread.kind === 'rod' || st.thread.kind === 'bolt',
+      threadWasherStyle: this.segBtn(st.thread.kind === 'washer'),
+      threadHoleStyle: this.segBtn(st.thread.kind === 'hole'),
+      setThreadWasher: () => this.setThread({ kind: 'washer' }), setThreadHole: () => this.setThread({ kind: 'hole' }),
+      toggleChamfer: () => this.setThread({ chamfer: !st.thread.chamfer }),
+      chamferState: st.thread.chamfer ? 'ON' : 'OFF',
+      chamferStyle: `display:flex;align-items:center;gap:9px;width:100%;margin-bottom:12px;background:${st.thread.chamfer ? '#1C3251' : '#16181C'};border:1px solid ${st.thread.chamfer ? '#2C4D78' : '#2C3037'};color:${st.thread.chamfer ? '#9CC2F5' : '#8A9099'};font:inherit;font-size:12px;padding:8px 11px;border-radius:8px;cursor:pointer;text-align:left;`,
+      chamferDot: `width:9px;height:9px;border-radius:50%;flex:none;background:${st.thread.chamfer ? '#5B9BF5' : '#3A4250'};`,
+      setNutRound: () => this.setThread({ nutHex: false }), setNutHex: () => this.setThread({ nutHex: true }),
+      nutRoundStyle: this.segBtnSm(!st.thread.nutHex), nutHexStyle: this.segBtnSm(st.thread.nutHex),
+      setHoleCbore: () => this.setThread({ hole: 'counterbore' }), setHoleCsink: () => this.setThread({ hole: 'countersink' }),
+      holeCboreStyle: this.segBtnSm(st.thread.hole === 'counterbore'), holeCsinkStyle: this.segBtnSm(st.thread.hole === 'countersink'),
       threadTolHint: st.thread.kind === 'nut'
         ? 'Nut bore grows by this · ~0.2\u20130.4 typical for FDM mating parts'
         : 'Rod/bolt shrinks by this · ~0.2\u20130.4 typical for FDM mating parts',

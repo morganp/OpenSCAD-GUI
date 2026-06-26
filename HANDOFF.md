@@ -1,4 +1,37 @@
 # ===================================================================================================
+# HANDOFF — Thread/bolt polish (chamfer lead-in, hole cutter, washer, hex nut) + APPEND fix — ✅ SHIPPED v0.45.0
+# ===================================================================================================
+# APPEND FIX (the reported bug): insertThread now READS the current code and APPENDS the new part
+# (offset +X by part-count × ~3.2·d), de-duping helper modules via `cur.includes('module …')`. Each
+# part is tagged `// … [scs-part]` (used to count parts → offset). Empty editor → first part at origin.
+# Verified: rod then bolt → both render side-by-side (no wipe); helpers emitted once.
+# NEW KINDS (Thread tool → Rod | Bolt | Nut | Washer | Hole), all render 0-error (verified):
+#  - Washer: `module washer` (linear_extrude annulus) — NO CSG.
+#  - Hole cutter (counterbore | countersink): `module hole_cutter` (one rotate_extrude) — NO CSG;
+#    subtract from your part. UI shows the difference() hint.
+#  - Chamfered lead-in toggle (rod/bolt): `module chamfered_thread` = intersection(thread, 45°
+#    rotate_extrude envelope). CSG → slower (multi-second), gated behind the toggle.
+#  - Hex nut: intersection(round nut annulus, hex prism). CSG.
+# UI: 5-way kind selector (wraps), per-kind control rows (head / chamfer / nut outer round|hex /
+# hole recess), header renamed "Thread & hardware", designation kind-aware. methods: buildThreadScad(cur)
+# (append-aware, deduped helpers, per-kind literal-arg calls), insertThread() reads cur + Added/Generated
+# flash. state.thread += { chamfer, nutHex, hole }.
+#
+# ===== FUTURE BUGS (logged 2026-06-26, NOT yet fixed) =====
+#  - [ ] The Thread & hardware popover is NOT draggable/movable (the floating panels use a panelStyle
+#        + dragShape/dragGroup/etc. pattern; the lib/thread popovers are fixed-position with a
+#        full-screen click-catcher). FIX: give them a draggable header via the same panelPos/startPanelDrag
+#        machinery the shape/group/params/tree panels use.
+#  - [ ] The Model Tree window is NOT resizable (fixed max-height:210px scroll area). FIX: add a drag
+#        handle on its bottom edge to set a stored height (like panelPos but a size).
+#  - [ ] Delete is only reachable when a component is selected in the Model Tree (the Delete button
+#        lives in the shape/group panel, which only shows for a live selection; advanced/read-only
+#        parts have no panel → delete only via the tree kebab/context menu). FIX: surface delete for
+#        the current selection more globally (e.g. a delete affordance on the row hover, or restore a
+#        toolbar delete that works for read-only top-level rows too).
+# ===================================================================================================
+
+# ===================================================================================================
 # BACKLOG — Undo (≥1 level) (filed 2026-06-26) — ✅ SHIPPED v0.44.0 (multi-level)
 # ===================================================================================================
 # Cmd/Ctrl-Z = undo, Shift-Cmd/Ctrl-Z (or Ctrl-Y) = redo, plus toolbar undo/redo buttons (disabled
