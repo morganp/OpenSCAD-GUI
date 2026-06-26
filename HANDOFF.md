@@ -1,4 +1,32 @@
 # ===================================================================================================
+# HANDOFF — Native thread support — ✅ SHIPPED v0.42.0 (Advanced-mode Thread tool)
+# ===================================================================================================
+# "Thread" button in the top bar (Advanced only) → popover generates a parametric ISO metric thread
+# as engine-renderable OpenSCAD (renders read-only). Fusion360-like options + a parameterised fit
+# tolerance, per the request. Controls: Rod | Nut (external/internal), Size M3–M30 (ISO table auto-
+# fills pitch), Coarse | Fine pitch series, manual Pitch + Length, Direction RH | LH, and a radial
+# Fit-clearance slider (0–0.6 mm) so printed male/female parts mate. Emits a clean self-contained
+# module the user can keep editing (nominal_d / pitch / fit_tol / …).
+#
+# GEOMETRY (the key insight — NO CSG needed, so it never hits the three-bvh-csg uv bug):
+#  - The thread tooth is a POLAR V-profile r(α): radius ramps Rmaj→Rmin over an angular half-width
+#    beta, then the core arc at Rmin closes the loop → one simple closed polygon = a solid rod whose
+#    `linear_extrude(twist = 360*turns)` spirals the tooth into a real helical thread. depth=0.6134·p
+#    (ISO engagement). turns = len/p. dir = ±1 for hand. External applies tol as −radius, internal +.
+#  - INTERNAL (nut): a twisted CIRCLE is rotationally invariant, so an ANNULAR polygon (plain outer
+#    circle + the V-profile as an inner hole via polygon paths=) twist-extrudes to a straight-walled
+#    nut with a helical bore — again a single extrude, no boolean. methods: buildThreadScad(),
+#    THREAD_TABLE, setThread(), insertThread() in Editor.dc.html; UI = threadOpen popover + renderVals.
+#
+# KNOWN ENGINE BUG surfaced (NOT blocking threads, but worth a future fix): difference()/union() of a
+# primitive (cylinder) with a twist `linear_extrude` throws "CSG Operations: Attribute uv not
+# available on geometry" — the extrude brush from the brushFrom2D/ringsToSolid twist path reaches the
+# Evaluator without a uv attribute that the primitive side has. extrudeBrush should zero-fill uv (and
+# normal) on its geometry before evaluate, same as importGeometry/ringsToSolid do elsewhere. Filed
+# for later; the thread feature avoids CSG entirely so it's unaffected.
+# ===================================================================================================
+
+# ===================================================================================================
 # BACKLOG — Undo (≥1 level) (filed 2026-06-26) — [ ] NOT STARTED
 # ===================================================================================================
 # FEATURE: at least a single-level undo (Cmd/Ctrl-Z), ideally a small history stack. The model's
