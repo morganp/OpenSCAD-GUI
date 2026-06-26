@@ -1,4 +1,31 @@
 # ===================================================================================================
+# HANDOFF — Bolts + thread-as-boolean-tool + CSG uv fix — ✅ SHIPPED v0.43.0
+# ===================================================================================================
+# 1) CSG uv BUG FIXED (the one filed under v0.42.0): ringsToSolid() now zero-fills a `uv` attribute on
+#    every extrude solid (the twist loft / revolve emit none), so difference()/union() of a primitive
+#    + a thread `linear_extrude` no longer throws "Attribute uv not available". VERIFIED: a block with
+#    a threaded hole cut in (difference), and a threaded cylinder (union), both render. This directly
+#    enables the user's "subtract a threaded cylinder from another shape" workflow.
+# 2) BOLTS: the Thread tool is now a 3-way Rod | Bolt | Nut. Bolt = head + threaded shaft unioned into
+#    one solid, head types Hex (hex prism, AF=1.5d) / Socket cap (cyl head + hex recess) / Countersunk
+#    (flat-top cone). Head dims auto-derive from nominal d (ISO-ish) and stay editable in code; an
+#    optional `shank` gives an unthreaded section. VERIFIED: hex/socket/countersunk all render 0-error.
+# 3) TOLERANCE DIRECTION (the user's concern) is handled by `internal` inside iso_thread:
+#       Rmaj = d/2 + (internal ? +tol : -tol)
+#    External (rod/bolt) SHRINKS by tol; internal (nut bore) GROWS by tol — so a nominal pair mates
+#    with `tol` radial clearance regardless of which side you generate. The popover hint now states
+#    the direction per kind ("Rod/bolt shrinks by this" vs "Nut bore grows by this").
+# methods: buildThreadScad() (rod/bolt/nut branches + bolt_head module), setThread(), THREAD_TABLE;
+# state.thread = { kind:'rod'|'bolt'|'nut', size, fine, pitch, len, lh, tol, head }.
+#
+# NOTE for "thread as a cutter into arbitrary geometry": subtract a ROD generated with the SAME tol
+# you'd want as clearance — the cut cavity ends up tol larger than the rod, i.e. an internal thread
+# with clearance. (A dedicated "cutter" preset that emits the male solid at +tol could be a future
+# nicety, but difference(yourBlock, rod) already works now that CSG+extrude is fixed.) CSG with the
+# high-facet thread is heavy (multi-second) but completes.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — Native thread support — ✅ SHIPPED v0.42.0 (Advanced-mode Thread tool)
 # ===================================================================================================
 # "Thread" button in the top bar (Advanced only) → popover generates a parametric ISO metric thread

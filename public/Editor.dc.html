@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.42.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.43.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -135,15 +135,30 @@
       </div>
 
       <div style="display:flex;gap:6px;margin-bottom:11px;">
-        <button onClick="{{ setThreadExternal }}" style="{{ threadExtStyle }}">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="1.5" width="5" height="13" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 4h5M5.5 6.4h5M5.5 8.8h5M5.5 11.2h5" stroke="currentColor" stroke-width="1"/></svg>
+        <button onClick="{{ setThreadRod }}" style="{{ threadRodStyle }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="1.5" width="5" height="13" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 4h5M5.5 6.4h5M5.5 8.8h5M5.5 11.2h5" stroke="currentColor" stroke-width="1"/></svg>
           Rod
         </button>
-        <button onClick="{{ setThreadInternal }}" style="{{ threadIntStyle }}">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="3.6" stroke="currentColor" stroke-width="1.2"/><path d="M5 6.7h6M5 9.3h6" stroke="currentColor" stroke-width=".9"/></svg>
+        <button onClick="{{ setThreadBolt }}" style="{{ threadBoltStyle }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 2.5h9l-1.2 2.2H4.7L3.5 2.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><rect x="5.8" y="4.7" width="4.4" height="9.3" rx="0.6" stroke="currentColor" stroke-width="1.2"/><path d="M5.8 6.6h4.4M5.8 8.6h4.4M5.8 10.6h4.4" stroke="currentColor" stroke-width=".9"/></svg>
+          Bolt
+        </button>
+        <button onClick="{{ setThreadNut }}" style="{{ threadNutStyle }}">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4.5 2.7h7l3 5.3-3 5.3h-7l-3-5.3 3-5.3Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.8" stroke="currentColor" stroke-width="1.2"/></svg>
           Nut
         </button>
       </div>
+
+      <sc-if value="{{ threadIsBolt }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-bottom:11px;">
+          <div style="font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:#6B7280;margin-bottom:5px;">Head</div>
+          <div style="display:flex;gap:5px;">
+            <button onClick="{{ setHeadHex }}" style="{{ headHexStyle }}">Hex</button>
+            <button onClick="{{ setHeadSocket }}" style="{{ headSocketStyle }}">Socket cap</button>
+            <button onClick="{{ setHeadCsk }}" style="{{ headCskStyle }}">Countersunk</button>
+          </div>
+        </div>
+      </sc-if>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 10px;margin-bottom:12px;">
         <div>
@@ -177,7 +192,7 @@
           <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9CC2F5;">{{ threadTolLabel }}</span>
         </div>
         <input type="range" min="0" max="0.6" step="0.05" value="{{ threadTol }}" onInput="{{ onThreadTol }}" style="width:100%;accent-color:#2563EB;cursor:pointer;" />
-        <div style="font-size:9.5px;color:#5B616B;margin-top:3px;">0 = nominal · ~0.2–0.4 typical for FDM-printed mating parts</div>
+        <div style="font-size:9.5px;color:#5B616B;margin-top:3px;">{{ threadTolHint }}</div>
       </div>
 
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;">
@@ -808,7 +823,7 @@ class Component extends DCLogic {
     libBusy: false,        // a fetch is in flight
     libMsg: '',            // importer status / error line
     threadOpen: false,     // Thread generator popover
-    thread: { size: 'M12', fine: false, pitch: 1.75, len: 16, lh: false, internal: false, tol: 0.0 },
+    thread: { kind: 'rod', size: 'M12', fine: false, pitch: 1.75, len: 16, lh: false, tol: 0.0, head: 'hex' },
     ppMode: 'linear',         // push/pull sub-mode: 'linear' | 'revolve'
     shapes: [],            // serializable mirror for the tree
     selectedShapeId: null,
@@ -4313,7 +4328,14 @@ class Component extends DCLogic {
     for (const g of plain) { const a = g.attributes.position.array; out.set(a, o); o += a.length; }
     const merged = new THREE.BufferGeometry(); merged.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); return merged;
   }
-  ringsToSolid(rings, mode, params) { return mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params); }
+  ringsToSolid(rings, mode, params) {
+    const geo = mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params);
+    // three-bvh-csg requires matching attributes across operands; primitives carry uv, so the
+    // extrude solids must too (the twist loft / revolve don't emit uv) or CSG with a primitive
+    // throws "Attribute uv not available on geometry".
+    if (geo && !geo.attributes.uv) { const c = geo.attributes.position.count; geo.setAttribute('uv', new this.THREE.Float32BufferAttribute(new Float32Array(c * 2), 2)); }
+    return geo;
+  }
 
   // ---- authoring-tree 2D -> rings -> extrude solid (Slice 4) ----
   ringsForType(node) {
@@ -5094,22 +5116,27 @@ class Component extends DCLogic {
   }
   threadNominal() { return parseFloat((this.state.thread.size || 'M12').replace(/^M/i, '')) || 12; }
   buildThreadScad() {
-    const t = this.state.thread, d = this.threadNominal(), p = t.pitch, len = t.len;
-    const F = (n) => { const s = (Math.round(n * 1000) / 1000).toString(); return s; };
-    const desc = t.size + ' \u00d7 ' + F(p) + ' \u2014 ' + (t.internal ? 'internal (nut)' : 'external (rod)') + ', ' + (t.lh ? 'left' : 'right') + '-hand';
-    return `// \u2500\u2500\u2500 ISO metric thread \u00b7 ${desc} \u2500\u2500\u2500
+    const t = this.state.thread, d = this.threadNominal(), p = t.pitch, len = t.len, internal = t.kind === 'nut';
+    const F = (n) => (Math.round(n * 1000) / 1000).toString();
+    const kindLabel = t.kind === 'bolt' ? 'bolt (' + t.head + ' head)' : t.kind === 'nut' ? 'internal (nut)' : 'external (rod)';
+    const desc = t.size + ' \u00d7 ' + F(p) + ' \u2014 ' + kindLabel + ', ' + (t.lh ? 'left' : 'right') + '-hand';
+    // ISO-ish head defaults derived from nominal diameter
+    const headAF = +(1.5 * d).toFixed(2);     // hex across-flats
+    const headDia = t.head === 'countersunk' ? +(2 * d).toFixed(2) : +(1.5 * d).toFixed(2);
+    const headH = t.head === 'countersunk' ? +(0.5 * d).toFixed(2) : t.head === 'socket' ? +(1.0 * d).toFixed(2) : +(0.65 * d).toFixed(2);
+    const headParam = t.head === 'hex' ? headAF : headDia;
+
+    const common = `// \u2500\u2500\u2500 ISO metric thread \u00b7 ${desc} \u2500\u2500\u2500
 // Generated by SCAD Studio \u2014 fully parametric, edit the values below.
 nominal_d = ${F(d)};      // nominal major diameter (mm)
 pitch     = ${F(p)};      // thread pitch (mm)
 length    = ${F(len)};      // threaded length (mm)
 fit_tol   = ${F(t.tol)};      // radial fit clearance (mm) \u2014 larger = looser fit
-internal  = ${t.internal};    // true = threaded hole / nut, false = threaded rod
 left_hand = ${t.lh};    // thread direction
-wall      = 3;       // nut wall thickness (internal only)
 seg       = 64;      // facets per revolution
 
-// One pitch of axial advance per turn; the V-tooth is a polar profile swept by linear_extrude
-// twist (a circle is twist-invariant, so the nut's outer wall stays straight while the bore threads).
+// V-tooth = polar profile swept by linear_extrude twist (a circle is twist-invariant, so a nut's
+// outer wall stays straight while the bore threads). depth = 0.6134*p is the ISO engagement depth.
 function vee(Rmin, Rmaj, beta, n) =
   concat(
     [ for (i = [0:n])   let(a = -beta + 2*beta*i/n, r = Rmaj - (Rmaj-Rmin)*abs(a)/beta) [r*cos(a), r*sin(a)] ],
@@ -5117,7 +5144,7 @@ function vee(Rmin, Rmaj, beta, n) =
   );
 
 module iso_thread(d, p, len, tol=0, internal=false, lh=false, wall=3, seg=64, beta=95) {
-  depth = 0.6134 * p;                       // ISO engagement depth
+  depth = 0.6134 * p;
   Rmaj  = d/2 + (internal ? tol : -tol);
   Rmin  = Rmaj - depth;
   turns = len / p;
@@ -5135,16 +5162,42 @@ module iso_thread(d, p, len, tol=0, internal=false, lh=false, wall=3, seg=64, be
       polygon(vee(Rmin, Rmaj, beta, 24));
   }
 }
-
-iso_thread(nominal_d, pitch, length, fit_tol, internal, left_hand, wall, seg);
 `;
+    if (t.kind === 'nut') {
+      return common + `wall = 3;       // nut wall thickness\n\niso_thread(nominal_d, pitch, length, fit_tol, true, left_hand, wall, seg);\n`;
+    }
+    if (t.kind === 'bolt') {
+      return common + `head_type = "${t.head}";   // "hex" | "socket" | "countersunk"
+head_size = ${F(headParam)};   // hex across-flats, or head diameter
+head_h    = ${F(headH)};
+shank     = 0;          // unthreaded length below the thread (0 = fully threaded)
+
+module bolt_head(type, hs, hh, d, seg) {
+  if (type == "hex") cylinder(h=hh, r=hs/2/cos(30), $fn=6);
+  else if (type == "socket")
+    difference() {
+      cylinder(h=hh, r=hs/2, $fn=seg);
+      translate([0,0,hh*0.45]) cylinder(h=hh, r=0.55*d/2/cos(30)*1.6, $fn=6);
+    }
+  else  // countersunk: flat-topped cone, wide at the head face
+    cylinder(h=hh, r1=d/2, r2=hs/2, $fn=seg);
+}
+
+union() {
+  bolt_head(head_type, head_size, head_h, nominal_d, seg);
+  if (shank > 0) translate([0,0,head_h]) cylinder(h=shank, r=nominal_d/2 - fit_tol, $fn=seg);
+  translate([0,0,head_h + shank]) iso_thread(nominal_d, pitch, length, fit_tol, false, left_hand, 3, seg);
+}
+`;
+    }
+    return common + `iso_thread(nominal_d, pitch, length, fit_tol, false, left_hand, 3, seg);\n`;
   }
   insertThread = () => {
     const code = this.buildThreadScad();
     if (this._codeArea) this._codeArea.value = code;
     this.setState({ code, threadOpen: false }, () => this.runCode());
     const t = this.state.thread;
-    this.flashStatus('Generated ' + t.size + ' ' + (t.internal ? 'nut' : 'thread') + ' \u2014 read-only');
+    this.flashStatus('Generated ' + t.size + ' ' + t.kind + ' \u2014 read-only');
   };
   loadImportFiles(files) {
     files = (files || []).filter(Boolean); if (!files.length) return;
@@ -6127,18 +6180,27 @@ iso_thread(nominal_d, pitch, length, fit_tol, internal, left_hand, wall, seg);
       threadPitch: this.fmt(st.thread.pitch), threadLen: this.fmt(st.thread.len),
       threadTol: st.thread.tol, threadTolLabel: '\u00b1' + st.thread.tol.toFixed(2) + ' mm',
       threadDesignation: st.thread.size + ' \u00d7 ' + this.fmt(st.thread.pitch),
-      threadKindLabel: st.thread.internal ? 'nut' : 'rod',
+      threadKindLabel: st.thread.kind === 'nut' ? 'nut' : st.thread.kind,
+      threadIsBolt: st.thread.kind === 'bolt',
+      threadTolHint: st.thread.kind === 'nut'
+        ? 'Nut bore grows by this · ~0.2\u20130.4 typical for FDM mating parts'
+        : 'Rod/bolt shrinks by this · ~0.2\u20130.4 typical for FDM mating parts',
       onThreadSize: (e) => this.setThread({ size: e.target.value }),
       onThreadPitch: (e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) this.setThread({ pitch: v }); },
       onThreadLen: (e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v > 0) this.setThread({ len: v }); },
       onThreadTol: (e) => this.setThread({ tol: parseFloat(e.target.value) }),
       setThreadCoarse: () => this.setThread({ fine: false }), setThreadFine: () => this.setThread({ fine: true }),
       setThreadRH: () => this.setThread({ lh: false }), setThreadLH: () => this.setThread({ lh: true }),
-      setThreadExternal: () => this.setThread({ internal: false }), setThreadInternal: () => this.setThread({ internal: true }),
+      setThreadRod: () => this.setThread({ kind: 'rod' }), setThreadBolt: () => this.setThread({ kind: 'bolt' }), setThreadNut: () => this.setThread({ kind: 'nut' }),
+      setHeadHex: () => this.setThread({ head: 'hex' }), setHeadSocket: () => this.setThread({ head: 'socket' }), setHeadCsk: () => this.setThread({ head: 'countersunk' }),
       threadSelectStyle: "width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font:inherit;font-size:12px;padding:6px 8px;outline:none;cursor:pointer;box-sizing:border-box;",
       threadInputStyle: "width:100%;background:#0F1114;border:1px solid #2C3037;border-radius:7px;color:#E6E9EE;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;outline:none;box-sizing:border-box;",
-      threadExtStyle: this.segBtn(!st.thread.internal),
-      threadIntStyle: this.segBtn(st.thread.internal),
+      threadRodStyle: this.segBtn(st.thread.kind === 'rod'),
+      threadBoltStyle: this.segBtn(st.thread.kind === 'bolt'),
+      threadNutStyle: this.segBtn(st.thread.kind === 'nut'),
+      headHexStyle: this.segBtnSm(st.thread.head === 'hex'),
+      headSocketStyle: this.segBtnSm(st.thread.head === 'socket'),
+      headCskStyle: this.segBtnSm(st.thread.head === 'countersunk'),
       threadCoarseStyle: this.segBtnSm(!st.thread.fine),
       threadFineStyle: this.segBtnSm(st.thread.fine),
       threadRHStyle: this.segBtnSm(!st.thread.lh),
