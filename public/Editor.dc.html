@@ -45,6 +45,7 @@
 <script src="scad-engine.js"></script>
 <script src="mesh-parsers.js"></script>
 <script src="scad-authoring.js"></script>
+<script src="scad-emitter.js"></script>
 <script src="conformance.js"></script>
 <script src="https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js"></script>
 </helmet>
@@ -63,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.52.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.53.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -1144,8 +1145,16 @@ class Component extends DCLogic {
     this.setState({ ready: true, csgOk: !!this.CSG });
     window.__editor = this;
 
-    // seed with a cuboid so "draw a cube, highlight an edge" works immediately
-    this.addCuboid();
+    // seed with a cuboid so "draw a cube, highlight an edge" works immediately.
+    // The seed's regenCode() emits via window.ScadEmitter (an async-loaded helmet module); if THREE
+    // fires three-ready before that script executes, wait for it so the first emit can't crash.
+    this._whenLibsReady(() => this.addCuboid());
+  }
+  // poll until the externally-loaded authoring modules are present, then run cb (immediately if ready)
+  _whenLibsReady(cb) {
+    const ok = () => typeof window.ScadEmitter === 'function' && !!window.ScadAuthoring;
+    if (ok()) { cb(); return; }
+    const t = setInterval(() => { if (ok()) { clearInterval(t); cb(); } }, 20);
   }
 
   addAxes() {
@@ -3858,158 +3867,22 @@ class Component extends DCLogic {
     return out.join('\n');
   }
 
-  ind(level) { return '  '.repeat(level); }
-  emitNode(node, level, out) {
-    const pad = this.ind(level);
-    if (this.isGroup(node)) {
-      const gp = node.pos || [0, 0, 0];
-      if (gp[0] || gp[1] || gp[2]) out.push(pad + `translate([${this.fmt(gp[0])}, ${this.fmt(gp[1])}, ${this.fmt(gp[2])}])`);
-      const rl = this.rotLine(node, pad); if (rl) out.push(rl);
-      let header;
-      if (this.isExtrude(node)) {
-        const d = node.dims || {};
-        if (node.op === 'rotate_extrude') header = `rotate_extrude(angle = ${this.fmt(d.angle == null ? 360 : d.angle)}, $fn = ${this.gfn()})`;
-        else { const tw = d.twist || 0, esc = (d.escale == null ? 1 : d.escale), dyn = (tw !== 0 || esc !== 1); header = `linear_extrude(height = ${this.fmt(d.height == null ? 30 : d.height)}${tw ? `, twist = ${this.fmt(tw)}` : ''}${esc !== 1 ? `, scale = ${this.fmt(esc)}` : ''}${dyn ? `, slices = ${Math.max(8, Math.ceil(Math.abs(tw) / 6))}` : ''})`; }
-      } else header = node.op + '()';
-      const ets = Object.values(node.edgeTreatments || {});
-      if (!ets.length) {
-        out.push(pad + header + ' {');
-        for (const c of node.children) this.emitNode(c, level + 1, out);
-        out.push(pad + '}');
-        return;
-      }
-      this.emitGroupWithEdges(node, header, ets, level, out);
-      return;
-    }
-    this.emitPrimitive(node, level, out);
+  // ---- authoring-tree -> OpenSCAD text emitter lives in scad-emitter.js (window.ScadEmitter), v0.53.0.
+  // Built once with a context of bound editor/THREE helpers; emitNode delegates. fmt/gfn/cylProfile/
+  // edgeMatrix/groupEdgeMatrix/matStr stay in the editor (used widely outside the emitter). ----
+  _emit() {
+    return this._emitter || (this._emitter = window.ScadEmitter({
+      fmt: (n) => this.fmt(n),
+      gfn: () => this.gfn(),
+      isGroup: (n) => this.isGroup(n),
+      isExtrude: (n) => this.isExtrude(n),
+      cylProfile: (rb, rt, h, tr) => this.cylProfile(rb, rt, h, tr),
+      edgeMatrix: (e, r) => this.edgeMatrix(e, r),
+      groupEdgeMatrix: (seg, r, convex) => this.groupEdgeMatrix(seg, r, convex),
+      matStr: (M) => this.matStr(M),
+    }));
   }
-  // Slice 5: wrap a group's op-block with convex (difference) / concave (union) edge tools
-  emitGroupWithEdges(node, header, ets, level, out) {
-    const F = (n) => this.fmt(n);
-    const convex = ets.filter(t => t.convex), concave = ets.filter(t => !t.convex);
-    const emitOp = (lvl) => {
-      const p = this.ind(lvl);
-      out.push(p + header + ' {');
-      for (const c of node.children) this.emitNode(c, lvl + 1, out);
-      out.push(p + '}');
-    };
-    const emitTool = (t, lvl) => {
-      const p = this.ind(lvl);
-      const mod = t.convex ? (t.type === 'fillet' ? 'edge_fillet' : 'edge_chamfer') : (t.type === 'fillet' ? 'edge_round_in' : 'edge_chamfer_in');
-      out.push(p + `// ${t.convex ? 'convex' : 'concave'} ${t.type} r=${F(t.size)}`);
-      for (const seg of t.segs) {
-        const M = this.groupEdgeMatrix(seg, t.size, t.convex);
-        out.push(p + `multmatrix(${this.matStr(M)})`);
-        out.push(p + `  ${mod}(${F(seg.len + 0.04)}, ${F(t.size)});`);
-      }
-    };
-    const diffBlock = (lvl) => {
-      if (!convex.length) { emitOp(lvl); return; }
-      const p = this.ind(lvl);
-      out.push(p + 'difference() {');
-      emitOp(lvl + 1);
-      for (const t of convex) emitTool(t, lvl + 1);
-      out.push(p + '}');
-    };
-    if (!concave.length) { diffBlock(level); return; }
-    const p = this.ind(level);
-    out.push(p + 'union() {');
-    diffBlock(level + 1);
-    for (const t of concave) emitTool(t, level + 1);
-    out.push(p + '}');
-  }
-  rotLine(node, pad) {
-    const r = node.rot || [0, 0, 0];
-    if (!r[0] && !r[1] && !r[2]) return null;
-    const F = (n) => this.fmt(n);
-    return pad + `rotate([${F(r[0])}, ${F(r[1])}, ${F(r[2])}])`;
-  }
-  emitPrimitive(s, level, out) {
-    const F = (n) => this.fmt(n);
-    const pad = this.ind(level);
-    const treats = Object.entries(s.treatments || {});
-    const is2D = s.type === 'circle' || s.type === 'square' || s.type === 'polygon';
-    // 2D shapes carry a small viewport-only z lift (restingPos 0.3) to avoid z-fighting the floor;
-    // never emit it — OpenSCAD 2D geometry lives at z=0 and extrudes ignore the source z anyway.
-    const pzTok = is2D && !(s.expr && s.expr.pz) ? '0' : this.posTok(s, 'pz');
-    const pos = `[${this.posTok(s, 'px')}, ${this.posTok(s, 'py')}, ${pzTok}]`;
-    out.push(pad + '// ' + s.label);
-    if (s.type === 'cylinder' && treats.length) {
-      out.push(pad + '// rims: ' + treats.map(([k, t]) => k.toLowerCase() + ' ' + t.type + ' r=' + F(t.size)).join(', '));
-      out.push(pad + `translate(${pos})`);
-      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
-      out.push(pad + '  ' + this.cylinderScad(s).replace(/\n/g, '\n' + pad) + ';');
-    } else if (!treats.length) {
-      out.push(pad + `translate(${pos})`);
-      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
-      out.push(pad + '  ' + this.baseCall(s).replace(/\n/g, '\n' + pad) + ';');
-    } else {
-      out.push(pad + `translate(${pos})`);
-      { const rl = this.rotLine(s, pad); if (rl) out.push(rl); }
-      out.push(pad + 'difference() {');
-      out.push(pad + '  ' + this.baseCall(s) + ';');
-      for (const [name, t] of treats) {
-        const e = s.edges.find(x => x.name === name);
-        if (!e) continue;
-        const M = this.edgeMatrix(e, t.size);
-        const mod = t.type === 'fillet' ? 'edge_fillet' : 'edge_chamfer';
-        out.push(pad + `  // ${name} (${t.type} r=${F(t.size)})`);
-        out.push(pad + `  multmatrix(${this.matStr(M)})`);
-        out.push(pad + `    ${mod}(${F(e.length + 0.02)}, ${F(t.size)});`);
-      }
-      out.push(pad + '}');
-    }
-  }
-
-  dimTok(s, key) {
-    const e = s.expr && s.expr[key];
-    if (e) return e;
-    if (key === 'x' || key === 'y' || key === 'z') return this.fmt(s.dims[key]);
-    if (key === 'h') return this.fmt(s.dims.h);
-    if (key === 'd') return this.fmt(s.dims.r * 2);
-    if (key === 'r1') return this.fmt(s.dims.r);
-    if (key === 'r2') return this.fmt(s.dims.r2 != null ? s.dims.r2 : s.dims.r);
-    return '0';
-  }
-  posTok(s, key) {
-    const e = s.expr && s.expr[key];
-    if (e) return e;
-    const i = { px: 0, py: 1, pz: 2 }[key];
-    return this.fmt(s.pos[i]);
-  }
-  baseCall(s) {
-    if (s.type === 'cuboid') return `cube([${this.dimTok(s, 'x')}, ${this.dimTok(s, 'y')}, ${this.dimTok(s, 'z')}], center = true)`;
-    if (s.type === 'sphere') return `sphere(d = ${this.dimTok(s, 'd')})`;
-    if (s.type === 'torus') {
-      const fn = this.gfn();
-      return `rotate_extrude($fn = ${fn})\n  translate([${this.fmt(s.dims.ring)}, 0, 0])\n  circle(r = ${this.fmt(s.dims.tube)}, $fn = ${fn})`;
-    }
-    if (s.type === 'tube') {
-      return `difference() {\n  cylinder(h = ${this.dimTok(s, 'h')}, d = ${this.dimTok(s, 'd')}, center = true);\n  cylinder(h = ${this.dimTok(s, 'h')} + 0.2, d = ${this.fmt((s.dims.ri || 0) * 2)}, center = true);\n}`;
-    }
-    if (s.type === 'wedge') {
-      const hx = s.dims.x / 2, hz = s.dims.z / 2;
-      return `rotate([90, 0, 0])\n  linear_extrude(height = ${this.dimTok(s, 'y')}, center = true)\n  polygon([[${this.fmt(-hx)}, ${this.fmt(-hz)}], [${this.fmt(hx)}, ${this.fmt(-hz)}], [${this.fmt(-hx)}, ${this.fmt(hz)}]])`;
-    }
-    if (s.type === 'circle') return `circle(d = ${this.dimTok(s, 'd')}, $fn = ${this.gfn()})`;
-    if (s.type === 'square') return `square([${this.dimTok(s, 'x')}, ${this.dimTok(s, 'y')}], center = true)`;
-    if (s.type === 'polygon') {
-      const pts = (s.dims.pts && s.dims.pts.length >= 3) ? s.dims.pts : [[-20, -20], [20, -20], [20, 20]];
-      return `polygon([${pts.map(p => `[${this.fmt(p[0])}, ${this.fmt(p[1])}]`).join(', ')}])`;
-    }
-    const d = s.dims;
-    const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : 0;
-    const tapered = (d.r2 != null && Math.abs(d.r2 - d.r) > 1e-9) || sides;
-    if (!tapered) return `cylinder(h = ${this.dimTok(s, 'h')}, d = ${this.dimTok(s, 'd')}, center = true)`;
-    const fn = sides ? `, $fn = ${sides}` : '';
-    return `cylinder(h = ${this.dimTok(s, 'h')}, r1 = ${this.dimTok(s, 'r1')}, r2 = ${this.dimTok(s, 'r2')}, center = true${fn})`;
-  }
-  cylinderScad(s) {
-    const pts = this.cylProfile(s.dims.r, s.dims.r2 != null ? s.dims.r2 : s.dims.r, s.dims.h, s.treatments || {});
-    const poly = pts.map(p => `[${this.fmt(p[0])}, ${this.fmt(p[1])}]`).join(', ');
-    const note = (s.expr && (s.expr.d || s.expr.h)) ? '  // note: treated cylinder \u2014 dimensions baked numerically\n    ' : '';
-    return `${note}rotate_extrude()\n    polygon([${poly}])`;
-  }
+  emitNode(node, level, out) { return this._emit().emitNode(node, level, out); }
 
   // ============ CODE -> MODEL (base solids; tolerant of our own format) ============
   runCode = () => {

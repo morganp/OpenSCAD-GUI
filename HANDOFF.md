@@ -1,4 +1,46 @@
 # ===================================================================================================
+# HANDOFF — v0.53.0 — Refactor: extract OpenSCAD emitter → public/scad-emitter.js  ✅ SHIPPED
+# ===================================================================================================
+# GOAL: the last authoring-layer unit. Move the authoring-tree → OpenSCAD TEXT generator out of the editor.
+# Unlike the parser (pure), the emitter is coupled to a few editor/THREE helpers, so it ships as a FACTORY
+# `window.ScadEmitter(ctx)` that closes over an injected context rather than a bag of pure fns.
+#
+# MOVED → scad-emitter.js (closure over ctx): emitNode, emitGroupWithEdges, rotLine, emitPrimitive, dimTok,
+#   posTok, baseCall, cylinderScad, ind. These call each other; the factory closure lets them do so without
+#   threading ctx through every call.
+# STAYS in editor, injected via ctx (used widely OUTSIDE the emitter — push/pull codegen, field render, tree
+#   meta, geometry building — so they can't move): fmt, gfn, isGroup, isExtrude, cylProfile, edgeMatrix,
+#   groupEdgeMatrix, matStr. Passed as bound arrows so they read live state / use this.THREE.
+# EDITOR SURFACE: only `emitNode` is called externally (_programText + appendPrimitiveCode). A one-line
+#   wrapper (_emit() lazily builds the instance, emitNode delegates) replaced the 9 method bodies.
+#
+# BUILD ORDER:
+#  1. [x] Write public/scad-emitter.js — window.ScadEmitter(ctx) factory, the 9 methods de-`this`'d.
+#  2. [x] Add <script src="scad-emitter.js"> in helmet after scad-authoring.js.
+#  3. [x] Editor: add _emit() lazy factory + emitNode wrapper; delete the 9 bodies.
+#  4. [x] Verify byte-identity + round-trips + conformance.
+#  5. [x] Version badge + VERSION → 0.53.0; release snapshot OpenSCAD-GUI-v0.53.0.
+#
+# RESULT: Editor.dc.html ~6160 → ~6020 lines (−7.0 KB / ~140 lines); scad-emitter.js = 198 lines.
+# VERIFIED: _programText() for a mixed model (treated cube/cylinder, torus, tube, wedge, 2D, linear_extrude
+# twist+scale, rotate_extrude, boolean diff) is BYTE-IDENTICAL pre/post (1369 chars, captured via localStorage
+# across reload). Live round-trips: difference/extrude editable, for-loop read-only, conformance 113/113.
+#
+# ⚠ RACE FIX (important, applies to all helmet modules): the old emitter was an always-present class method;
+# an external module is loaded by an async-injected <script src> in the DC helmet. initThree seeds a default
+# cuboid (addCuboid → regenCode → emitNode) the moment THREE fires `three-ready`, which can BEAT the helmet
+# script's execution → "window.ScadEmitter is not a function" render crash. FIX: initThree now seeds via
+# `_whenLibsReady(cb)` — polls (20ms) until window.ScadEmitter + window.ScadAuthoring exist, then seeds.
+# Any FUTURE mount-time use of a helmet module must go through the same gate; user-triggered paths (runCode)
+# are safe because they fire long after load.
+#
+# AUTHORING-LAYER EXTRACTION COMPLETE: parser+evaluator (v0.52, scad-authoring.js) + emitter (v0.53,
+# scad-emitter.js) now both live outside Editor.dc.html, joining scad-engine.js + mesh-parsers.js. What
+# remains in the god component is genuinely THREE/scene/React-coupled (geometry builders, CSG, face detection,
+# push/pull, gizmo, UI template) — per CLAUDE.md that belongs in the component.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.52.0 — Refactor: extract SCAD authoring parser + expression evaluator → public/scad-authoring.js  ✅ SHIPPED
 # ===================================================================================================
 # GOAL: continue breaking up the Editor.dc.html god component (audit #1 pulled the mesh parsers; this is
