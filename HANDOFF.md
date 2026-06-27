@@ -1,4 +1,43 @@
 # ===================================================================================================
+# HANDOFF — v0.50.0 — Mobile / touch layout
+# ===================================================================================================
+# REQUEST: "work on mobile touch" — make the editor usable on a phone.
+# CONTEXT: gestures already work (canvas uses pointer events + touch-action:none; OrbitControls does
+# orbit/pan/pinch; tree long-press menus exist). The gap was LAYOUT — desktop-fixed floating panels,
+# a 420px side code-drawer, and a camera view-offset that assumes that drawer always occupies the
+# right ~40% of the screen. All of that breaks below ~760px.
+# APPROACH (gated by a reactive `isMobile` flag = matchMedia('(max-width:760px)'), desktop untouched):
+#   - state: isMobile, mobileTreeOpen. Set in componentDidMount via matchMedia 'change' listener;
+#     entering mobile also closes the code drawer (drawerOpen:false) and re-applies view offset/resize.
+#   - applyViewOffset(): on mobile clear the 1.42× right-offset so the model centers in the full canvas.
+#   - panelStyle(key,base): on mobile, append a bottom-sheet override (left/right:0; bottom:0; width
+#     100%; rounded top; max-height 82vh; scroll) — keeps each panel's own background/border/z-index so
+#     inspector sheets (z34/35) still stack above the model-tree sheet (z30). Drag-position is ignored.
+#   - code drawer: on mobile full-screen slide-in (drawerStyle inset:0) + a pill FAB (drawerTab) bottom-
+#     right to open, and a mobile-only "Done" button in the drawer header to close.
+#   - model tree: on mobile it's a collapsed bottom bar; tapping the header toggles mobileTreeOpen
+#     (onTreeHeaderClick) which shows/hides the scroll body (treeScrollStyle += display:none) and a
+#     caret (treeCaretStyle). The ns-resize handle is hidden on mobile (treeResizeStyle).
+#   - top toolbar wraps (flex-wrap + max-width:calc(100vw-32px)); bottom $fn/status pill hidden on
+#     mobile (showStatusBar). Tool rail (40px buttons) already touch-sized — left as-is.
+# renderVals exposes: isMobile, onTreeHeaderClick, treeCaretStyle, treeResizeStyle, showStatusBar.
+# ===================================================================================================
+
+# ===================================================================================================
+# HANDOFF — v0.49.0 — Custom names for objects (rename)
+# ===================================================================================================
+# REQUEST: let users name objects — "Cuboid 1" → an editable field whose placeholder shows the type.
+# DONE: the shape panel AND group panel headers now show the label as an inline-editable <input>
+# (placeholder = defaultLabelFor(node), e.g. "Cuboid"/"Union"). Live: onInput → renameNode(id,name)
+# updates node.label + syncShapesState (Model Tree + panel reflect immediately); onBlur/Enter →
+# commitRenameNode (regenCode; restores a default label if cleared). Esc/Enter blur the field;
+# onPointerDown stops propagation so editing doesn't start a panel drag. Labels are emitted ONLY as a
+# code comment (// <label>), so any text is safe — verified node.label + "// Mounting plate" in code.
+# methods: renameNode, commitRenameNode, defaultLabelFor. (Read-only/advanced rows aren't renamed this
+# way — their labels come from the evaluated geometry; a future nicety could edit the [scs-part] comment.)
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.48.0 — Top toolbar condensed into a File ▾ menu (menu plan step 1)
 # ===================================================================================================
 # The top strip's right cluster was 4–5 always-on buttons (Open, Save .scad, Export STL, Import mesh,
