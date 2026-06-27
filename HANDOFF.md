@@ -1,4 +1,25 @@
 # ===================================================================================================
+# HANDOFF — v0.50.3 — Refactor: color palette token table + panelChrome() helper (audit item #2)
+# ===================================================================================================
+# WHY: audit finding #2 — no single palette source (106 distinct color tokens / 590 uses) and the
+# floating-panel chrome string (bg+blur+border+radius+shadow) was repeated ~9× across panel/menu styles.
+# WHAT: added two class fields right after the Z scale:
+#   - `C = {...}` — documented design-token table: surfaces (void/bg/surface/surface2), borders
+#     (line/border/borderStrong/borderBlue), a text ramp (textBright→textDisabled), accent blues,
+#     semantic red/green/amber, glass fills, and elevation shadows (shadowSm/Md/Lg/Xl/Ctx).
+#   - `panelChrome(o)` — returns the repeated chrome recipe; defaults match the standard inspector
+#     panel, overridable via {bg, blur, border, r, shadow}. Output is BYTE-IDENTICAL to the old
+#     literals (verified via eval_js comparing tree/params/edge/file styles).
+# APPLIED: the 9 panel/menu base strings (tree, params, shape, group, edge, lib, thread, file, and
+#   both context-menu strings) now call ${this.panelChrome({...})} with C tokens instead of inline
+#   chrome literals. No visual change — re-rendered identically.
+# SCOPE NOTE (same constraint as #2/#3): the ~229 color literals in TEMPLATE markup stay inline
+#   (holes would delay first paint); they mirror the C table, which is now the documented reference.
+#   3 markup chrome strings remain by design (tool-rail flyout L263/L279, deferred-extrude box L734).
+# No engine changes; conformance unaffected. AUDIT ITEMS #1, #2, #3 all now complete.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.50.2 — Refactor: named z-index scale (audit item #3)
 # ===================================================================================================
 # WHY: audit finding #3 — 18 ad-hoc z-index values (25–70) scattered across the file with no scale;

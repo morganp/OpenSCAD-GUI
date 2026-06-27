@@ -62,7 +62,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.50.2</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.50.3</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -967,6 +967,37 @@ class Component extends DCLogic {
     overlay: 60,         // loading spinner, push/pull HUD
     modal: 70,           // top-most centered modal
   };
+
+  // ---- color palette: single reference for the editor's color vocabulary ----
+  // Many static colors remain inline in the TEMPLATE markup (inline-style {{holes}} would delay
+  // first paint) — those literals mirror this table. The JS-computed style strings below use it.
+  C = {
+    // surfaces (deep → raised)
+    void: '#0F1114', bg: '#15171B', surface: '#181B1F', surface2: '#1B1E23',
+    // hairlines / borders
+    line: '#23272E', border: '#2C3037', borderStrong: '#34393F', borderBlue: '#34495F',
+    // text ramp (bright → disabled)
+    textBright: '#E6E9EE', text: '#C7CCD4', textDim: '#9AA3AE', textMute: '#8A9099',
+    textFaint: '#6B7280', textFainter: '#5B616B', textDisabled: '#454B54',
+    // accent (blue) + semantic
+    blue: '#3B82F6', blueDeep: '#2563EB', blueText: '#9CC2F5', blueBorder: '#2C4D78',
+    red: '#E0736B', green: '#5E8C6A', amber: '#D8A24A',
+    // translucent panel fills (glass)
+    glass: 'rgba(27,30,35,.82)', glassPanel: 'rgba(24,27,31,.94)',
+    glassPanel2: 'rgba(24,27,31,.92)', glassMenu: 'rgba(24,27,31,.97)',
+    // elevation shadows
+    shadowSm: '0 8px 26px rgba(0,0,0,.4)', shadowMd: '0 10px 30px rgba(0,0,0,.45)',
+    shadowLg: '0 14px 40px rgba(0,0,0,.55)', shadowXl: '0 16px 44px rgba(0,0,0,.55)',
+    shadowCtx: '0 16px 44px rgba(0,0,0,.6)',
+  };
+  // The floating-panel / menu chrome recipe (bg + blur + border + radius + shadow) that was
+  // repeated ~9× across the panel & menu style strings. Defaults match the standard inspector panel.
+  panelChrome(o) {
+    o = o || {};
+    const bg = o.bg || this.C.glassPanel, blur = o.blur || 14, border = o.border || this.C.border,
+          r = o.r != null ? o.r : 13, shadow = o.shadow || this.C.shadowLg;
+    return `background:${bg};backdrop-filter:blur(${blur}px);border:1px solid ${border};border-radius:${r}px;box-shadow:${shadow};`;
+  }
 
   componentDidMount() {
     this._onKey = (e) => this.onKey(e);
@@ -5829,7 +5860,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         ctxItems = items;
         const mx = Math.min(ctx.x, window.innerWidth - 200);
         const my = Math.min(ctx.y, window.innerHeight - (Math.max(1, items.length) * 32 + 24));
-        ctxStyle = items.length ? `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;` : '';
+        ctxStyle = items.length ? `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;${this.panelChrome({bg:this.C.glassMenu, border:this.C.borderStrong, r:10, shadow:this.C.shadowCtx})}padding:5px;` : '';
       } else {
       const node = this.findNode(ctx.id);
       const nIsGroup = this.isGroup(node);
@@ -5871,7 +5902,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       ctxItems = items;
       const mx = Math.min(ctx.x, window.innerWidth - 200);
       const my = Math.min(ctx.y, window.innerHeight - (items.length * 32 + 24));
-      ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;`;
+      ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;${this.panelChrome({bg:this.C.glassMenu, border:this.C.borderStrong, r:10, shadow:this.C.shadowCtx})}padding:5px;`;
       }
     }
 
@@ -5987,13 +6018,13 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       libOpen: st.libOpen, libSpec: st.libSpec, libMsg: st.libMsg, hasLibMsg: !!st.libMsg,
       toggleLib: this.toggleLib, closeLib: this.closeLib, setLibSpec: this.setLibSpec, onLibKey: this.onLibKey,
       dragLib: this.startPanelDrag('lib'),
-      libPanelStyle: this.panelStyle('lib', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;`),
+      libPanelStyle: this.panelStyle('lib', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:344px;${this.panelChrome({bg:this.C.glassMenu, r:12, shadow:this.C.shadowXl})}padding:13px;`),
       fetchLib: () => this.fetchGithubLib(),
       // ---- Thread generator ----
       threadOpen: st.threadOpen,
       toggleThread: this.toggleThread, closeThread: this.closeThread, insertThread: this.insertThread,
       dragThread: this.startPanelDrag('thread'),
-      threadPanelStyle: this.panelStyle('thread', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:360px;max-height:calc(100vh - 128px);overflow-y:auto;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;`),
+      threadPanelStyle: this.panelStyle('thread', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:360px;max-height:calc(100vh - 128px);overflow-y:auto;${this.panelChrome({bg:this.C.glassMenu, r:12, shadow:this.C.shadowXl})}padding:14px;`),
       threadSize: st.thread.size, threadSizeOpts: this.threadSizes(),
       threadPitch: this.fmt(st.thread.pitch), threadLen: this.fmt(st.thread.len),
       threadTol: st.thread.tol, threadTolLabel: '\u00b1' + st.thread.tol.toFixed(2) + ' mm',
@@ -6070,14 +6101,14 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       onTreeHeaderClick: () => { if (this.state.isMobile) this.setState(s => ({ mobileTreeOpen: !s.mobileTreeOpen })); },
       treeCaretStyle: `display:${st.isMobile ? 'flex' : 'none'};align-items:center;justify-content:center;width:16px;height:16px;color:#6B7280;font-size:11px;transition:transform .15s;transform:rotate(${st.mobileTreeOpen ? '90deg' : '0deg'});`,
       treeResizeStyle: `height:11px;display:${st.isMobile ? 'none' : 'flex'};align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;border-top:1px solid #23272E;`,
-      treePanelStyle: this.panelStyle('tree', `position:absolute;left:16px;bottom:16px;z-index:${this.Z.chrome};width:226px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;`),
+      treePanelStyle: this.panelStyle('tree', `position:absolute;left:16px;bottom:16px;z-index:${this.Z.chrome};width:226px;${this.panelChrome({bg:this.C.glass, blur:12, r:12, shadow:this.C.shadowMd})}overflow:hidden;`),
       dragEdge: this.startPanelDrag('edge'),
       dragShape: this.startPanelDrag('shape'),
       dragGroup: this.startPanelDrag('group'),
-      paramsPanelStyle: this.panelStyle('params', `position:absolute;left:84px;top:72px;z-index:${this.Z.panel};width:256px;background:rgba(24,27,31,.94);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);overflow:hidden;`),
-      edgePanelStyle: this.panelStyle('edge', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelTop};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #34495F;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;min-width:330px;`),
-      shapePanelStyle: this.panelStyle('shape', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:344px;`),
-      groupPanelStyle: this.panelStyle('group', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:312px;`),
+      paramsPanelStyle: this.panelStyle('params', `position:absolute;left:84px;top:72px;z-index:${this.Z.panel};width:256px;${this.panelChrome()}overflow:hidden;`),
+      edgePanelStyle: this.panelStyle('edge', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelTop};${this.panelChrome({bg:this.C.glassPanel2, border:this.C.borderBlue})}padding:13px 15px;min-width:330px;`),
+      shapePanelStyle: this.panelStyle('shape', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};${this.panelChrome({bg:this.C.glassPanel2})}padding:13px 15px;width:344px;`),
+      groupPanelStyle: this.panelStyle('group', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};${this.panelChrome({bg:this.C.glassPanel2})}padding:13px 15px;width:312px;`),
       varsList,
       varsEmpty: varsList.length === 0,
       varCount: varsList.length,
@@ -6225,7 +6256,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       miImport: () => { this.setState({ fileMenuOpen: false }); this.openImport(); },
       miLibrary: () => this.setState({ fileMenuOpen: false, libOpen: true }),
       fileMenuBtnStyle: `display:flex;align-items:center;gap:7px;background:${st.fileMenuOpen ? '#262A30' : 'transparent'};border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;`,
-      fileMenuStyle: `position:absolute;top:62px;right:16px;z-index:${this.Z.menu};width:236px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:6px;`,
+      fileMenuStyle: `position:absolute;top:62px;right:16px;z-index:${this.Z.menu};width:236px;${this.panelChrome({bg:this.C.glassMenu, r:12, shadow:this.C.shadowXl})}padding:6px;`,
       fileItemStyle: "display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:8px 9px;border-radius:8px;cursor:pointer;text-align:left;",
       openImport: this.openImport, onImportChosen: this.onImportChosen,
       hasImports: !!((this._imports && this._imports.size) || (this._surfaces && this._surfaces.size) || (this._svg && this._svg.size) || (this._scadFiles && this._scadFiles.size)),
