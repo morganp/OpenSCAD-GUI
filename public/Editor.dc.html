@@ -62,7 +62,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.50.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.50.2</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -944,6 +944,29 @@ class Component extends DCLogic {
   _rendered = [];          // nodes currently added to the scene (for teardown)
   vars = [];               // [{ name, value }] ordered
   seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
+
+  // ---- z-index scale: single source of truth for stacking order (low → high) ----
+  // The static base-chrome tiers (hud/chrome/panel*) are ALSO written as literals in the template
+  // markup (status pill, toolbar, tool rail, model tree, inspector mounts, menu scrims) because
+  // inline-style {{holes}} would delay first paint — keep those literals in sync with this table.
+  // The conflict-prone CONDITIONAL overlays below (drawers, dropdowns, context menu, HUD, modal)
+  // are driven from here so they can never collide with a panel tier again.
+  Z = {
+    hud: 25,             // bottom status pill + live-preview pill
+    drawerBody: 28,      // desktop code-drawer panel
+    drawerTab: 29,       // desktop code-drawer pull tab + imports chip
+    chrome: 30,          // top toolbar, tool rail, model tree
+    panel: 33,           // params panel, read-only badge
+    panelMid: 34,        // shape / group inspector
+    panelTop: 35,        // edge inspector (sits above shape/group)
+    submenuScrim: 39, submenu: 40,   // tool-rail flyout
+    fnScrim: 40, fnMenu: 41,         // $fn picker
+    menuScrim: 44, menu: 45,         // file / library / thread dropdowns
+    mobileFab: 46, mobileDrawer: 47, // mobile full-screen code drawer
+    ctxScrim: 48, ctxMenu: 49,       // right-click context menu
+    overlay: 60,         // loading spinner, push/pull HUD
+    modal: 70,           // top-most centered modal
+  };
 
   componentDidMount() {
     this._onKey = (e) => this.onKey(e);
@@ -5725,7 +5748,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
     const anchor = st.ppHudPos || { x: vw / 2, y: vh / 2 };
     const hudLeft = Math.min(Math.max(10, anchor.x + 16), vw - 250);
     const hudTop = Math.min(Math.max(10, anchor.y - 54), vh - 96);
-    const ppHudStyle = 'position:fixed;left:' + hudLeft + 'px;top:' + hudTop + 'px;z-index:60;'
+    const ppHudStyle = 'position:fixed;left:' + hudLeft + 'px;top:' + hudTop + 'px;z-index:' + this.Z.overlay + ';'
       + 'background:rgba(20,26,36,.94);backdrop-filter:blur(14px);border:1px solid #2E5C92;border-radius:11px;'
       + 'padding:11px 13px;box-shadow:0 10px 30px rgba(0,0,0,.5);min-width:182px;pointer-events:auto;';
     const ppHudInputStyle = 'flex:1;min-width:0;width:84px;background:#0F1114;border:1px solid '
@@ -5806,7 +5829,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         ctxItems = items;
         const mx = Math.min(ctx.x, window.innerWidth - 200);
         const my = Math.min(ctx.y, window.innerHeight - (Math.max(1, items.length) * 32 + 24));
-        ctxStyle = items.length ? `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:49;min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;` : '';
+        ctxStyle = items.length ? `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;` : '';
       } else {
       const node = this.findNode(ctx.id);
       const nIsGroup = this.isGroup(node);
@@ -5848,7 +5871,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       ctxItems = items;
       const mx = Math.min(ctx.x, window.innerWidth - 200);
       const my = Math.min(ctx.y, window.innerHeight - (items.length * 32 + 24));
-      ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:49;min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;`;
+      ctxStyle = `position:fixed;left:${mx}px;top:${Math.max(8, my)}px;z-index:${this.Z.ctxMenu};min-width:184px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #34393F;border-radius:10px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;`;
       }
     }
 
@@ -5930,11 +5953,11 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
 
     const drawerW = 420;
     const drawerStyle = st.isMobile
-      ? `position:fixed;inset:0;z-index:47;display:flex;flex-direction:column;background:rgba(16,18,22,.985);backdrop-filter:blur(16px);transform:translateX(${st.drawerOpen ? '0' : '100%'});transition:transform .28s cubic-bezier(.4,0,.2,1);`
-      : `position:absolute;top:64px;bottom:0;right:0;width:${drawerW}px;z-index:28;display:flex;flex-direction:column;background:rgba(18,20,24,.94);backdrop-filter:blur(16px);border-left:1px solid #23272E;border-top:1px solid #23272E;border-radius:12px 0 0 0;box-shadow:-12px 0 40px rgba(0,0,0,.4);transform:translateX(${st.drawerOpen ? '0' : drawerW + 'px'});transition:transform .28s cubic-bezier(.4,0,.2,1);`;
+      ? `position:fixed;inset:0;z-index:${this.Z.mobileDrawer};display:flex;flex-direction:column;background:rgba(16,18,22,.985);backdrop-filter:blur(16px);transform:translateX(${st.drawerOpen ? '0' : '100%'});transition:transform .28s cubic-bezier(.4,0,.2,1);`
+      : `position:absolute;top:64px;bottom:0;right:0;width:${drawerW}px;z-index:${this.Z.drawerBody};display:flex;flex-direction:column;background:rgba(18,20,24,.94);backdrop-filter:blur(16px);border-left:1px solid #23272E;border-top:1px solid #23272E;border-radius:12px 0 0 0;box-shadow:-12px 0 40px rgba(0,0,0,.4);transform:translateX(${st.drawerOpen ? '0' : drawerW + 'px'});transition:transform .28s cubic-bezier(.4,0,.2,1);`;
     const drawerTab = st.isMobile
-      ? `position:fixed;bottom:18px;right:16px;z-index:46;display:${st.drawerOpen ? 'none' : 'flex'};align-items:center;justify-content:center;gap:7px;height:46px;padding:0 18px;border-radius:23px;border:1px solid #2C4D78;background:rgba(28,50,81,.96);backdrop-filter:blur(12px);color:#9CC2F5;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.5);`
-      : `position:absolute;top:50%;right:${st.drawerOpen ? drawerW : 0}px;transform:translateY(-50%);z-index:29;display:flex;align-items:center;justify-content:center;width:26px;height:54px;border-radius:9px 0 0 9px;border:1px solid #2C3037;border-right:none;background:rgba(27,30,35,.9);backdrop-filter:blur(12px);color:#9AA3AE;cursor:pointer;transition:right .28s cubic-bezier(.4,0,.2,1);transform-origin:center;` + (st.drawerOpen ? 'transform:translateY(-50%) rotate(180deg);' : '');
+      ? `position:fixed;bottom:18px;right:16px;z-index:${this.Z.mobileFab};display:${st.drawerOpen ? 'none' : 'flex'};align-items:center;justify-content:center;gap:7px;height:46px;padding:0 18px;border-radius:23px;border:1px solid #2C4D78;background:rgba(28,50,81,.96);backdrop-filter:blur(12px);color:#9CC2F5;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.5);`
+      : `position:absolute;top:50%;right:${st.drawerOpen ? drawerW : 0}px;transform:translateY(-50%);z-index:${this.Z.drawerTab};display:flex;align-items:center;justify-content:center;width:26px;height:54px;border-radius:9px 0 0 9px;border:1px solid #2C3037;border-right:none;background:rgba(27,30,35,.9);backdrop-filter:blur(12px);color:#9AA3AE;cursor:pointer;transition:right .28s cubic-bezier(.4,0,.2,1);transform-origin:center;` + (st.drawerOpen ? 'transform:translateY(-50%) rotate(180deg);' : '');
 
     return {
       setViewport: this.setViewport,
@@ -5964,13 +5987,13 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       libOpen: st.libOpen, libSpec: st.libSpec, libMsg: st.libMsg, hasLibMsg: !!st.libMsg,
       toggleLib: this.toggleLib, closeLib: this.closeLib, setLibSpec: this.setLibSpec, onLibKey: this.onLibKey,
       dragLib: this.startPanelDrag('lib'),
-      libPanelStyle: this.panelStyle('lib', 'position:absolute;top:108px;left:16px;z-index:45;width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;'),
+      libPanelStyle: this.panelStyle('lib', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;`),
       fetchLib: () => this.fetchGithubLib(),
       // ---- Thread generator ----
       threadOpen: st.threadOpen,
       toggleThread: this.toggleThread, closeThread: this.closeThread, insertThread: this.insertThread,
       dragThread: this.startPanelDrag('thread'),
-      threadPanelStyle: this.panelStyle('thread', 'position:absolute;top:108px;left:16px;z-index:45;width:360px;max-height:calc(100vh - 128px);overflow-y:auto;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;'),
+      threadPanelStyle: this.panelStyle('thread', `position:absolute;top:108px;left:16px;z-index:${this.Z.menu};width:360px;max-height:calc(100vh - 128px);overflow-y:auto;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;`),
       threadSize: st.thread.size, threadSizeOpts: this.threadSizes(),
       threadPitch: this.fmt(st.thread.pitch), threadLen: this.fmt(st.thread.len),
       threadTol: st.thread.tol, threadTolLabel: '\u00b1' + st.thread.tol.toFixed(2) + ' mm',
@@ -6047,14 +6070,14 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       onTreeHeaderClick: () => { if (this.state.isMobile) this.setState(s => ({ mobileTreeOpen: !s.mobileTreeOpen })); },
       treeCaretStyle: `display:${st.isMobile ? 'flex' : 'none'};align-items:center;justify-content:center;width:16px;height:16px;color:#6B7280;font-size:11px;transition:transform .15s;transform:rotate(${st.mobileTreeOpen ? '90deg' : '0deg'});`,
       treeResizeStyle: `height:11px;display:${st.isMobile ? 'none' : 'flex'};align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;border-top:1px solid #23272E;`,
-      treePanelStyle: this.panelStyle('tree', 'position:absolute;left:16px;bottom:16px;z-index:30;width:226px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;'),
+      treePanelStyle: this.panelStyle('tree', `position:absolute;left:16px;bottom:16px;z-index:${this.Z.chrome};width:226px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;`),
       dragEdge: this.startPanelDrag('edge'),
       dragShape: this.startPanelDrag('shape'),
       dragGroup: this.startPanelDrag('group'),
-      paramsPanelStyle: this.panelStyle('params', 'position:absolute;left:84px;top:72px;z-index:33;width:256px;background:rgba(24,27,31,.94);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);overflow:hidden;'),
-      edgePanelStyle: this.panelStyle('edge', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:35;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #34495F;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;min-width:330px;'),
-      shapePanelStyle: this.panelStyle('shape', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:344px;'),
-      groupPanelStyle: this.panelStyle('group', 'position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:34;background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:312px;'),
+      paramsPanelStyle: this.panelStyle('params', `position:absolute;left:84px;top:72px;z-index:${this.Z.panel};width:256px;background:rgba(24,27,31,.94);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);overflow:hidden;`),
+      edgePanelStyle: this.panelStyle('edge', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelTop};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #34495F;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;min-width:330px;`),
+      shapePanelStyle: this.panelStyle('shape', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:344px;`),
+      groupPanelStyle: this.panelStyle('group', `position:absolute;top:16px;left:50%;transform:translateX(-50%);z-index:${this.Z.panelMid};background:rgba(24,27,31,.92);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:13px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:13px 15px;width:312px;`),
       varsList,
       varsEmpty: varsList.length === 0,
       varCount: varsList.length,
@@ -6155,7 +6178,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       roRotateTab: this.tab(st.gizmoMode === 'rotate'),
       roScaleTab: this.tab(st.gizmoMode === 'scale'),
       exitReadOnly: this.exitReadOnly,
-      roBadgeStyle: `position:absolute;top:74px;right:${st.drawerOpen ? 436 : 16}px;z-index:33;display:flex;align-items:center;gap:8px;background:rgba(40,33,18,.9);backdrop-filter:blur(12px);border:1px solid #5A4A22;border-radius:10px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);`,
+      roBadgeStyle: `position:absolute;top:74px;right:${st.drawerOpen ? 436 : 16}px;z-index:${this.Z.panel};display:flex;align-items:center;gap:8px;background:rgba(40,33,18,.9);backdrop-filter:blur(12px);border:1px solid #5A4A22;border-radius:10px;padding:8px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);`,
       shapeCount: this.shapes.length,
       hasMultiSel: !st.readOnly && selIds.length >= 2,
       multiSelHint: canGroup ? (selIds.length + ' selected \u2014 first row is the difference base') : 'Select shapes at the same level to combine',
@@ -6202,7 +6225,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       miImport: () => { this.setState({ fileMenuOpen: false }); this.openImport(); },
       miLibrary: () => this.setState({ fileMenuOpen: false, libOpen: true }),
       fileMenuBtnStyle: `display:flex;align-items:center;gap:7px;background:${st.fileMenuOpen ? '#262A30' : 'transparent'};border:none;color:#C7CCD4;font:inherit;font-size:12px;padding:6px 11px;border-radius:7px;cursor:pointer;`,
-      fileMenuStyle: 'position:absolute;top:62px;right:16px;z-index:45;width:236px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:6px;',
+      fileMenuStyle: `position:absolute;top:62px;right:16px;z-index:${this.Z.menu};width:236px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:6px;`,
       fileItemStyle: "display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;color:#C7CCD4;font:inherit;font-size:12.5px;padding:8px 9px;border-radius:8px;cursor:pointer;text-align:left;",
       openImport: this.openImport, onImportChosen: this.onImportChosen,
       hasImports: !!((this._imports && this._imports.size) || (this._surfaces && this._surfaces.size) || (this._svg && this._svg.size) || (this._scadFiles && this._scadFiles.size)),

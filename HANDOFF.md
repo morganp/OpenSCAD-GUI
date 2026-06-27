@@ -1,4 +1,25 @@
 # ===================================================================================================
+# HANDOFF — v0.50.2 — Refactor: named z-index scale (audit item #3)
+# ===================================================================================================
+# WHY: audit finding #3 — 18 ad-hoc z-index values (25–70) scattered across the file with no scale;
+# this is exactly why the mobile drawer (47) had to be hand-tuned to dodge inspector panels (34/35).
+# WHAT: added a single source-of-truth `Z = { hud:25, drawerBody:28, drawerTab:29, chrome:30,
+#   panel:33, panelMid:34, panelTop:35, submenu(Scrim):39/40, fn(Scrim/Menu):40/41, menu(Scrim):44/45,
+#   mobileFab:46, mobileDrawer:47, ctx(Scrim/Menu):48/49, overlay:60, modal:70 }` class field, with a
+#   doc comment naming every tier. All CONDITIONAL / JS-computed overlay styles in renderVals now
+#   interpolate this.Z.* (drawer + mobile drawer/FAB, tree/params/shape/group/edge panelStyle bases,
+#   lib/thread/file menus, read-only badge, both context-menu strings, push/pull HUD). Values are
+#   byte-identical to before — stacking behavior unchanged, just single-sourced.
+# KEPT AS LITERALS (by design): the static base-chrome z-indexes written directly in template markup
+#   (status pill 25, toolbar/rail 30, menu scrims 39/40/44/48, deferred-extrude box 34, imports chip
+#   29, loading overlay 60, modal 70) — turning these into {{holes}} would delay first paint. They are
+#   documented in the Z table's comment and must be kept in sync with it.
+# No engine changes; conformance unaffected. Editor verified to boot + Z resolves correctly via eval_js.
+# REMAINING AUDIT ITEM: #2 — JS palette/chrome helper for the repeated panel-chrome string
+#   (rgba(27,30,35,..)+blur ×9) and 83 distinct hex colors. Still open.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.50.1 — Refactor: extract mesh/vector parsers into public/mesh-parsers.js
 # ===================================================================================================
 # WHY: code-audit finding #1 — Editor.dc.html was a ~6800-line god component. The file-format
