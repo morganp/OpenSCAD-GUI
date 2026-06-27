@@ -44,6 +44,7 @@
 </script>
 <script src="scad-engine.js"></script>
 <script src="mesh-parsers.js"></script>
+<script src="scad-authoring.js"></script>
 <script src="conformance.js"></script>
 <script src="https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js"></script>
 </helmet>
@@ -62,7 +63,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.51.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.52.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -2801,54 +2802,9 @@ class Component extends DCLogic {
   varMap() { const m = {}; for (const v of this.vars) m[v.name] = v.value; return m; }
   syncVarsState() { this.setState({ vars: this.vars.map(v => ({ name: v.name, value: v.value })) }); }
 
-  // --- safe arithmetic evaluator (no eval): tokenize -> shunting-yard -> RPN ---
-  tokenizeExpr(str) {
-    if (typeof str !== 'string') return null;
-    if (!/^[\sA-Za-z0-9_+\-*/%().]*$/.test(str)) return null;
-    return str.match(/([0-9]*\.?[0-9]+|[A-Za-z_]\w*|[-+*/%()])/g) || [];
-  }
-  toRPN(toks) {
-    const out = [], ops = [];
-    const prec = { 'u-': 4, '*': 3, '/': 3, '%': 3, '+': 2, '-': 2 };
-    let prev = null;
-    for (const t of toks) {
-      if (/^[0-9.]/.test(t) || /^[A-Za-z_]/.test(t)) { out.push(t); prev = t; }
-      else if (t === '(') { ops.push(t); prev = t; }
-      else if (t === ')') {
-        while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop());
-        if (!ops.length) throw new Error('paren'); ops.pop(); prev = t;
-      } else {
-        let op = t;
-        if (t === '-' && (prev === null || prev === '(' || ['+','-','*','/','%','u-'].includes(prev))) op = 'u-';
-        while (ops.length) {
-          const top = ops[ops.length - 1];
-          if (top === '(') break;
-          if (prec[top] > prec[op] || (prec[top] === prec[op] && op !== 'u-')) out.push(ops.pop());
-          else break;
-        }
-        ops.push(op); prev = op;
-      }
-    }
-    while (ops.length) { const o = ops.pop(); if (o === '(') throw new Error('paren'); out.push(o); }
-    return out;
-  }
-  evalExpr(str, vars) {
-    vars = vars || this.varMap();
-    const toks = this.tokenizeExpr(str);
-    if (!toks || !toks.length) throw new Error('empty');
-    const rpn = this.toRPN(toks);
-    const st = [];
-    for (const t of rpn) {
-      if (t === 'u-') { st.push(-st.pop()); }
-      else if (t.length === 1 && '+-*/%'.includes(t)) {
-        const b = st.pop(), a = st.pop();
-        st.push(t === '+' ? a + b : t === '-' ? a - b : t === '*' ? a * b : t === '/' ? a / b : a % b);
-      } else if (/^[0-9.]/.test(t)) { st.push(parseFloat(t)); }
-      else { if (!(t in vars)) throw new Error('unknown:' + t); st.push(vars[t]); }
-    }
-    if (st.length !== 1 || !isFinite(st[0])) throw new Error('eval');
-    return st[0];
-  }
+  // --- arithmetic evaluator lives in scad-authoring.js (window.ScadAuthoring) — extracted v0.52.0.
+  // Wrapper supplies the editor's parameter scope when the caller doesn't pass one explicitly. ---
+  evalExpr(str, vars) { return window.ScadAuthoring.evalExpr(str, vars || this.varMap()); }
   isSingleVar(str) {
     const t = (str || '').trim();
     return (/^[A-Za-z_]\w*$/.test(t) && this.vars.some(v => v.name === t)) ? t : null;
@@ -4993,156 +4949,9 @@ class Component extends DCLogic {
     };
   }
 
-  // split a comma list respecting parens; returns trimmed tokens
-  splitArgs(str) {
-    const res = []; let depth = 0, cur = '';
-    for (const ch of str) {
-      if (ch === '(') { depth++; cur += ch; }
-      else if (ch === ')') { depth--; cur += ch; }
-      else if (ch === ',' && depth === 0) { res.push(cur); cur = ''; }
-      else cur += ch;
-    }
-    res.push(cur);
-    return res.map(s => s.trim());
-  }
-  // raw value token of a named arg (key = …), paren-aware, stops at top-level comma
-  argRaw(args, key) {
-    const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp('(^|[,(\\s])' + esc + '\\s*=\\s*');
-    const m = re.exec(args); if (!m) return null;
-    let i = m.index + m[0].length, depth = 0, out = '';
-    for (; i < args.length; i++) {
-      const ch = args[i];
-      if (ch === '(') { depth++; out += ch; }
-      else if (ch === ')') { if (depth === 0) break; depth--; out += ch; }
-      else if (ch === ',' && depth === 0) break;
-      else out += ch;
-    }
-    return out.trim();
-  }
-  // a token -> { value, expr|null }: pure number = literal, else expression (resolved with vmap)
-  tokOrNum(tk, vmap) {
-    const t = (tk || '').trim();
-    if (t === '') return { value: 0, expr: null };
-    if (/^-?[0-9]*\.?[0-9]+$/.test(t)) return { value: parseFloat(t), expr: null };
-    let v = 0; try { v = this.evalExpr(t, vmap); } catch (_) {}
-    return { value: v, expr: t };
-  }
-  // ---- recursive, brace-aware parser ----
-  matchParen(src, i) { let d = 0; for (let j = i; j < src.length; j++) { if (src[j] === '(') d++; else if (src[j] === ')') { d--; if (d === 0) return j + 1; } } return src.length; }
-  matchBrace(src, i) { let d = 0; for (let j = i; j < src.length; j++) { if (src[j] === '{') d++; else if (src[j] === '}') { d--; if (d === 0) return j + 1; } } return src.length; }
-  stripModules(src) {
-    let out = '', i = 0;
-    while (i < src.length) {
-      const m = /module\s+[A-Za-z_]\w*\s*\([^)]*\)\s*\{/.exec(src.slice(i));
-      if (!m) { out += src.slice(i); break; }
-      const start = i + m.index;
-      out += src.slice(i, start);
-      const braceAt = start + m[0].length - 1;
-      i = this.matchBrace(src, braceAt);
-    }
-    return out;
-  }
-  argVector(args) { const m = /\[([^\]]*)\]/.exec(args); return m ? m[1] : args; }
-  readPosTokens(inner) {
-    const toks = this.splitArgs(inner); const pos = [0, 0, 0], pexpr = {};
-    ['px', 'py', 'pz'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); pos[i] = r.value; if (r.expr) pexpr[k] = r.expr; });
-    return { pos, pexpr };
-  }
-  // rotate([x,y,z]) -> [x,y,z]; rotate(angle) -> [0,0,angle]
-  readRotTokens(args) {
-    if (/\[/.test(args)) {
-      const toks = this.splitArgs(this.argVector(args)); const r = [0, 0, 0];
-      toks.forEach((t, i) => { if (i < 3) r[i] = +(this.tokOrNum(t, this._vmap).value || 0).toFixed(4); });
-      return r;
-    }
-    const a = +(this.tokOrNum(this.splitArgs(args)[0] || '0', this._vmap).value || 0).toFixed(4);
-    return [0, 0, a];
-  }
-  readPrimitive(name, args) {
-    if (name === 'circle') {
-      const dims = { r: 22 }, ex = {};
-      const dT = this.argRaw(args, 'd');
-      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 44) / 2; if (r.expr) ex.d = r.expr; }
-      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 22; } else { const f = this.splitArgs(args)[0]; if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); dims.r = r.value || 22; } } }
-      return { type: 'circle', dims, expr: ex };
-    }
-    if (name === 'square') {
-      const dims = { x: 30, y: 30 }, ex = {};
-      if (/\[/.test(args)) {
-        const toks = this.splitArgs(this.argVector(args));
-        ['x', 'y'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); dims[k] = r.value || dims[k]; if (r.expr) ex[k] = r.expr; });
-      } else { const f = this.splitArgs(args)[0]; if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); dims.x = dims.y = r.value || 30; } }
-      return { type: 'square', dims, expr: ex };
-    }
-    if (name === 'polygon') {
-      const pts = this.parsePolyPoints(args);
-      return { type: 'polygon', dims: { pts: pts.length >= 3 ? pts : [[-20, -20], [20, -20], [20, 20]] } };
-    }
-    if (name === 'cube') {
-      const toks = this.splitArgs(this.argVector(args)); const dims = { x: 10, y: 10, z: 10 }, ex = {};
-      ['x', 'y', 'z'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); dims[k] = r.value || dims[k]; if (r.expr) ex[k] = r.expr; });
-      return { type: 'cuboid', dims, expr: ex };
-    }
-    if (name === 'sphere') {
-      const dims = { r: 10 }, ex = {};
-      const dT = this.argRaw(args, 'd');
-      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
-      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } else { const f = this.splitArgs(args)[0]; if (f) { const r = this.tokOrNum(f, this._vmap); dims.r = r.value || 10; } } }
-      return { type: 'sphere', dims, expr: ex };
-    }
-    const dims = { r: 10, h: 10 }, ex = {};
-    const hT = this.argRaw(args, 'h'); if (hT != null) { const r = this.tokOrNum(hT, this._vmap); dims.h = r.value || 10; if (r.expr) ex.h = r.expr; }
-    // cone / truncated cone: r1/r2 or d1/d2 (two radii) -> tapered cylinder
-    const r1T = this.argRaw(args, 'r1'), r2T = this.argRaw(args, 'r2');
-    const d1T = this.argRaw(args, 'd1'), d2T = this.argRaw(args, 'd2');
-    if (r1T != null || r2T != null || d1T != null || d2T != null) {
-      dims.r = r1T != null ? (this.tokOrNum(r1T, this._vmap).value)
-        : d1T != null ? (this.tokOrNum(d1T, this._vmap).value / 2) : 10;
-      dims.r2 = r2T != null ? (this.tokOrNum(r2T, this._vmap).value)
-        : d2T != null ? (this.tokOrNum(d2T, this._vmap).value / 2) : 0;
-    } else {
-      const dT = this.argRaw(args, 'd');
-      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 20) / 2; if (r.expr) ex.d = r.expr; }
-      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 10; } }
-    }
-    // low $fn -> faceted prism/pyramid (sides); high $fn left smooth
-    const fnT = this.argRaw(args, '$fn');
-    if (fnT != null) { const n = this.tokOrNum(fnT, this._vmap).value; if (n >= 3 && n <= 12) dims.sides = Math.round(n); }
-    return { type: 'cylinder', dims, expr: ex };
-  }
-  // parse polygon([[x,y], ...]) point list -> [[x,y], ...] (numeric; outer bracket ignored)
-  parsePolyPoints(args) {
-    let s = args; const pe = this.argRaw(args, 'points'); if (pe != null) s = pe;
-    const pts = []; const re = /\[\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\]/g; let m;
-    while ((m = re.exec(s)) !== null) pts.push([+parseFloat(m[1]).toFixed(4), +parseFloat(m[2]).toFixed(4)]);
-    return pts;
-  }
-  // numeric value of a named arg (or a leading positional for height/angle), else default
-  numArg(args, key, dflt) {
-    const t = this.argRaw(args, key);
-    if (t != null) { const r = this.tokOrNum(t, this._vmap); return (r.value != null && !isNaN(r.value)) ? r.value : dflt; }
-    if (key === 'height' || key === 'angle') {
-      const f = this.splitArgs(args)[0];
-      if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); if (!isNaN(r.value)) return r.value; }
-    }
-    return dflt;
-  }
-  // end index (exclusive) of ONE statement starting at i: after its terminating top-level ';',
-  // or after a balanced {…} body if that comes first (for a brace-less extrude/transform child).
-  statementEnd(src, i) {
-    let d = 0;
-    for (let j = i; j < src.length; j++) {
-      const c = src[j];
-      if (c === '(') d++;
-      else if (c === ')') d--;
-      else if (d === 0) {
-        if (c === '{') return this.matchBrace(src, j);
-        if (c === ';') return j + 1;
-      }
-    }
-    return src.length;
-  }
+  // ---- SCAD authoring parser + arithmetic evaluator extracted to scad-authoring.js (window.ScadAuthoring), v0.52.0.
+  // The editor keeps restingPos (also used by the GUI) + a thin parseScad wrapper (below) that threads
+  // editor scope (reserved + restingPos) into the module. evalExpr's wrapper lives up in the eval section. ----
   restingPos(node) {
     if (node.type === 'cuboid') return [0, 0, node.dims.z / 2];
     if (node.type === 'cylinder') return [0, 0, node.dims.h / 2];
@@ -5152,110 +4961,10 @@ class Component extends DCLogic {
     if (node.type === 'circle' || node.type === 'square' || node.type === 'polygon') return [0, 0, 0.3];
     return [0, 0, node.dims.r];
   }
-  parseBlock(src) {
-    const nodes = []; let i = 0; const n = src.length;
-    const TRANSFORMS = ['scale', 'mirror', 'color', 'multmatrix', 'resize', 'offset'];
-    const GROUPS = ['union', 'difference', 'intersection', 'hull'];
-    const EXTRUDES = ['linear_extrude', 'rotate_extrude'];
-    const PRIMS = ['cube', 'cylinder', 'sphere', 'circle', 'square', 'polygon'];
-    while (i < n) {
-      while (i < n && /[\s;]/.test(src[i])) i++;
-      if (i >= n) break;
-      // consume transform prefixes; remember translate/rotate as the node's pos/rot
-      let pos = null, pexpr = null, rot = null, guard = 0;
-      while (guard++ < 50) {
-        const mm = /^([A-Za-z_]\w*)\s*\(/.exec(src.slice(i));
-        if (!mm) break;
-        const nm = mm[1];
-        if (nm === 'translate') {
-          const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart);
-          const r = this.readPosTokens(this.argVector(src.slice(pStart + 1, pEnd - 1)));
-          pos = r.pos; pexpr = r.pexpr; i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue;
-        }
-        if (nm === 'rotate') {
-          const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart);
-          rot = this.readRotTokens(src.slice(pStart + 1, pEnd - 1));
-          i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue;
-        }
-        if (TRANSFORMS.includes(nm)) { const pStart = i + mm[0].length - 1, pEnd = this.matchParen(src, pStart); i = pEnd; while (i < n && /\s/.test(src[i])) i++; continue; }
-        break;
-      }
-      const pm = /^([A-Za-z_]\w*)\s*\(/.exec(src.slice(i));
-      if (!pm) { i++; continue; }
-      const name = pm[1];
-      const pStart = i + pm[0].length - 1, pEnd = this.matchParen(src, pStart);
-      const args = src.slice(pStart + 1, pEnd - 1);
-      i = pEnd; while (i < n && /\s/.test(src[i])) i++;
-      if (GROUPS.includes(name)) {
-        if (src[i] === '{') {
-          const bEnd = this.matchBrace(src, i); const inner = src.slice(i + 1, bEnd - 1); i = bEnd;
-          const isEdgeTreat = /edge_fillet|edge_chamfer/.test(inner);
-          const children = this.parseBlock(inner);
-          if (isEdgeTreat) {                       // our own edge-treatment wrapper, not a user boolean
-            const prim = children.find(c => c.type !== 'group');
-            if (prim) { if (pos) { prim.pos = pos; if (pexpr && Object.keys(pexpr).length) prim.expr = { ...pexpr, ...(prim.expr || {}) }; } else prim.pos = this.restingPos(prim); if (rot && (rot[0] || rot[1] || rot[2])) prim.rot = rot; nodes.push(prim); }
-          } else if (children.length) {
-            const grp = { type: 'group', op: name, children };
-            if (pos && (pos[0] || pos[1] || pos[2])) grp.pos = pos;
-            if (rot && (rot[0] || rot[1] || rot[2])) grp.rot = rot;
-            nodes.push(grp);
-          }
-        }
-        continue;
-      }
-      if (EXTRUDES.includes(name)) {
-        const dims = name === 'rotate_extrude'
-          ? { angle: this.numArg(args, 'angle', 360) }
-          : { height: this.numArg(args, 'height', 30), twist: this.numArg(args, 'twist', 0), escale: this.numArg(args, 'scale', 1) };
-        let children = [];
-        if (src[i] === '{') {
-          const bEnd = this.matchBrace(src, i); children = this.parseBlock(src.slice(i + 1, bEnd - 1)); i = bEnd;
-        } else {                                  // brace-less single child: linear_extrude(10) circle(5);
-          const sEnd = this.statementEnd(src, i); children = this.parseBlock(src.slice(i, sEnd)); i = sEnd;
-        }
-        if (children.length) {
-          const grp = { type: 'group', op: name, dims, children };
-          if (pos && (pos[0] || pos[1] || pos[2])) grp.pos = pos;
-          if (rot && (rot[0] || rot[1] || rot[2])) grp.rot = rot;
-          nodes.push(grp);
-        }
-        continue;
-      }
-      if (PRIMS.includes(name)) {
-        const node = this.readPrimitive(name, args);
-        if (pos) { node.pos = pos; if (pexpr && Object.keys(pexpr).length) node.expr = { ...pexpr, ...(node.expr || {}) }; }
-        else node.pos = this.restingPos(node);
-        if (rot && (rot[0] || rot[1] || rot[2])) node.rot = rot;
-        while (i < n && /[\s;]/.test(src[i])) i++;
-        nodes.push(node);
-        continue;
-      }
-      // unknown call -> skip its block or statement
-      if (src[i] === '{') i = this.matchBrace(src, i);
-      else { while (i < n && src[i] !== ';' && src[i] !== '{') i++; if (src[i] === ';') i++; }
-    }
-    return nodes;
-  }
+  // SCAD -> authoring-tree reconstruction lives in scad-authoring.js. Wrapper threads editor scope in.
   parseScad(txt) {
-    const clean = txt.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    const noMods = this.stripModules(clean);
-    // 1) parameter assignments: NAME = <arithmetic> ;  (skip module-call RHS)
-    const vars = []; const vmap = {};
-    const varRe = /(?:^|\n)\s*([A-Za-z_]\w*)\s*=\s*([^;{}]+);/g;
-    let vm;
-    while ((vm = varRe.exec(noMods)) !== null) {
-      const name = vm[1], rhs = vm[2].trim();
-      if (this.reserved(name)) continue;
-      if (/[A-Za-z_]\w*\s*\(/.test(rhs)) continue;       // RHS is a call, not a parameter
-      if (vars.some(v => v.name === name)) continue;
-      let val; try { val = this.evalExpr(rhs, vmap); } catch (_) { val = parseFloat(rhs); }
-      if (val == null || isNaN(val)) continue;
-      vmap[name] = val; vars.push({ name, value: +(+val).toFixed(6) });
-    }
-    // 2) body -> node tree
-    this._vmap = vmap;
-    const tree = this.parseBlock(noMods);
-    return { vars, tree };
+    const r = window.ScadAuthoring.parseScad(txt, { reserved: (nm) => this.reserved(nm), restingPos: (nd) => this.restingPos(nd) });
+    return { vars: r.vars, tree: r.tree };
   }
 
   onCodeChange = (e) => { this.setState({ code: e.target.value, dirty: true }); };

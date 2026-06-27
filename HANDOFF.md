@@ -1,4 +1,52 @@
 # ===================================================================================================
+# HANDOFF — v0.52.0 — Refactor: extract SCAD authoring parser + expression evaluator → public/scad-authoring.js  ✅ SHIPPED
+# ===================================================================================================
+# GOAL: continue breaking up the Editor.dc.html god component (audit #1 pulled the mesh parsers; this is
+# the next genuinely-pure unit). Move the SCAD→authoring-tree RECONSTRUCTION PARSER and the arithmetic
+# EXPRESSION EVALUATOR into a sibling IIFE module `window.ScadAuthoring`, like scad-engine.js / mesh-parsers.js.
+#
+# WHY THIS UNIT: a code-audit-style scan shows only TWO of these methods are called from outside the
+# parser — `evalExpr` (expression-editing UI) and `parseScad` (runCode). Everything else
+# (tokenizeExpr, toRPN, splitArgs, argRaw, argVector, matchParen, matchBrace, stripModules, statementEnd,
+# parsePolyPoints, tokOrNum, numArg, readPosTokens, readRotTokens, readPrimitive, parseBlock) is
+# parser-internal. So the bodies can move wholesale and the editor keeps just two thin delegating wrappers.
+#
+# DEPENDENCIES TO INVERT (the only `this.*` the parser/evaluator reach for):
+#   - varMap()      → evaluator default scope. Module evalExpr takes `vars` explicitly; the editor wrapper
+#                     supplies `vars || this.varMap()`.
+#   - reserved(n)   → parseScad skips reserved names when harvesting top-level params. Passed via ctx.reserved.
+#   - restingPos(n) → default position for a primitive with no translate() wrapper. Passed via ctx.restingPos.
+#   - this._vmap    → transient parse scope; becomes a threaded `vmap` arg inside the module and is DROPPED
+#                     from the editor (nothing else referenced it).
+#
+# MODULE API (window.ScadAuthoring):
+#   pure:    splitArgs, argRaw, argVector, matchParen, matchBrace, statementEnd, stripModules, parsePolyPoints
+#   eval:    tokenizeExpr, toRPN, evalExpr(str, vars), tokOrNum(tk, vmap)
+#   readers: readPosTokens(inner,vmap), readRotTokens(args,vmap), numArg(args,key,dflt,vmap), readPrimitive(name,args,vmap)
+#   blocks:  parseBlock(src, ctx{vmap,restingPos}), parseScad(txt, ctx{reserved,restingPos}) → {vars, tree, vmap}
+#
+# BUILD ORDER:
+#  1. [x] Write public/scad-authoring.js (IIFE → window.ScadAuthoring), de-`this`'d, vmap/restingPos/reserved threaded.
+#  2. [x] Add <script src="scad-authoring.js"> in helmet after mesh-parsers.js.
+#  3. [x] Editor: delete the 18 moved methods + tokenizeExpr/toRPN; replace with two wrappers —
+#         evalExpr(str,vars){ return ScadAuthoring.evalExpr(str, vars || this.varMap()); }
+#         parseScad(txt){ const r = ScadAuthoring.parseScad(txt,{reserved:n=>this.reserved(n),restingPos:n=>this.restingPos(n)}); return {vars:r.vars, tree:r.tree}; }
+#  4. [x] Verify via eval_js: extrude round-trip (v0.51.0 cases) still editable; expression-bound dims still
+#         evaluate (param + arithmetic); for-loop/text/color still read-only; conformance 113/113; clean boot.
+#  5. [x] Version badge + VERSION → 0.52.0; release snapshot OpenSCAD-GUI-v0.52.0.
+#
+# RESULT: Editor.dc.html 6450 → ~6200 lines (−12.9 KB / ~250 lines); public/scad-authoring.js = 333 lines,
+# 18 exported fns. restingPos stays in the editor (still used by placeOnFloor + hydrate). Verified via
+# eval_js: extrude height/twist round-trip editable (dims {height:45,twist:30,escale:1}); param w=25 →
+# cube dims {25,50,10} with expr bindings {x:'w',y:'w*2'} preserved (proves evalExpr wrapper + tokOrNum
+# thread editor scope correctly); for-loop/color stay read-only; conformance 113/113; boot clean (no logs).
+# INVARIANT PRESERVED: parseScad's reconstructible subset must still match isAdvanced's SIMPLE gate (v0.51.0).
+# Moving the parser doesn't change its grammar — same functions, same behavior, just relocated + parameterized.
+# NEXT (optional, not started): the OpenSCAD EMITTER (emitNode/emitPrimitive/baseCall/cylProfile/dimTok) is
+# the remaining authoring-layer unit, but it's more fmt/gfn/tree-coupled — extract behind a renderer context if pursued.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.51.0 — Dual-parser parity: extrudes + 2D primitives stay GUI-editable (B2 / read-only-tree extrusion bug)
 # ===================================================================================================
 # SYMPTOM (reproduced): build a 2D shape + linear/rotate_extrude in the GUI → fully editable. Edit ONE
