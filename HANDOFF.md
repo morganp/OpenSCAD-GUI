@@ -1,4 +1,18 @@
 # ===================================================================================================
+# HANDOFF — v0.48.0 — Top toolbar condensed into a File ▾ menu (menu plan step 1)
+# ===================================================================================================
+# The top strip's right cluster was 4–5 always-on buttons (Open, Save .scad, Export STL, Import mesh,
+# + Library in advanced) that crowded the code-drawer header / read-only badge. CONSOLIDATED into a
+# single "File ▾" dropdown (state.fileMenuOpen) with sectioned items: Project (Open / Save) · Exchange
+# (Export STL / Import mesh+vector / GitHub library [advanced]). Undo/redo stay as icon buttons (compact,
+# frequent). Each item closes the menu then calls the existing handler (openFile/saveFile/exportSTL/
+# openImport/open Library popover). Frees ~360px of top strip. handlers: toggleFileMenu/closeFileMenu +
+# miOpen/miSave/miExport/miImport/miLibrary in renderVals; fileMenuStyle/fileItemStyle.
+# MENU PLAN status: ✅ draggable popovers (v0.47) ✅ resizable tree (v0.47) ✅ toolbar condensed (v0.48).
+# Still open (optional): move the read-only badge into the drawer header; a global Delete affordance.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.47.0 — UI accessibility bugs (12/13/14) + model-tree duplicate-id robustness fix
 # ===================================================================================================
 # BUG 12 (draggable popovers) ✅: Thread & hardware AND GitHub Library popovers now drag by their
