@@ -1,4 +1,25 @@
 # ===================================================================================================
+# HANDOFF — v0.47.0 — UI accessibility bugs (12/13/14) + model-tree duplicate-id robustness fix
+# ===================================================================================================
+# BUG 12 (draggable popovers) ✅: Thread & hardware AND GitHub Library popovers now drag by their
+#   header (onPointerDown=startPanelDrag('thread'|'lib'); style via panelStyle(key, base) so a dragged
+#   position pins left/top and clears the default. Same machinery as the shape/group/params/tree panels.
+# BUG 13 (resizable Model Tree) ✅: the tree scroll area height is now state.treeHeight (default 210),
+#   with a bottom-edge drag handle (startTreeResize → clamps 96…vh-180). treeScrollStyle uses it.
+# BUG 14 (delete reachability) — INVESTIGATED + the real bug found: the per-row trash button WAS
+#   already always rendered (verified 2 buttons present with no selection), so "only on selection" was
+#   a symptom of the duplicate-id bug below, not a missing button. Delete works per-row + via keyboard.
+# ROBUSTNESS BUG (the big one — "model tree not robust with threads"): every top-level evaluated part
+#   serialized to the SAME id. Cause: collapseGeomRow hoists a single child's id up, and each part's
+#   sole child sits at child-index 0 depth 1 → all became 'g1_0'. Colliding ids meant selecting/deleting
+#   one row hit another. FIX: serializeGeom now re-stamps the whole top-level subtree with a unique
+#   top-index prefix (reidRow → 't0', 't1', 't2', children 't0_0'…). Verified ids unique; deleting the
+#   middle of 3 threads removes exactly that part. ALSO: deleteReadOnlyRow now swallows the leading
+#   "// … [scs-part]" comment so a delete doesn't leave an orphan that miscounts the next part's X offset.
+# methods: startPanelDrag('thread'|'lib'), startTreeResize, reidRow; state += treeHeight.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.46.0 — Thread moved from top toolbar INTO the shape tool palette (as advanced hardware)
 # ===================================================================================================
 # RATIONALE (user): threads are GEOMETRY creation (an advanced shape), not file I/O — so the Thread

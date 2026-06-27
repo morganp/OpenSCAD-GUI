@@ -61,7 +61,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.46.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.47.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -104,8 +104,8 @@
 
   <sc-if value="{{ libOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeLib }}" style="position:fixed;inset:0;z-index:44;"></div>
-    <div style="position:absolute;top:108px;left:16px;z-index:45;width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+    <div style="{{ libPanelStyle }}">
+      <div onPointerDown="{{ dragLib }}" style="display:flex;align-items:center;gap:8px;margin-bottom:11px;cursor:grab;touch-action:none;">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="#9CC2F5"><path d="M8 .6a7.4 7.4 0 0 0-2.34 14.42c.37.07.5-.16.5-.36v-1.26c-2.06.45-2.5-.99-2.5-.99-.34-.86-.82-1.09-.82-1.09-.67-.46.05-.45.05-.45.74.05 1.13.76 1.13.76.66 1.13 1.73.8 2.15.61.07-.48.26-.8.47-.99-1.64-.19-3.37-.82-3.37-3.65 0-.81.29-1.47.76-1.99-.08-.18-.33-.93.07-1.94 0 0 .62-.2 2.03.76a7.05 7.05 0 0 1 3.7 0c1.4-.96 2.02-.76 2.02-.76.4 1.01.15 1.76.07 1.94.48.52.76 1.18.76 1.99 0 2.84-1.73 3.46-3.38 3.64.27.23.5.68.5 1.37v2.03c0 .2.14.44.51.36A7.4 7.4 0 0 0 8 .6Z"/></svg>
         <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">GitHub library</span>
         <button onClick="{{ closeLib }}" style="margin-left:auto;background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#C7CCD4;">×</button>
@@ -129,8 +129,8 @@
 
   <sc-if value="{{ threadOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeThread }}" style="position:fixed;inset:0;z-index:44;"></div>
-    <div style="position:absolute;top:108px;left:16px;z-index:45;width:360px;max-height:calc(100vh - 128px);overflow-y:auto;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px;">
+    <div style="{{ threadPanelStyle }}">
+      <div onPointerDown="{{ dragThread }}" style="display:flex;align-items:center;gap:8px;margin-bottom:13px;cursor:grab;touch-action:none;">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M5 1.5h6M5 14.5h6M5.5 1.5c0 2 5 2.4 5 4.3 0 1.9-5 2.3-5 4.2 0 1.9 5 2.3 5 3" stroke="#9CC2F5" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">Thread &amp; hardware</span>
         <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9CC2F5;">{{ threadDesignation }}</span>
@@ -587,7 +587,7 @@
       <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8A9099;font-weight:500;">Model Tree</span>
       <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#5B616B;">{{ shapeCount }}</span>
     </div>
-    <div class="cad-scroll" style="max-height:210px;overflow-y:auto;padding:6px;">
+    <div class="cad-scroll" style="{{ treeScrollStyle }}">
       <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
         <div style="padding:14px 10px;text-align:center;color:#5B616B;font-size:11.5px;line-height:1.5;">No solids yet.<br/>Add a cuboid to begin.</div>
       </sc-if>
@@ -668,6 +668,9 @@
         </div>
       </sc-if>
       <div style="margin-top:6px;padding:0 2px;font-size:10px;color:#4F555E;line-height:1.4;">{{ treeFooterHint }}</div>
+    </div>
+    <div onPointerDown="{{ startTreeResize }}" title="Drag to resize" style="height:11px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;border-top:1px solid #23272E;">
+      <span style="width:26px;height:3px;border-radius:2px;background:#3A4048;"></span>
     </div>
   </div>
 
@@ -2857,6 +2860,23 @@ class Component extends DCLogic {
     const p = (this.state.panelPos || {})[key];
     return p ? `${base};left:${p.left}px;top:${p.top}px;right:auto;bottom:auto;transform:none;` : base;
   }
+  // resize the model-tree scroll area by dragging its bottom edge; height persisted in state.
+  startTreeResize = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const sy = e.clientY, h0 = this.state.treeHeight || 210;
+    const move = (ev) => {
+      const nh = Math.max(96, Math.min(h0 + (ev.clientY - sy), (window.innerHeight || 800) - 180));
+      this.setState({ treeHeight: nh });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up); document.body.style.cursor = '';
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    document.body.style.cursor = 'ns-resize';
+  };
 
   toggleParams = () => this.setState({ paramsOpen: !this.state.paramsOpen });
   setParamScroll = (el) => { this._paramScroll = el; };
@@ -3235,6 +3255,9 @@ class Component extends DCLogic {
     // also swallow a trailing comment line we emit above push/pull statements
     if (start >= 2 && /^\s*\/\/\s*push\/pull/.test(lines[start - 2] || '')) start -= 1;
     if (start >= 2 && /@scs-xform/.test(lines[start - 2] || '')) start -= 1;
+    // swallow the leading "// … [scs-part]" comment a generated part/primitive emits, so deleting a
+    // part doesn't leave an orphan comment that miscounts the next part's X offset.
+    if (start >= 2 && /\[scs-part\]/.test(lines[start - 2] || '')) start -= 1;
     const kept = lines.filter((_, i) => (i + 1) < start || (i + 1) > end);
     let next = kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\s+|\s+$/g, '');
     if (!next.trim()) next = '// (empty)\n';
@@ -4720,7 +4743,16 @@ class Component extends DCLogic {
     const raw = this.serializeGeomRaw(node, idx, depth);
     const row = this.collapseGeomRow(raw, depth);
     if (row && root) { row.root = true; row.topIndex = idx; row.srcLines = node && node.__src ? node.__src : null; }
+    // collapse can hoist a child's id up, so two top-level parts whose single child both sit at
+    // child-index 0 collide (both 'g1_0'). Re-stamp the whole subtree with a unique top-index prefix
+    // so tree selection + delete target the right row.
+    if (row && root) this.reidRow(row, 't' + idx);
     return row;
+  }
+  reidRow(row, prefix) {
+    if (!row) return;
+    row.id = prefix;
+    (row.children || []).forEach((c, i) => this.reidRow(c, prefix + '_' + i));
   }
   serializeGeomRaw(node, idx, depth) {
     if (!node) return null;
@@ -6331,10 +6363,14 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       redoBtnStyle: `display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:${this._redo.length ? '#C7CCD4' : '#454B54'};padding:6px 8px;border-radius:7px;cursor:${this._redo.length ? 'pointer' : 'default'};` + (this._redo.length ? '' : 'pointer-events:none;'),
       libOpen: st.libOpen, libSpec: st.libSpec, libMsg: st.libMsg, hasLibMsg: !!st.libMsg,
       toggleLib: this.toggleLib, closeLib: this.closeLib, setLibSpec: this.setLibSpec, onLibKey: this.onLibKey,
+      dragLib: this.startPanelDrag('lib'),
+      libPanelStyle: this.panelStyle('lib', 'position:absolute;top:108px;left:16px;z-index:45;width:344px;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:13px;'),
       fetchLib: () => this.fetchGithubLib(),
       // ---- Thread generator ----
       threadOpen: st.threadOpen,
       toggleThread: this.toggleThread, closeThread: this.closeThread, insertThread: this.insertThread,
+      dragThread: this.startPanelDrag('thread'),
+      threadPanelStyle: this.panelStyle('thread', 'position:absolute;top:108px;left:16px;z-index:45;width:360px;max-height:calc(100vh - 128px);overflow-y:auto;background:rgba(24,27,31,.97);backdrop-filter:blur(14px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:14px;'),
       threadSize: st.thread.size, threadSizeOpts: this.threadSizes(),
       threadPitch: this.fmt(st.thread.pitch), threadLen: this.fmt(st.thread.len),
       threadTol: st.thread.tol, threadTolLabel: '\u00b1' + st.thread.tol.toFixed(2) + ' mm',
@@ -6404,6 +6440,8 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       paramsOpen: st.paramsOpen,
       dragParams: this.startPanelDrag('params'),
       dragTree: this.startPanelDrag('tree'),
+      startTreeResize: this.startTreeResize,
+      treeScrollStyle: `max-height:${st.treeHeight || 210}px;overflow-y:auto;padding:6px;`,
       treePanelStyle: this.panelStyle('tree', 'position:absolute;left:16px;bottom:16px;z-index:30;width:226px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);overflow:hidden;'),
       dragEdge: this.startPanelDrag('edge'),
       dragShape: this.startPanelDrag('shape'),
