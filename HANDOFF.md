@@ -1,4 +1,43 @@
 # ===================================================================================================
+# HANDOFF — v0.51.0 — Dual-parser parity: extrudes + 2D primitives stay GUI-editable (B2 / read-only-tree extrusion bug)
+# ===================================================================================================
+# SYMPTOM (reproduced): build a 2D shape + linear/rotate_extrude in the GUI → fully editable. Edit ONE
+# number in the code (e.g. linear_extrude(height = 30) → 45) and the whole program PERMANENTLY dropped
+# to read-only. Root cause = "dual-parser fragility": three independent judges of "is this GUI-editable"
+#   1. readTreeSnapshot/hydrateFromSnapshot — byte-exact `// @scs-tree {json}` round-trip; ANY hand-edit
+#      (even whitespace) breaks the equality check and the snapshot is discarded.
+#   2. isAdvanced(ast) — the engine-AST gate that picks simple (GUI) vs advanced (read-only). Its SIMPLE
+#      set was {translate,rotate,cube,cylinder,sphere,union,difference,intersection,hull} — NO extrudes,
+#      NO 2D prims. So every extrude/2D program that lost its snapshot fell here → advanced → read-only.
+#   3. parseScad/parseBlock/readPrimitive — the GUI reconstructor, which ALSO only handled
+#      cube/cylinder/sphere + those booleans. The snapshot was the ONLY thing keeping GUI extrudes alive.
+# INVARIANT that makes the gate safe: isAdvanced's accepted set MUST be a subset of what parseScad can
+# faithfully reconstruct (else the GUI tree silently drops geometry and regenCode overwrites the user's
+# code). The fix EXTENDS BOTH in lockstep so a simple extrude/2D program reconstructs without the snapshot.
+# CHANGES (all public/Editor.dc.html):
+#   - readPrimitive: now reconstructs circle (d=/r=/positional), square ([x,y] or scalar, centered like
+#     the emitter), polygon (via parsePolyPoints — numeric [x,y] pairs, outer bracket ignored).
+#   - parseBlock: PRIMS += circle/square/polygon; new EXTRUDES = [linear_extrude, rotate_extrude] handled
+#     as op-groups carrying dims {height,twist,escale} or {angle}. Handles BOTH braced `{…}` and
+#     brace-less single-child forms (`linear_extrude(10) circle(5);`) via new statementEnd() — required
+#     because isAdvanced can't tell brace from brace-less, so the reconstructor must accept both or the
+#     invariant breaks. New helpers: parsePolyPoints, numArg (named or leading-positional height/angle),
+#     statementEnd (end of one statement: top-level `;` or a balanced `{…}`).
+#   - buildNodeFromParsed: group branch now labels extrudes ("Linear-extrude N"/"Rotate-extrude N") and
+#     CARRIES p.dims onto the node (was dropped → extrude params lost). Leaf branch labelMap covers
+#     circle/square/polygon (was hard-wired to Cuboid/Sphere/Cylinder).
+#   - isAdvanced: SIMPLE set += linear_extrude, rotate_extrude, circle, square, polygon. Comment now
+#     states the subset-of-parseScad invariant explicitly.
+# VERIFIED via eval_js: GUI extrude → edit height → STAYS editable, tree = [cuboid, linear_extrude→circle],
+# height reads 45. rotate_extrude(270) translate circle (brace-less) → editable, angle 270. square/polygon
+# extrudes, twist+scale (dims {height:40,twist:90,escale:0.5}), bare 2D square → all editable + render.
+# Genuinely-advanced still read-only: for-loop, linear_extrude text(), color() cube. Conformance 113/113.
+# STILL OPEN (B2 remainder): delete of NESTED items inside a boolean/extrude in read-only view (needs
+# sub-statement provenance); the snapshot byte-equality check itself is still brittle, but extrudes/2D no
+# longer DEPEND on it — they survive via parser parity now.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.50.3 — Refactor: color palette token table + panelChrome() helper (audit item #2)
 # ===================================================================================================
 # WHY: audit finding #2 — no single palette source (106 distinct color tokens / 590 uses) and the

@@ -62,7 +62,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.50.3</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.51.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -4094,10 +4094,12 @@ class Component extends DCLogic {
   };
 
   // ============ ADVANCED PATH: full SCAD evaluator -> read-only render ============
-  // a program is "simple" (GUI-editable) only if it is numeric assigns + translate-wrapped or
-  // bare cube/cylinder/sphere + union/difference/intersection. Everything else evaluates.
+  // a program is "simple" (GUI-editable) only if every statement reconstructs faithfully through
+  // parseScad: numeric assigns + translate/rotate-wrapped primitives, booleans, and extrudes over
+  // 2D primitives. This set MUST stay in sync with parseBlock/readPrimitive (the reconstructor) —
+  // anything admitted here must round-trip, or the GUI tree would silently drop geometry.
   isAdvanced(ast) {
-    const SIMPLE = new Set(['translate', 'rotate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection', 'hull']);
+    const SIMPLE = new Set(['translate', 'rotate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection', 'hull', 'linear_extrude', 'rotate_extrude', 'circle', 'square', 'polygon']);
     const exprSimple = (e) => {
       if (!e) return true;
       switch (e.e) {
@@ -4962,17 +4964,28 @@ class Component extends DCLogic {
 
   buildNodeFromParsed(p) {
     if (p.type === 'group') {
-      this.seq.group++;
-      const opLabel = p.op === 'union' ? 'Union ' : p.op === 'difference' ? 'Difference ' : p.op === 'hull' ? 'Hull ' : p.op === 'intersection' ? 'Intersection ' : 'Group ';
-      return {
+      const isExtrude = p.op === 'linear_extrude' || p.op === 'rotate_extrude';
+      let label;
+      if (isExtrude) {
+        this.seq.extrude = (this.seq.extrude || 0) + 1;
+        label = (p.op === 'rotate_extrude' ? 'Rotate-extrude ' : 'Linear-extrude ') + this.seq.extrude;
+      } else {
+        this.seq.group++;
+        const opLabel = p.op === 'union' ? 'Union ' : p.op === 'difference' ? 'Difference ' : p.op === 'hull' ? 'Hull ' : p.op === 'intersection' ? 'Intersection ' : 'Group ';
+        label = opLabel + this.seq.group;
+      }
+      const node = {
         id: 'gp' + Date.now() + Math.random().toString(36).slice(2, 6), op: p.op,
-        label: opLabel + this.seq.group,
+        label,
         children: (p.children || []).map(c => this.buildNodeFromParsed(c)),
         pos: p.pos || undefined, rot: p.rot || undefined,
       };
+      if (p.dims) node.dims = p.dims;
+      return node;
     }
     this.seq[p.type] = (this.seq[p.type] || 0) + 1;
-    const label = (p.type === 'cuboid' ? 'Cuboid ' : p.type === 'sphere' ? 'Sphere ' : 'Cylinder ') + this.seq[p.type];
+    const labelMap = { cuboid: 'Cuboid ', sphere: 'Sphere ', cylinder: 'Cylinder ', circle: 'Circle ', square: 'Square ', polygon: 'Polygon ' };
+    const label = (labelMap[p.type] || 'Shape ') + this.seq[p.type];
     return {
       id: p.type + Date.now() + Math.random().toString(36).slice(2, 6), type: p.type, label,
       dims: p.dims, pos: p.pos, rot: p.rot || undefined, treatments: {},
@@ -5047,6 +5060,25 @@ class Component extends DCLogic {
     return [0, 0, a];
   }
   readPrimitive(name, args) {
+    if (name === 'circle') {
+      const dims = { r: 22 }, ex = {};
+      const dT = this.argRaw(args, 'd');
+      if (dT != null) { const r = this.tokOrNum(dT, this._vmap); dims.r = (r.value || 44) / 2; if (r.expr) ex.d = r.expr; }
+      else { const rT = this.argRaw(args, 'r'); if (rT != null) { const r = this.tokOrNum(rT, this._vmap); dims.r = r.value || 22; } else { const f = this.splitArgs(args)[0]; if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); dims.r = r.value || 22; } } }
+      return { type: 'circle', dims, expr: ex };
+    }
+    if (name === 'square') {
+      const dims = { x: 30, y: 30 }, ex = {};
+      if (/\[/.test(args)) {
+        const toks = this.splitArgs(this.argVector(args));
+        ['x', 'y'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); dims[k] = r.value || dims[k]; if (r.expr) ex[k] = r.expr; });
+      } else { const f = this.splitArgs(args)[0]; if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); dims.x = dims.y = r.value || 30; } }
+      return { type: 'square', dims, expr: ex };
+    }
+    if (name === 'polygon') {
+      const pts = this.parsePolyPoints(args);
+      return { type: 'polygon', dims: { pts: pts.length >= 3 ? pts : [[-20, -20], [20, -20], [20, 20]] } };
+    }
     if (name === 'cube') {
       const toks = this.splitArgs(this.argVector(args)); const dims = { x: 10, y: 10, z: 10 }, ex = {};
       ['x', 'y', 'z'].forEach((k, i) => { if (toks[i] === undefined) return; const r = this.tokOrNum(toks[i], this._vmap); dims[k] = r.value || dims[k]; if (r.expr) ex[k] = r.expr; });
@@ -5079,6 +5111,38 @@ class Component extends DCLogic {
     if (fnT != null) { const n = this.tokOrNum(fnT, this._vmap).value; if (n >= 3 && n <= 12) dims.sides = Math.round(n); }
     return { type: 'cylinder', dims, expr: ex };
   }
+  // parse polygon([[x,y], ...]) point list -> [[x,y], ...] (numeric; outer bracket ignored)
+  parsePolyPoints(args) {
+    let s = args; const pe = this.argRaw(args, 'points'); if (pe != null) s = pe;
+    const pts = []; const re = /\[\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*\]/g; let m;
+    while ((m = re.exec(s)) !== null) pts.push([+parseFloat(m[1]).toFixed(4), +parseFloat(m[2]).toFixed(4)]);
+    return pts;
+  }
+  // numeric value of a named arg (or a leading positional for height/angle), else default
+  numArg(args, key, dflt) {
+    const t = this.argRaw(args, key);
+    if (t != null) { const r = this.tokOrNum(t, this._vmap); return (r.value != null && !isNaN(r.value)) ? r.value : dflt; }
+    if (key === 'height' || key === 'angle') {
+      const f = this.splitArgs(args)[0];
+      if (f && !/=/.test(f)) { const r = this.tokOrNum(f, this._vmap); if (!isNaN(r.value)) return r.value; }
+    }
+    return dflt;
+  }
+  // end index (exclusive) of ONE statement starting at i: after its terminating top-level ';',
+  // or after a balanced {…} body if that comes first (for a brace-less extrude/transform child).
+  statementEnd(src, i) {
+    let d = 0;
+    for (let j = i; j < src.length; j++) {
+      const c = src[j];
+      if (c === '(') d++;
+      else if (c === ')') d--;
+      else if (d === 0) {
+        if (c === '{') return this.matchBrace(src, j);
+        if (c === ';') return j + 1;
+      }
+    }
+    return src.length;
+  }
   restingPos(node) {
     if (node.type === 'cuboid') return [0, 0, node.dims.z / 2];
     if (node.type === 'cylinder') return [0, 0, node.dims.h / 2];
@@ -5092,7 +5156,8 @@ class Component extends DCLogic {
     const nodes = []; let i = 0; const n = src.length;
     const TRANSFORMS = ['scale', 'mirror', 'color', 'multmatrix', 'resize', 'offset'];
     const GROUPS = ['union', 'difference', 'intersection', 'hull'];
-    const PRIMS = ['cube', 'cylinder', 'sphere'];
+    const EXTRUDES = ['linear_extrude', 'rotate_extrude'];
+    const PRIMS = ['cube', 'cylinder', 'sphere', 'circle', 'square', 'polygon'];
     while (i < n) {
       while (i < n && /[\s;]/.test(src[i])) i++;
       if (i >= n) break;
@@ -5135,6 +5200,24 @@ class Component extends DCLogic {
             if (rot && (rot[0] || rot[1] || rot[2])) grp.rot = rot;
             nodes.push(grp);
           }
+        }
+        continue;
+      }
+      if (EXTRUDES.includes(name)) {
+        const dims = name === 'rotate_extrude'
+          ? { angle: this.numArg(args, 'angle', 360) }
+          : { height: this.numArg(args, 'height', 30), twist: this.numArg(args, 'twist', 0), escale: this.numArg(args, 'scale', 1) };
+        let children = [];
+        if (src[i] === '{') {
+          const bEnd = this.matchBrace(src, i); children = this.parseBlock(src.slice(i + 1, bEnd - 1)); i = bEnd;
+        } else {                                  // brace-less single child: linear_extrude(10) circle(5);
+          const sEnd = this.statementEnd(src, i); children = this.parseBlock(src.slice(i, sEnd)); i = sEnd;
+        }
+        if (children.length) {
+          const grp = { type: 'group', op: name, dims, children };
+          if (pos && (pos[0] || pos[1] || pos[2])) grp.pos = pos;
+          if (rot && (rot[0] || rot[1] || rot[2])) grp.rot = rot;
+          nodes.push(grp);
         }
         continue;
       }
