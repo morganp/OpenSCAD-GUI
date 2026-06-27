@@ -1,4 +1,26 @@
 # ===================================================================================================
+# HANDOFF — v0.50.1 — Refactor: extract mesh/vector parsers into public/mesh-parsers.js
+# ===================================================================================================
+# WHY: code-audit finding #1 — Editor.dc.html was a ~6800-line god component. The file-format
+# parsers are pure (no `this`, no THREE, no editor state), so per CLAUDE.md they belong in a plain
+# .js helper module (testable in isolation, like scad-engine.js).
+# WHAT MOVED → public/mesh-parsers.js (window.MeshParsers, IIFE, 25 fns, 8 public entry points):
+#   parseSTL/parseBinarySTL/parseAsciiSTL, parseOFF, parse3MF/parseAMF/meshXmlToPositions/
+#   unzipEntries/inflateRaw, parseDAT, parsePNG (surface heightmaps), and the whole SVG stack
+#   (parseSVG + identMat2/applyMat2/mulMat2/svgTransform/svgEllipsePts/svgPointList/
+#   svgPathContours/flatArc) + DXF stack (parseDXF/dxfPolyPoints/arcFromBulge/circleFrom3/
+#   chainDxfSegments). Internal cross-calls de-`this`'d to bare fn calls.
+# WHAT STAYED in Editor.dc.html (needs THREE / editor state): importGeometry/importMesh,
+#   surfaceGeometry/surfaceMesh/collectSurfaceNodes, loadSvgFiles/afterSvg/removeSvg and the
+#   collect*Nodes walkers, plus the FileReader orchestration in the import drop handlers.
+# WIRING: <script src="mesh-parsers.js"> in helmet right after scad-engine.js. The 8 external call
+#   sites now read window.MeshParsers.parseX(...). Result: Editor 6784 → 6313 lines (−471);
+#   mesh-parsers.js = 507 lines. Conformance still 113/113; all parsers re-verified via eval_js.
+# NEXT AUDIT ITEMS (not done): #2 JS palette/chrome helper for repeated panel styles + 83 hex
+#   colors; #3 a named z-index scale (18 ad-hoc values 25–70). Both still open.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.50.0 — Mobile / touch layout
 # ===================================================================================================
 # REQUEST: "work on mobile touch" — make the editor usable on a phone.
