@@ -1,4 +1,17 @@
 # ===================================================================================================
+# HANDOFF — v0.46.0 — Thread moved from top toolbar INTO the shape tool palette (as advanced hardware)
+# ===================================================================================================
+# RATIONALE (user): threads are GEOMETRY creation (an advanced shape), not file I/O — so the Thread
+# entry was wrong sitting next to Open/Save/Export/Import/Library. MOVED: removed the top-toolbar
+# "Thread" button; added a "Hardware → Thread & hardware…" item to the left-palette "More shapes…"
+# flyout (in the advancedMode-gated section, alongside the 2D-for-extrude shapes). It sets
+# {shapeMenuOpen:false, threadOpen:true} → opens the existing Thread & hardware popover unchanged.
+# This also starts executing the MENU PLAN step 1 (declutter the top strip): the top toolbar's
+# Insert-y items now begin migrating to the palette; Library still sits up top (it's a project/import
+# concern, defensible there). handler: miThread in renderVals.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.45.1 bug fixes (evaluated-tree drop, Run hidden) + menu plan
 # ===================================================================================================
 # FIX 1 — "evaluated view keeps dropping all components": adding a GUI primitive (Add cuboid, etc.)
