@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.53.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.54.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -3939,9 +3939,25 @@ class Component extends DCLogic {
       }
     };
     const argSimple = (e) => e && e.e === 'vector' ? e.items.every(argSimple) : exprSimple(e);
+    // The GUI authoring extrude path (collectAuthored2DRings + ringsToShapes) flattens a 2D body by
+    // EVEN-ODD nesting only — it does NOT execute 2D boolean/hull ops. So an extrude is GUI-simple only
+    // when its body is purely 2D primitives (optionally translate/rotate-wrapped). Any union/difference/
+    // intersection/hull/offset/etc. under an extrude must render via the engine path (advanced/read-only),
+    // or the silhouette comes out wrong (a difference/intersection renders as a naive union, etc.).
+    const EXTRUDE_BODY = new Set(['translate', 'rotate', 'circle', 'square', 'polygon']);
+    const extrudeBodySimple = (s) => {
+      if (s.t !== 'call' || !EXTRUDE_BODY.has(s.name)) return false;
+      if (s.args.some(a => !argSimple(a.expr))) return false;
+      if (s.children) for (const c of s.children.stmts) if (!extrudeBodySimple(c)) return false;
+      return true;
+    };
     const callSimple = (s) => {
       if (!SIMPLE.has(s.name)) return false;
       if (s.args.some(a => !argSimple(a.expr))) return false;
+      if (s.name === 'linear_extrude' || s.name === 'rotate_extrude') {
+        if (s.children) for (const c of s.children.stmts) if (!extrudeBodySimple(c)) return false;
+        return true;
+      }
       if (s.children) for (const c of s.children.stmts) if (!stmtSimple(c)) return false;
       return true;
     };
@@ -4775,6 +4791,20 @@ class Component extends DCLogic {
     let report = null;
     try { report = window.ScadConformance.run({ $fn: this.state.fn }); }
     catch (e) { this.flashStatus('Harness error: ' + (e.message || e)); return; }
+    // GUI render-path classification battery (guards isAdvanced — the gate the engine harness can't see)
+    if (window.ScadConformance.runGui) {
+      try {
+        const gui = window.ScadConformance.runGui(this);
+        report = {
+          ...report,
+          sections: [gui, ...report.sections],
+          passed: report.passed + gui.passed,
+          total: report.total + gui.total,
+          failed: (report.failed || 0) + (gui.total - gui.passed),
+          coveragePct: Math.round(((report.passed + gui.passed) / (report.total + gui.total)) * 1000) / 10,
+        };
+      } catch (e) { /* GUI battery best-effort; engine report still stands */ }
+    }
     // auto-expand any section that has a failure
     const expanded = {};
     for (const s of report.sections) if (s.passed < s.total) expanded[s.name] = true;

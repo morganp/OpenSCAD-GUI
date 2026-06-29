@@ -236,5 +236,66 @@
     };
   }
 
-  window.ScadConformance = { cases: C, run, flatten };
+  window.ScadConformance = { cases: C, run, flatten, runGui };
+
+  /* ===================================================================================================
+   * GUI render-path classification battery (added v0.54.0 after the extrude-boolean regression).
+   * conformance's main battery only exercises window.ScadEngine (the evaluator). It never touched the
+   * EDITOR's isAdvanced() gate — the thing that decides "render via GUI authoring path" vs "render via
+   * engine (read-only)". A v0.51 change wrongly admitted 2D booleans under linear_extrude/rotate_extrude
+   * into the GUI path, which can only even-odd-merge 2D primitives (no boolean execution), so a
+   * difference/intersection silhouette came out as a naive union. Nothing caught it because the GUI gate
+   * had ZERO coverage. These cases assert the classification directly: { src, advanced }.
+   * Invariant under test: a program is GUI-simple ONLY if the GUI authoring path can render it faithfully.
+   * =================================================================================================== */
+  const G = [];
+  const gadd = (n, src, advanced) => G.push({ n, src, advanced });
+
+  // plain extrudes over a single 2D primitive — GUI path handles these (simple)
+  gadd('linear_extrude over circle', 'linear_extrude(height=10) circle(d=20,$fn=32);', false);
+  gadd('linear_extrude over square', 'linear_extrude(height=8) square([20,30], center=true);', false);
+  gadd('linear_extrude over polygon', 'linear_extrude(height=5) polygon([[0,0],[20,0],[10,18]]);', false);
+  gadd('translate-wrapped extrude body', 'linear_extrude(height=5) translate([4,0,0]) circle(r=6,$fn=24);', false);
+  gadd('rotate_extrude over translated circle', 'rotate_extrude(angle=270,$fn=48) translate([12,0,0]) circle(r=4);', false);
+  // 2D booleans/hull under an extrude — GUI path CANNOT execute these → must be advanced (engine path)
+  gadd('intersection of 2D under extrude', 'linear_extrude(height=10) intersection(){ circle(d=40,$fn=48); translate([25,0,0]) circle(d=40,$fn=48); }', true);
+  gadd('difference of 2D under extrude', 'linear_extrude(height=10) difference(){ circle(d=40,$fn=48); circle(d=20,$fn=48); }', true);
+  gadd('union of 2D under extrude', 'linear_extrude(height=10) union(){ circle(d=40,$fn=48); circle(d=20,$fn=48); }', true);
+  gadd('hull of 2D under extrude', 'linear_extrude(height=6) hull(){ circle(4,$fn=24); translate([20,0,0]) circle(4,$fn=24); }', true);
+  gadd('nested boolean under extrude', 'linear_extrude(height=4) difference(){ square([30,30],center=true); union(){ circle(5,$fn=24); translate([10,0,0]) circle(5,$fn=24); } }', true);
+  // 3D primitives + booleans (unchanged GUI capability)
+  gadd('bare cube', 'cube([10,20,30], center=true);', false);
+  gadd('3D difference', 'difference(){ cube(20,center=true); cylinder(h=30,d=10,center=true); }', false);
+  // genuinely advanced constructs stay advanced
+  gadd('for loop', 'for(i=[0:3]) translate([i*10,0,0]) cube(5);', true);
+  gadd('extruded text', 'linear_extrude(5) text("hi");', true);
+
+  // editor: the live Component instance (window.__editor) — needed for isAdvanced + parse
+  function runGui(editor) {
+    editor = editor || window.__editor;
+    const cases = [];
+    let passed = 0;
+    const haveEngine = !!(window.ScadEngine && window.ScadEngine.parse);
+    const haveEditor = !!(editor && typeof editor.isAdvanced === 'function');
+    for (const c of G) {
+      let ok = false, detail = '';
+      if (!haveEngine || !haveEditor) { detail = 'editor/engine not available'; }
+      else {
+        try {
+          const pp = window.ScadEngine.parse(c.src);
+          if (pp.errors && pp.errors.length) { detail = 'parse error: ' + pp.errors[0].msg; }
+          else {
+            const adv = editor.isAdvanced(pp.ast);
+            ok = (adv === c.advanced);
+            if (!ok) detail = 'classified ' + (adv ? 'advanced' : 'simple') + ', expected ' + (c.advanced ? 'advanced' : 'simple');
+          }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: c.n, ok, detail, src: c.src });
+    }
+    return { name: 'GUI classification', passed, total: G.length, cases };
+  }
+
+  window.ScadConformance.guiCases = G;
 })();

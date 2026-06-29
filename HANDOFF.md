@@ -1,4 +1,46 @@
 # ===================================================================================================
+# HANDOFF — v0.54.0 — FIX: 2D booleans under extrude rendered wrong (regression) + GUI gate test coverage
+# ===================================================================================================
+# SYMPTOM (user): extrude surfaces "badly calculated — way more polygons than required, cutting out
+# sections that should not be." Reproduced: `linear_extrude(10) intersection(){ circle(40); translate([25,0,0]) circle(40); }`
+# rendered as TWO overlapping full disks (a union) instead of the lens-shaped overlap. Same class of
+# breakage for difference/union/hull of 2D shapes under an extrude.
+#
+# ROOT CAUSE — my v0.51 change, NOT the v0.52/v0.53 extraction. v0.51 added union/difference/intersection/
+# hull + 2D prims to isAdvanced's SIMPLE set so extrudes would stay GUI-editable. But the GUI authoring
+# render path (extrudeGeometry → collectAuthored2DRings → ringsToShapes) only flattens a 2D body by
+# EVEN-ODD nesting — it does NOT execute 2D boolean/hull ops. So an extrude wrapping a 2D boolean was
+# routed to the GUI path and its silhouette came out as a naive even-odd merge (difference/intersection
+# → union; nested union → wrongly holed). It only LOOKED right for the one case where a small circle
+# nested in a big circle coincidentally equals a hole. The engine path renders these correctly — they
+# were simply sent down the wrong path.
+#
+# FIX (public/Editor.dc.html, isAdvanced): an extrude is GUI-simple ONLY if its body is purely 2D
+# primitives (optionally translate/rotate-wrapped). New EXTRUDE_BODY set + extrudeBodySimple() recursion;
+# callSimple() special-cases linear_extrude/rotate_extrude to require extrudeBodySimple on every child.
+# Any union/difference/intersection/hull/offset/etc. under an extrude → advanced → engine path (correct).
+# Plain extrudes over circle/square/polygon (incl. translate/rotate-wrapped, rotate_extrude) stay GUI-editable.
+#
+# WHY THE TEST SUITE MISSED IT (user's question): conformance.js exercises window.ScadEngine.run (the
+# evaluator) ONLY. The EDITOR's isAdvanced() gate — which decides GUI-path vs engine-path — and the GUI
+# authoring render path had ZERO test coverage. A construct sent down the wrong path was never checked
+# because both the gate and that render path were untested.
+# FIX FOR THE GAP: new GUI-classification battery in conformance.js (window.ScadConformance.runGui(editor),
+# 14 cases) asserting isAdvanced() classification for booleans-under-extrude (advanced), plain extrudes
+# (simple), 3D booleans (simple), for/text (advanced). Folded into runConformance() so the editor "run
+# tests" button + status chip now report the combined total (127/127: 14 GUI + 113 engine). The GUI battery
+# is listed FIRST in the results panel. runGui is best-effort (skips cleanly if editor/engine absent).
+#
+# VERIFIED: intersection-under-extrude now renders the correct lens via the engine path (read-only badge);
+# plain circle extrude still renders a clean cylinder, GUI-editable; classification battery 14/14; engine
+# 113/113; combined 127/127; clean boot, no console errors.
+#
+# KNOWN MINOR (pre-existing, NOT this bug): a per-primitive $fn on a 2D shape in a GUI-simple extrude is
+# ignored by the GUI tessellation (uses the global $fn) and the regenerated code reflects the global value.
+# Fidelity-only; silhouette is correct. Left as-is to keep this fix focused.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.53.0 — Refactor: extract OpenSCAD emitter → public/scad-emitter.js  ✅ SHIPPED
 # ===================================================================================================
 # GOAL: the last authoring-layer unit. Move the authoring-tree → OpenSCAD TEXT generator out of the editor.
