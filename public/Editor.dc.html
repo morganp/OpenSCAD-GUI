@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.54.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.55.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -2201,6 +2201,17 @@ class Component extends DCLogic {
   // ===== SLICE 5: BOOLEAN-EDGE FILLET / CHAMFER =====
   // Detect sharp feature edges of a CSG result mesh (group-local coords), chained into pickable
   // polylines, each tagged convex/concave with per-segment face frames (U=nA, V=nB outward normals).
+  // self-test fixture for the GUI conformance battery: union two offset boxes (which forms two concave
+  // internal seam edges) and report detected convex/concave counts. Guards the v0.55.0 unwelded-seam fix.
+  internalEdgeSelfTest() {
+    if (!this.CSG || !this.THREE) return { ok: false, reason: 'CSG/THREE unavailable' };
+    const THREE = this.THREE; const { Brush, Evaluator, ADDITION } = this.CSG;
+    const mk = (sx, sy, sz, tx, ty, tz) => { const g = new THREE.BoxGeometry(sx, sy, sz); g.translate(tx, ty, tz); const b = new Brush(g); b.updateMatrixWorld(true); return b; };
+    const a = mk(40, 40, 40, 0, 0, 20), b = mk(40, 40, 40, 34, 0, 29);
+    const ev = new Evaluator(); const u = ev.evaluate(a, b, ADDITION); u.updateMatrixWorld(true);
+    const edges = this.detectGroupEdges(u.geometry);
+    return { ok: true, total: edges.length, convex: edges.filter(e => !e.convex === false).length, concave: edges.filter(e => !e.convex).length };
+  }
   detectGroupEdges(geo) {
     if (!geo || !geo.attributes || !geo.attributes.position) return [];
     const pos = geo.attributes.position, idx = geo.index;
@@ -2227,7 +2238,9 @@ class Component extends DCLogic {
     }
     const COS_FLAT = Math.cos(8 * Math.PI / 180);
     const segs = [];
+    const boundary = [];
     for (const rec of emap.values()) {
+      if (rec.length === 1) { boundary.push(rec[0]); continue; } // unwelded CSG seam edge — paired below
       if (rec.length < 2) continue;
       const fA = rec[0], fB = rec[1];
       const dot = fA.n[0] * fB.n[0] + fA.n[1] * fB.n[1] + fA.n[2] * fB.n[2];
@@ -2238,7 +2251,55 @@ class Component extends DCLogic {
       const len = Math.hypot(E[0], E[1], E[2]); if (len < 1e-4) continue;
       segs.push({ a, b, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], U: fA.n.slice(), V: fB.n.slice(), len, convex });
     }
+    // three-bvh-csg leaves the NEW seam between operands UNWELDED: the two adjoining faces are
+    // triangulated with non-matching vertices (T-junctions), so a concave/convex seam edge appears only
+    // as single-triangle BOUNDARY edges that never pair in emap (this is why internal union/difference
+    // edges were not selectable). Recover them: group collinear boundary edges, pair the two opposing
+    // face normals on each supporting line, and classify convex/concave with the same apex test.
+    this.pairBoundarySeams(boundary, segs, COS_FLAT);
     return this.chainEdgeSegs(segs);
+  }
+  // pair collinear single-triangle boundary edges (CSG seam) into feature-edge segments
+  pairBoundarySeams(boundary, segs, COS_FLAT) {
+    if (!boundary.length) return;
+    const Q = 1e3, QD = 1e3;
+    const lineKey = (e) => {
+      let dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], dz = e.b[2] - e.a[2];
+      const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+      const s = (Math.abs(dx) > 1e-6 ? dx : Math.abs(dy) > 1e-6 ? dy : dz) < 0 ? -1 : 1; // canonical dir
+      dx *= s; dy *= s; dz *= s;
+      const ad = e.a[0] * dx + e.a[1] * dy + e.a[2] * dz;            // foot of perpendicular from origin
+      const fx = e.a[0] - ad * dx, fy = e.a[1] - ad * dy, fz = e.a[2] - ad * dz;
+      return Math.round(dx * QD) + ',' + Math.round(dy * QD) + ',' + Math.round(dz * QD) + '|' +
+        Math.round(fx * Q) + ',' + Math.round(fy * Q) + ',' + Math.round(fz * Q);
+    };
+    const lines = new Map();
+    for (const e of boundary) { const k = lineKey(e); let g = lines.get(k); if (!g) { g = []; lines.set(k, g); } g.push(e); }
+    const nk = (n) => Math.round(n[0] * 100) + ',' + Math.round(n[1] * 100) + ',' + Math.round(n[2] * 100);
+    for (const g of lines.values()) {
+      const clusters = new Map();
+      for (const e of g) { const k = nk(e.n); let c = clusters.get(k); if (!c) { c = { n: e.n, edges: [] }; clusters.set(k, c); } c.edges.push(e); }
+      const cl = [...clusters.values()];
+      if (cl.length < 2) continue;                          // only one face on this line — a free boundary, not a feature
+      cl.sort((a, b) => b.edges.length - a.edges.length);
+      const A = cl[0], B = cl[1];                            // the two dominant faces meeting at the line
+      const dot = A.n[0] * B.n[0] + A.n[1] * B.n[1] + A.n[2] * B.n[2];
+      if (dot > COS_FLAT) continue;                          // near-coplanar — a triangulation split, not an edge
+      const aEdge = A.edges[0], apexB = B.edges[0].apex;
+      const dA = A.n[0] * (apexB[0] - aEdge.a[0]) + A.n[1] * (apexB[1] - aEdge.a[1]) + A.n[2] * (apexB[2] - aEdge.a[2]);
+      const convex = dA < 0;
+      let U = A.n.slice(), V = B.n.slice();
+      // keep the basis right-handed w.r.t. the edge direction (U×V must point along the edge), or the
+      // corner tool extrudes/mirrors the wrong way
+      const cx = U[1] * V[2] - U[2] * V[1], cy = U[2] * V[0] - U[0] * V[2], cz = U[0] * V[1] - U[1] * V[0];
+      const ed0 = aEdge.b[0] - aEdge.a[0], ed1 = aEdge.b[1] - aEdge.a[1], ed2 = aEdge.b[2] - aEdge.a[2];
+      if (cx * ed0 + cy * ed1 + cz * ed2 < 0) { const t = U; U = V; V = t; }
+      for (const e of A.edges) {
+        const E = [e.b[0] - e.a[0], e.b[1] - e.a[1], e.b[2] - e.a[2]];
+        const len = Math.hypot(E[0], E[1], E[2]); if (len < 1e-4) continue;
+        segs.push({ a: e.a, b: e.b, mid: [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2, (e.a[2] + e.b[2]) / 2], U: U.slice(), V: V.slice(), len, convex });
+      }
+    }
   }
   chainEdgeSegs(segs) {
     const Q = 1e3;

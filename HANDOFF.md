@@ -1,4 +1,83 @@
 # ===================================================================================================
+# HANDOFF — v0.55.0 — FIX/FEATURE: internal (concave) edges of booleans now detectable & filletable
+# ===================================================================================================
+# SYMPTOM (user, with a union of two offset cuboids forming a step): "two internal edges, one centre top
+# and one centre bottom — these are not selectable." Correct: detectGroupEdges returned 20 edges, ALL
+# convex, 0 concave, so the two reentrant step edges had no pick proxy.
+#
+# ROOT CAUSE: three-bvh-csg leaves the NEW seam between operands UNWELDED. The two faces meeting at an
+# internal edge (e.g. box-A top, normal +Z; box-B side, normal -X) are triangulated INDEPENDENTLY with
+# non-matching vertices along their shared line (T-junctions at different break points). detectGroupEdges
+# pairs faces via an exact-vertex-key manifold map and requires rec.length>=2; the seam edges therefore
+# appear only as SINGLE-triangle BOUNDARY edges (histogram showed 38 of them) that never pair → skipped.
+# Original box edges survive because each operand is internally manifold; only the boolean seam is unwelded.
+#
+# FIX (public/Editor.dc.html, detectGroupEdges + new pairBoundarySeams): after the manifold pass, route
+# rec.length===1 edges to a boundary pool, group them by SUPPORTING LINE (canonical direction + foot of
+# perpendicular from origin), cluster each line's edges by face normal, and where a line carries ≥2
+# non-coplanar normal clusters, emit feature-edge segments pairing the two dominant faces. Convex/concave
+# via the same apex test; basis kept right-handed w.r.t. edge direction (swap U/V) so the corner tool isn't
+# mirrored. These segments flow into the existing chainEdgeSegs → pick proxies → applyGroupTreatment →
+# concave UNION fill (edge_round_in / edge_chamfer_in) pipeline unchanged.
+# VERIFIED: the union now detects 24 edges (22 convex + 2 concave); both internal edges are pickable;
+# applying a fillet ADDS material (volume 120560 → 120698, a fill not a cut); the real apply path emits
+# edge_round_in + its helper module; visually the step's reentrant corners render rounded. Engine 113/113.
+#
+# TEST COVERAGE (the running lesson — render-path features need their own battery): new editor method
+# internalEdgeSelfTest() unions two offset box brushes via CSG and runs detectGroupEdges; conformance.js
+# runGui() asserts it yields ≥2 concave + ≥1 convex. GUI battery now 15/15 (combined "run tests" 128/128).
+# So a future regression that loses concave seam detection fails the test chip immediately.
+#
+# STILL FUTURE (see the planned section below — these remain): concave edges on BARE primitives that have
+# them (tube inner rim, wedge notch, reflex-vertex polygons; their solidGeometry path never runs edge
+# detection), unifying the two edge data models, mitering the fill tool where multiple internal edges meet,
+# wall-thickness clamping, and primitive-path concave code emission.
+# ===================================================================================================
+
+# ===================================================================================================
+# FUTURE FEATURE (PLANNED, PARTIALLY SHIPPED) — Internal-edge chamfer & fillet, first-class
+# ===================================================================================================
+# REQUEST (user): "add chamfers and fillets for internal edges."
+# SHIPPED v0.55.0: internal (concave) edges of BOOLEAN results (union/difference/intersection) and extrudes
+#   are now detected (unwelded-seam pairing), selectable, and fillet/chamfer-fillable. See the v0.55.0 entry.
+# REMAINING (not started):
+#   1. CONCAVE-AWARE primitives that DO have internal edges — wedge (its notch), tube (inner rim where the
+#      bore meets each end face), polygon/extrude profiles with reflex vertices. Today their concave edges
+#      are only reachable IF the shape happens to be a _rawGeo group; a bare primitive's solidGeometry path
+#      (buildCuboidSolid / buildCylinderSolid / Lathe / ExtrudeGeometry) never runs detectGroupEdges, so a
+#      bare tube/wedge/reflex-polygon exposes no concave edge to pick. PLAN: run detectGroupEdges on every
+#      primitive's raw geometry (not just booleans/extrudes), unify primitive + group edges behind ONE
+#      pick/treat model keyed by stable edge id, and let a concave pick union a fill tool the same way
+#      groups already do.
+#   2. UNIFIED DATA MODEL: collapse shape.treatments (name-keyed, convex-only) and node.edgeTreatments
+#      (id-keyed, convex|concave) into a single per-node edgeTreatments map carrying {type, size, convex}.
+#      Migration: read old shape.treatments on load and convert. Keep regenCode byte-stable for existing
+#      convex primitive treatments (don't churn saved files needlessly).
+#   3. ROBUSTNESS of the concave FILL tool: the current union tool is a straight prism along one edge; at a
+#      corner where 3 concave edges meet (inside corner of a box pocket) the prisms overlap/leave slivers.
+#      PLAN: miter adjacent concave fills at shared endpoints, or sphere-cap the joints, like a real router
+#      bit. Acceptance: a rectangular pocket (difference of two cubes) filleted on all 4 vertical + 4 bottom
+#      internal edges shows a continuous radius with no sliver/no z-fight.
+#   4. CODE EMISSION: extend the primitive emit path (emitPrimitive in scad-emitter.js) to emit concave
+#      fills for primitive-level internal edges using the existing edge_round_in / edge_chamfer_in modules
+#      (currently only emitGroupWithEdges does). Keep convex output byte-identical.
+#   5. CLAMPING: groupEdgeMaxR / edgeMaxRadius must bound an internal radius by the THINNEST adjacent wall
+#      (e.g. tube wall thickness, pocket floor depth), not just edge length, or the fill punches through.
+#   6. TEST COVERAGE (the v0.54.0 lesson — render-path features need their own battery): add a GUI battery
+#      that builds each internal-edge case, applies a known radius, and asserts (a) the edge is detected +
+#      classified concave, (b) post-treat solid VOLUME increased (fill) for concave vs decreased (cut) for
+#      convex, (c) bounding box unchanged. Wire into ScadConformance.runGui so the "run tests" chip covers it.
+#
+# BUILD ORDER (when picked up): (1) unify edge detection across primitives+groups → (2) unified
+# edgeTreatments data model + migration → (3) concave fill tool + joint mitering → (4) clamping by wall
+# thickness → (5) scad-emitter concave primitive emission → (6) GUI volume/bbox test battery. Each step
+# renders + round-trips before the next. Update CLAUDE.md ROADMAP (Phase 12 viewer/GUI line) when shipped.
+# RISK: the concave UNION fill changes a solid's volume, so it must run INSIDE the node's CSG accumulation
+# before the result feeds a parent boolean — verify ordering against applyEdgeTreatBrush's current place in
+# buildGroup/opMesh so a filled child still differences/intersects correctly in an ancestor.
+# ===================================================================================================
+
+# ===================================================================================================
 # HANDOFF — v0.54.0 — FIX: 2D booleans under extrude rendered wrong (regression) + GUI gate test coverage
 # ===================================================================================================
 # SYMPTOM (user): extrude surfaces "badly calculated — way more polygons than required, cutting out

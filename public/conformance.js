@@ -294,7 +294,22 @@
       if (ok) passed++;
       cases.push({ name: c.n, ok, detail, src: c.src });
     }
-    return { name: 'GUI classification', passed, total: G.length, cases };
+    // internal-edge detection: a union of two offset boxes must expose its concave seam edges (the
+    // unwelded-CSG-seam fix, v0.55.0). detectGroupEdges + a CSG union fixture live on the editor.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.internalEdgeSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.internalEdgeSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.concave >= 2 && r.convex >= 1; if (!ok) detail = 'detected ' + r.concave + ' concave / ' + r.convex + ' convex (want >=2 concave)'; }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'union exposes concave internal edges', ok, detail, src: 'union(){ translate([0,0,20]) cube([40,40,40],true); translate([34,0,29]) cube([40,40,40],true); }' });
+    }
+    return { name: 'GUI classification', passed, total: cases.length, cases };
   }
 
   window.ScadConformance.guiCases = G;
