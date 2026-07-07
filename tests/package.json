@@ -1,0 +1,11 @@
+{
+  "name": "openscad-gui-e2e",
+  "private": true,
+  "description": "Browser e2e tests for SCAD Studio (drives system Chrome via playwright-core)",
+  "scripts": {
+    "test": "node github-import-case.e2e.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}
