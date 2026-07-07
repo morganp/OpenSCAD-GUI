@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run ~/.claude/skills/art/tools/generate-image.ts *)",
+      "Bash(git fetch *)",
+      "Bash(curl -s http://127.0.0.1*)",
+      "Bash(curl -s http://localhost*)",
+      "Bash(curl -s \"https://api.github.com/*)",
+      "Bash(curl -s https://api.github.com/*)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/*)",
+      "Bash(curl -s https://raw.githubusercontent.com/*)",
+      "Bash(python3 -m http.server *)",
+      "mcp__claude_ai_SecondBrain__read_text",
+      "mcp__claude_ai_SecondBrain__grep",
+      "mcp__claude_ai_SecondBrain__list_projects",
+      "mcp__claude-in-chrome__tabs_context_mcp"
+    ]
+  }
+}
