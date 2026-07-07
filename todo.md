@@ -5,10 +5,10 @@
 - [ ] **Better zoom control / snap-to-fit-all.** Add a "fit all" zoom function (frame the
   whole model in the viewport) and generally better zoom control. (Logged 2026-07-07.)
 
-- [ ] **Custom shapes (module instances) in the tree viewer.** Unknown-but-defined library
-  modules (e.g. `capsule()` from an @github import) should appear in the Model Tree as
-  named module-instance nodes with translate/rotate/scale editing. In progress 2026-07-07;
-  plan in HANDOFF.md.
+- [x] **Custom shapes (module instances) in the tree viewer.** Library modules (e.g.
+  `capsule()` from an @github import) appear in the Model Tree as named module-instance
+  nodes with translate/rotate/scale editing; advanced/read-only trees show named module
+  rows too. Shipped v0.59.0; e2e scenario 3 in tests/. (Logged + shipped 2026-07-07.)
 
 - [x] **Open a file passed on the URL** (deep link). `index.html?github=owner/repo[@ref]
   [/path/to/file.scad]` (github.com URLs accepted, `&file=<basename>` picks entry) or
