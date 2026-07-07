@@ -99,6 +99,39 @@ function serve(dir) {
     pageErrors.join(' | '));
 
   await page.screenshot({ path: path.join(__dirname, 'github-import-case.last-run.png') });
+  await page.close();
+
+  // ---- Scenario 2: deep link — open a file passed on the URL ----
+  const page2 = await browser.newPage({ viewport: { width: 1500, height: 950 } });
+  const pageErrors2 = [];
+  page2.on('pageerror', (e) => pageErrors2.push(e.message));
+  await page2.goto(base + '/index.html?github=morganp/OpenSCAD_case/examples/hinged_box_demo.scad',
+    { waitUntil: 'networkidle' });
+  // startup repo fetch + entry promote + run + nested hinge fetch + re-run + CSG
+  await page2.waitForTimeout(25000);
+
+  const body2 = await page2.evaluate(() => document.body.innerText);
+  const editor2 = await page2.evaluate(() => {
+    const ta = document.querySelector('textarea.scad');
+    return ta ? ta.value : '';
+  });
+  check('deep link: demo file promoted to the editor',
+    /hinged_box\s*\(/.test(editor2),
+    'expected hinged_box(...) in the code drawer, got: ' + editor2.slice(0, 120));
+  check('deep link: sibling include auto-fetched (case_library chip)',
+    /case_lib/i.test(body2),
+    'expected a loaded-file chip for case_library.scad');
+  check('deep link: nested hinge repo fetched too',
+    !/hinge_library\.scad[^\n]*file not loaded/i.test(body2),
+    'hinge_library.scad missing — nested @github tag not resolved on deep link');
+  check('deep link: rendered read-only with no console-panel errors',
+    /read-only/i.test(body2) && !/ERROR/.test(body2),
+    (body2.split('\n').filter((l) => /error/i.test(l)).join(' | ') || 'no read-only badge'));
+  check('deep link: no uncaught page errors',
+    pageErrors2.length === 0,
+    pageErrors2.join(' | '));
+
+  await page2.screenshot({ path: path.join(__dirname, 'github-import-deeplink.last-run.png') });
   await browser.close();
   srv.close();
 
