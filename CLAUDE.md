@@ -196,6 +196,15 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       `include` splices the file's full statement list inline (vars + defs + geometry); `use` imports
       only its module/function definitions. Recursive (nested include/use), cycle-guarded, warns on a
       missing/unloaded file. Files keyed by lowercased basename.
+- [x] **`// @github: owner/repo[@ref][/subdir]` import tag** — a comment sitting directly above an
+      `include`/`use` line is both documentation (real OpenSCAD just sees a comment) and a fetch hint
+      for this GUI: `runCode` pre-scans the source (`scanGithubImportTags`) and, if the referenced
+      basename isn't already in `_scadFiles`, fetches that repo (`fetchGithubRepoFiles` — same GitHub
+      trees API + raw.githubusercontent.com path as the manual Library dialog, `fetchGithubLib`) before
+      re-running. A failed spec is cached in `_githubFailed` so a broken/rate-limited fetch doesn't
+      retry on every keystroke. Manual dialog and auto-tag share one spec grammar and one `_scadFiles`
+      cache, so a file fetched either way resolves the same `include`/`use`. See Editor.dc.html,
+      "GITHUB IMPORT TAG (automatic)".
 - [ ] *(Fallback: route binary-mesh import + font shaping through openscad-wasm if needed.)*
 
 ## Phase 11 — Modifier characters  `[x]`

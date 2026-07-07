@@ -3948,6 +3948,13 @@ class Component extends DCLogic {
   // ============ CODE -> MODEL (base solids; tolerant of our own format) ============
   runCode = () => {
     const txt = (this._codeArea ? this._codeArea.value : this.state.code) || '';
+    // `// @github: owner/repo` above an include/use, target not loaded yet -> fetch it first,
+    // then re-run. Once cached (or once the spec has failed once) this check is a no-op scan.
+    if (this.needsGithubFetch(txt)) {
+      this.flashStatus('Fetching library from GitHub…');
+      this.ensureGithubImports(txt).then(() => this.runCode());
+      return;
+    }
     // --- faithful round-trip: if the file carries a valid authoring-tree snapshot that still
     // matches the code, rebuild the GUI tree from it so the Model Tree is identical to the GUI ---
     const snap = this.readTreeSnapshot(txt);
@@ -5081,38 +5088,87 @@ class Component extends DCLogic {
     try { const r = await fetch('https://api.github.com/repos/' + owner + '/' + repo); if (r.ok) { const j = await r.json(); return j.default_branch || 'main'; } } catch (_) {}
     return 'main';
   }
+  // Core fetch, shared by the manual Library dialog (fetchGithubLib) and the automatic
+  // "// @github: owner/repo[@ref][/subdir]" tag scan (ensureGithubImports) below. Throws on
+  // failure; caller decides how to surface that (UI message vs. flashStatus + a failed-spec cache).
+  async fetchGithubRepoFiles(specStr) {
+    const s = this.parseGithubSpec(specStr);
+    if (!s) throw new Error('invalid github spec: ' + specStr);
+    const ref = await this.resolveRef(s.owner, s.repo, s.ref);
+    const tr = await fetch('https://api.github.com/repos/' + s.owner + '/' + s.repo + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1');
+    if (!tr.ok) throw new Error(tr.status === 404 ? 'repo or branch not found' : (tr.status === 403 ? 'GitHub rate limit \u2014 try again shortly' : 'GitHub error ' + tr.status));
+    const tree = await tr.json();
+    let blobs = (tree.tree || []).filter(n => n.type === 'blob' && /\.scad$/i.test(n.path));
+    if (s.subdir) { const d = s.subdir.replace(/^\/+|\/+$/g, '').toLowerCase() + '/'; blobs = blobs.filter(n => n.path.toLowerCase().startsWith(d)); }
+    if (!blobs.length) throw new Error('no .scad files found' + (s.subdir ? ' under ' + s.subdir : ''));
+    const truncated = blobs.length > 500; if (truncated) blobs = blobs.slice(0, 500);
+    if (!this._scadFiles) this._scadFiles = new Map();
+    let ok = 0;
+    await Promise.all(blobs.map(async n => {
+      try {
+        const res = await fetch('https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + ref + '/' + n.path.split('/').map(encodeURIComponent).join('/'));
+        if (!res.ok) return;
+        const src = await res.text();
+        const base = (n.path.split('/').pop() || n.path).toLowerCase();
+        this._scadFiles.set(base, { name: s.repo + '/' + (n.path.split('/').pop() || n.path), key: base, source: src, lines: src.split('\n').length, repo: s.owner + '/' + s.repo, ref });
+        ok++;
+      } catch (_) {}
+    }));
+    return { ok, truncated, owner: s.owner, repo: s.repo };
+  }
   async fetchGithubLib(spec) {
     if (this.state.libBusy) return;
-    const s = this.parseGithubSpec(spec != null ? spec : this.state.libSpec);
+    const specStr = spec != null ? spec : this.state.libSpec;
+    const s = this.parseGithubSpec(specStr);
     if (!s) { this.setState({ libMsg: 'Enter owner/repo, owner/repo@tag, or a GitHub URL' }); return; }
     this.setState({ libBusy: true, libMsg: 'Resolving ' + s.owner + '/' + s.repo + '\u2026' });
     try {
-      const ref = await this.resolveRef(s.owner, s.repo, s.ref);
-      const tr = await fetch('https://api.github.com/repos/' + s.owner + '/' + s.repo + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1');
-      if (!tr.ok) throw new Error(tr.status === 404 ? 'repo or branch not found' : (tr.status === 403 ? 'GitHub rate limit \u2014 try again shortly' : 'GitHub error ' + tr.status));
-      const tree = await tr.json();
-      let blobs = (tree.tree || []).filter(n => n.type === 'blob' && /\.scad$/i.test(n.path));
-      if (s.subdir) { const d = s.subdir.replace(/^\/+|\/+$/g, '').toLowerCase() + '/'; blobs = blobs.filter(n => n.path.toLowerCase().startsWith(d)); }
-      if (!blobs.length) throw new Error('no .scad files found' + (s.subdir ? ' under ' + s.subdir : ''));
-      const truncated = blobs.length > 500; if (truncated) blobs = blobs.slice(0, 500);
-      this.setState({ libMsg: 'Fetching ' + blobs.length + ' file' + (blobs.length !== 1 ? 's' : '') + '\u2026' });
-      if (!this._scadFiles) this._scadFiles = new Map();
-      let ok = 0;
-      await Promise.all(blobs.map(async n => {
-        try {
-          const res = await fetch('https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + ref + '/' + n.path.split('/').map(encodeURIComponent).join('/'));
-          if (!res.ok) return;
-          const src = await res.text();
-          const base = (n.path.split('/').pop() || n.path).toLowerCase();
-          this._scadFiles.set(base, { name: s.repo + '/' + (n.path.split('/').pop() || n.path), key: base, source: src, lines: src.split('\n').length, repo: s.owner + '/' + s.repo, ref });
-          ok++;
-        } catch (_) {}
-      }));
-      this.setState({ libBusy: false, libSpec: '', libMsg: 'Loaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo + (truncated ? ' (capped at 500)' : '') + '. Reference with include <\u2026>.' });
-      this.flashStatus('Imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo);
+      const { ok, truncated, owner, repo } = await this.fetchGithubRepoFiles(specStr);
+      this.setState({ libBusy: false, libSpec: '', libMsg: 'Loaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo + (truncated ? ' (capped at 500)' : '') + '. Reference with include <\u2026>.' });
+      this.flashStatus('Imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo);
       this.forceUpdate(); this.runCode();
     } catch (e) {
       this.setState({ libBusy: false, libMsg: 'Failed: ' + (e && e.message ? e.message : String(e)) });
+    }
+  }
+
+  // ============ GITHUB IMPORT TAG (automatic) ============
+  // A `// @github: owner/repo[@ref][/subdir]` comment sitting directly above an `include <...>`
+  // or `use <...>` line is BOTH documentation (tells a human where the file comes from \u2014 real
+  // OpenSCAD just sees a comment) AND a machine-readable fetch hint for this GUI: if the
+  // included file isn't already loaded, we fetch that repo the same way the manual Library
+  // dialog does, keyed into the same `_scadFiles` map, so `include`/`use` resolves without the
+  // user opening the dialog by hand.
+  scanGithubImportTags(txt) {
+    const lines = (txt || '').split('\n');
+    const out = [];
+    for (let i = 0; i < lines.length - 1; i++) {
+      const tag = lines[i].match(/^\s*\/\/\s*@github:\s*(\S+)\s*$/);
+      if (!tag) continue;
+      const inc = lines[i + 1].match(/^\s*(?:include|use)\s*<([^>]+)>/);
+      if (!inc) continue;
+      const file = (inc[1].split('/').pop() || inc[1]).toLowerCase();
+      out.push({ spec: tag[1], file });
+    }
+    return out;
+  }
+  needsGithubFetch(txt) {
+    const tags = this.scanGithubImportTags(txt);
+    return tags.some(t => !(this._scadFiles && this._scadFiles.has(t.file)) && !(this._githubFailed && this._githubFailed.has(t.spec)));
+  }
+  async ensureGithubImports(txt) {
+    const tags = this.scanGithubImportTags(txt);
+    const specs = [...new Set(tags.filter(t => !(this._scadFiles && this._scadFiles.has(t.file))).map(t => t.spec))];
+    for (const spec of specs) {
+      if (this._githubFailed && this._githubFailed.has(spec)) continue;
+      try {
+        const { ok, owner, repo } = await this.fetchGithubRepoFiles(spec);
+        this.flashStatus('Auto-imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo);
+      } catch (e) {
+        if (!this._githubFailed) this._githubFailed = new Set();
+        this._githubFailed.add(spec);
+        this.flashStatus('@github import failed (' + spec + '): ' + (e && e.message ? e.message : String(e)));
+      }
     }
   }
 
