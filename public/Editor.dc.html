@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.60.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.61.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -2484,6 +2484,25 @@ class Component extends DCLogic {
     } else { emitOk = true; }
     return { ok: true, sepOk, migOk, emitOk };
   }
+  // self-test (item 4 — primitive concave-fill emission): a treated feature primitive (tube) emits the
+  // seg-based edge module call wrapped in union()/difference(), and regenCode defines that module.
+  edgeEmitPrimSelfTest() {
+    if (typeof this.rebuildScene !== 'function' || !window.ScadEmitter) return { ok: false, reason: 'unavailable' };
+    const savedTree = this.tree, savedVars = this.vars, savedCode = this.state.code;
+    try {
+      const tube = { id: 't_tube_e4', type: 'tube', label: 'Tube', dims: { r: 24, ri: 15, h: 44 }, pos: [0, 0, 22] };
+      this.tree = [tube]; this.vars = []; this.reindex(); this.rebuildScene();
+      const edge = (tube._edges || [])[0];
+      if (!edge) return { ok: false, reason: 'no detected edges' };
+      tube.edgeTreatments = { [edge.id]: { type: 'fillet', size: 3, convex: edge.convex, segs: edge.segs.map(s => ({ a: s.a.slice(), b: s.b.slice(), mid: s.mid.slice(), U: s.U.slice(), V: s.V.slice(), len: s.len })) } };
+      this.buildGroup(tube);
+      const out = []; this.emitNode(tube, 0, out); const code = out.join('\n');
+      const mod = edge.convex ? 'edge_fillet' : 'edge_round_in';
+      const full = this._programText ? this._programText() : '';
+      return { ok: true, convex: edge.convex, callOk: code.includes(mod) && /union\(\)|difference\(\)/.test(code), defOk: full.includes('module ' + mod) };
+    } catch (e) { return { ok: false, reason: 'threw: ' + (e.message || e) }; }
+    finally { this.tree = savedTree; this.vars = savedVars; if (this._codeArea) this._codeArea.value = savedCode; this.reindex(); this.rebuildScene(); }
+  }
   detectGroupEdges(geo) {
     if (!geo || !geo.attributes || !geo.attributes.position) return [];
     const pos = geo.attributes.position, idx = geo.index;
@@ -4395,7 +4414,7 @@ class Component extends DCLogic {
     let usesMask = false;
     for (const s of this.shapes) if (Object.keys(this.namedTreats(s)).length && s.type === 'cuboid') usesMask = true;
     let usesConvex = false, usesConcave = false;
-    const scanET = (arr) => { for (const n of arr) { if (this.isGroup(n)) { for (const t of Object.values(n.edgeTreatments || {})) { if (t.convex) usesConvex = true; else usesConcave = true; } scanET(n.children); } } };
+    const scanET = (arr) => { for (const n of arr) { if (this.isGroup(n)) { for (const t of Object.values(n.edgeTreatments || {})) { if (t.convex) usesConvex = true; else usesConcave = true; } scanET(n.children); } else { for (const t of Object.values(n.edgeTreatments || {})) { if (!t.segs) continue; if (t.convex) usesConvex = true; else usesConcave = true; } } } };
     scanET(this.tree);
     if (usesMask || usesConvex) {
       out.push('// --- edge treatment masks (subtracted along a computed edge frame) ---');

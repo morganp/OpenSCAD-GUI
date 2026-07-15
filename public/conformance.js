@@ -401,6 +401,21 @@
       if (ok) passed++;
       cases.push({ name: 'unified edgeTreatments model (named+seg, migrate, emit)', ok, detail, src: 'shape.treatments ∪ edgeTreatments → edgeTreatments' });
     }
+    // primitive concave-fill emission (item 4): a treated bare feature primitive emits its edge module
+    // call wrapped in union()/difference(), and regenCode defines the module (not just the group path).
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.edgeEmitPrimSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.edgeEmitPrimSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.callOk && r.defOk; if (!ok) detail = 'call=' + r.callOk + ' def=' + r.defOk + ' convex=' + r.convex; }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'primitive feature-edge fill emits + defines module', ok, detail, src: 'tube + rim fillet → edge_round_in' });
+    }
     return { name: 'GUI classification', passed, total: cases.length, cases };
   }
 

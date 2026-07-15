@@ -169,9 +169,17 @@
 #      increases (fill, not cut), no sliver. TEST: conformance runGui "concave fill adds material (pocket,
 #      ball-joints)". (Original PLAN also listed miter — the sphere-cap covers the acceptance case; miter
 #      left as a future refinement if a non-fillet/chamfer joint ever needs it.)
-#   4. CODE EMISSION: extend the primitive emit path (emitPrimitive in scad-emitter.js) to emit concave
-#      fills for primitive-level internal edges using the existing edge_round_in / edge_chamfer_in modules
-#      (currently only emitGroupWithEdges does). Keep convex output byte-identical.
+#   4. ✅ SHIPPED v0.61.0 — CODE EMISSION for primitive-level internal edges. emitPrimitive now routes any
+#      feature-primitive node carrying seg-based edgeTreatments (tube/wedge/reflex-polygon) to a new
+#      emitPrimitiveWithEdges that wraps the placed base in the SAME union()/difference() + edge_round_in /
+#      edge_chamfer_in / edge_fillet / edge_chamfer tool structure the group path (emitGroupWithEdges) uses,
+#      via groupEdgeMatrix. regenCode's helper-module scan (scanET) now also walks non-group leaves so the
+#      edge_round_in/edge_fillet module DEFS are emitted for bare-primitive treatments (previously only
+#      groups triggered them). Convex named-edge output (cuboid/cylinder rims) is byte-IDENTICAL — those
+#      carry no seg treatments and never reach the new branch. The @scs-tree round-trip still holds (both
+#      emit sides are deterministic). VERIFIED: conformance runGui "primitive feature-edge fill emits +
+#      defines module" builds a tube, applies a rim treatment, asserts the emitted primitive contains the
+#      wrapped module call AND regenCode defines that module. GUI battery now 21/21.
 #   5. CLAMPING: groupEdgeMaxR / edgeMaxRadius must bound an internal radius by the THINNEST adjacent wall
 #      (e.g. tube wall thickness, pocket floor depth), not just edge length, or the fill punches through.
 #   6. TEST COVERAGE (the v0.54.0 lesson — render-path features need their own battery): add a GUI battery
