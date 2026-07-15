@@ -1,4 +1,21 @@
 # ===================================================================================================
+# FIX (v0.62.0) — Restore URL deep-link loader (?github= / ?file=)
+# ===================================================================================================
+# REGRESSION: the deep link documented as shipped in v0.58.0 (deepLink/openDeepLink) was never in the
+# committed public/ (confirmed: not on morganp/OpenSCAD-GUI@main, absent from the v0.58 snapshot) — a
+# refactor that removed the @github tag scan also dropped it. Links like
+#   index.html?github=morganp/OpenSCAD_hinge/examples/knuckle_hinge_demo.scad
+# fell through to the default seed cuboid.
+# FIX: new loadFromUrl() + _promoteToEditor() (public/Editor.dc.html, "URL DEEP-LINK LOADER" section
+# above the GitHub library import). initThree's seed is now gated: _whenLibsReady(() => { if
+# (!this.loadFromUrl()) this.addCuboid(); }). Accepts ?github=owner/repo[@ref]/path.scad AND
+# github.com blob/tree + raw.githubusercontent.com URLs AND ?file=<url> (github URLs routed to the
+# github path; other URLs fetched directly). GitHub links call fetchGithubLib(owner/repo@ref) first so
+# the whole repo lands in _scadFiles (sibling include/use resolve), then promote the named file + run.
+# VERIFIED: all 4 link forms parse; live fetch+run of a real .scad renders 3 meshes, no error; CORS OK
+# from raw.githubusercontent.com. On failure, falls back to the seed cuboid if the editor is empty.
+#
+# ===================================================================================================
 # FEATURE PLAN (IN PROGRESS) — View controls, measurement/annotation, and reader docs
 # ===================================================================================================
 # REQUEST (user): (1) zoom control incl. zoom-to-fit; (2) an XYZ orientation control with a scale;

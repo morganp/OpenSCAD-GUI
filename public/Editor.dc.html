@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.61.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.62.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -1209,7 +1209,7 @@ class Component extends DCLogic {
     // seed with a cuboid so "draw a cube, highlight an edge" works immediately.
     // The seed's regenCode() emits via window.ScadEmitter (an async-loaded helmet module); if THREE
     // fires three-ready before that script executes, wait for it so the first emit can't crash.
-    this._whenLibsReady(() => this.addCuboid());
+    this._whenLibsReady(() => { if (!this.loadFromUrl()) this.addCuboid(); });
   }
   // poll until the externally-loaded authoring modules are present, then run cb (immediately if ready)
   _whenLibsReady(cb) {
@@ -5567,6 +5567,80 @@ class Component extends DCLogic {
     this.forceUpdate(); this.runCode();
   }
   removeScad(key) { if (this._scadFiles) this._scadFiles.delete(key); this.forceUpdate(); this.runCode(); }
+
+  // ============ URL DEEP-LINK LOADER ============
+  // Open a model passed on the page URL (restores the pre-refactor deep link):
+  //   ?github=owner/repo[@ref]/path/to/file.scad   (github.com blob/tree/raw URLs also accepted)
+  //   ?file=<url>                                   direct URL to a .scad; github URLs treated as ?github=
+  // GitHub links fetch the WHOLE repo into the include/use store (_scadFiles) so sibling
+  // `include <…>` / `use <…>` resolve, then promote the named file into the editor and run it.
+  // Returns true if a link was present (caller skips the default seed cuboid); fetch runs async.
+  loadFromUrl() {
+    let ghSpec, fileUrl;
+    try { const q = new URLSearchParams(location.search); ghSpec = q.get('github'); fileUrl = q.get('file'); } catch (_) { return false; }
+    // ?file= pointing at github is just a ?github= link in URL form
+    if (!ghSpec && fileUrl && /github\.com|raw\.githubusercontent\.com/i.test(fileUrl)) { ghSpec = fileUrl; fileUrl = null; }
+    if (!ghSpec && !fileUrl) return false;
+
+    // ---- plain ?file=<url> (non-github): fetch the URL directly ----
+    if (!ghSpec) {
+      fileUrl = fileUrl.trim();
+      if (!/\.scad(\?|#|$)/i.test(fileUrl)) { this.flashStatus('?file= link must point to a .scad file'); return false; }
+      const fileName = (fileUrl.split(/[?#]/)[0].split('/').pop()) || 'model.scad';
+      this.flashStatus('Loading ' + fileName + '\u2026');
+      (async () => {
+        try {
+          const res = await fetch(fileUrl);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const src = await res.text();
+          this._promoteToEditor(src, fileName);
+        } catch (e) {
+          this.flashStatus('Could not load model: ' + (e && e.message ? e.message : String(e)));
+          if (!(this._codeArea && this._codeArea.value.trim())) this.addCuboid();
+        }
+      })();
+      return true;
+    }
+
+    // ---- ?github=owner/repo[@ref]/path.scad or a github.com URL ----
+    ghSpec = ghSpec.trim();
+    let owner, repo, ref = '', filePath = '';
+    let m = ghSpec.match(/github(?:usercontent)?\.com\/([^/\s]+)\/([^/\s]+)\/(?:blob\/|raw\/|tree\/)?([^/\s]+)\/(.+)$/i);
+    if (m) { owner = m[1]; repo = m[2]; ref = m[3]; filePath = m[4]; }
+    else {
+      m = ghSpec.match(/^([^/\s]+)\/([^/@\s]+)(?:@([^/\s]+))?\/(.+)$/);
+      if (!m) { this.flashStatus('Bad ?github= link \u2014 expected owner/repo/path.scad'); return false; }
+      owner = m[1]; repo = m[2]; ref = m[3] || ''; filePath = m[4];
+    }
+    filePath = decodeURIComponent(filePath.split(/[?#]/)[0]).replace(/^\/+/, '');
+    if (!/\.scad$/i.test(filePath)) { this.flashStatus('?github= link must point to a .scad file'); return false; }
+    const fileName = filePath.split('/').pop() || filePath;
+    this.flashStatus('Loading ' + fileName + '\u2026');
+    (async () => {
+      try {
+        ref = await this.resolveRef(owner, repo, ref);
+        // populate the include/use store with the repo's other .scad files (best-effort)
+        try { await this.fetchGithubLib(owner + '/' + repo + '@' + ref); } catch (_) {}
+        const url = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + ref + '/' + filePath.split('/').map(encodeURIComponent).join('/');
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status === 404 ? 'file not found' : 'GitHub error ' + res.status);
+        const src = await res.text();
+        // the main document shouldn't also live in the include store under its own name
+        if (this._scadFiles) this._scadFiles.delete(fileName.toLowerCase());
+        this._promoteToEditor(src, fileName, owner + '/' + repo);
+      } catch (e) {
+        this.flashStatus('Could not load model: ' + (e && e.message ? e.message : String(e)));
+        if (!(this._codeArea && this._codeArea.value.trim())) this.addCuboid();
+      }
+    })();
+    return true;
+  }
+  // drop fetched source into the editor as the main document and run it
+  _promoteToEditor(src, fileName, from) {
+    if (this._codeArea) this._codeArea.value = src;
+    this.setState({ code: src, dirty: false }, () => this.runCode());
+    this.flashStatus('Loaded ' + fileName + (from ? ' from ' + from : ''));
+  }
 
   // ============ GITHUB LIBRARY IMPORT (Advanced) ============
   // Fetch a GitHub repo's .scad files into the include/use store (_scadFiles, keyed by lowercased
