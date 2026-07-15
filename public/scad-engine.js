@@ -765,14 +765,7 @@
     sc.vars.set('$children', childGeom.length);
     sc.vars.set('$parent_modules', ctx.moduleStack.length);
     ctx.moduleStack.push(mod.name);
-    try {
-      const out = evalBlock(mod.body, sc, ctx, childGeom);
-      const kids = (Array.isArray(out) ? out : (out ? [out] : [])).filter(Boolean);
-      if (!kids.length) return null;
-      // one wrapper per instantiation, tagged with the module name, so the editor's
-      // Model Tree can present the subtree as a single named module instance
-      return { kind: 'group', module: mod.name, children: kids, matrix: Mat.identity(), dim: dimOf(kids) };
-    }
+    try { return evalBlock(mod.body, sc, ctx, childGeom); }
     finally { ctx.moduleStack.pop(); }
   }
   function modDefScope(mod, callScope) { return callScope; } // lexical-ish: defs see call scope chain (sufficient for most)
@@ -830,9 +823,7 @@
       }
       case 'vector': {
         const out = [];
-        // comprehension elements carry a string tag in .c ('for','if','let','each',...);
-        // expression nodes can also have a .c field (ternary condition), so type-check it
-        for (const it of e.items) { if (it && typeof it.c === 'string') runComp(it, scope, ctx, out); else out.push(evalExpr(it, scope, ctx)); }
+        for (const it of e.items) { if (it && it.c) runComp(it, scope, ctx, out); else out.push(evalExpr(it, scope, ctx)); }
         return out;
       }
       case 'range': return { __range:true, start:num(evalExpr(e.start,scope,ctx)), step: e.step?num(evalExpr(e.step,scope,ctx)):null, end:num(evalExpr(e.end,scope,ctx)) };

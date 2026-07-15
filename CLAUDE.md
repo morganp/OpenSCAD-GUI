@@ -196,24 +196,6 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
       `include` splices the file's full statement list inline (vars + defs + geometry); `use` imports
       only its module/function definitions. Recursive (nested include/use), cycle-guarded, warns on a
       missing/unloaded file. Files keyed by lowercased basename.
-- [x] **`// @github: owner/repo[@ref][/subdir]` import tag** — a comment sitting directly above an
-      `include`/`use` line is both documentation (real OpenSCAD just sees a comment) and a fetch hint
-      for this GUI: `runCode` pre-scans the source (`scanGithubImportTags`) and, if the referenced
-      basename isn't already in `_scadFiles`, fetches that repo (`fetchGithubRepoFiles` — same GitHub
-      trees API + raw.githubusercontent.com path as the manual Library dialog, `fetchGithubLib`) before
-      re-running. A failed spec is cached in `_githubFailed` so a broken/rate-limited fetch doesn't
-      retry on every keystroke. Manual dialog and auto-tag share one spec grammar and one `_scadFiles`
-      cache, so a file fetched either way resolves the same `include`/`use`. **Nested tags resolve
-      too** (v0.57.0): the scan covers the editor text plus every loaded `_scadFiles` source, and
-      `ensureGithubImports` loops (depth-capped at 5) so a fetched library's own `@github`-tagged
-      includes are fetched in turn (e.g. OpenSCAD_case pulls OpenSCAD_hinge). See Editor.dc.html,
-      "GITHUB IMPORT TAG (automatic)". Regression e2e: `tests/github-import-case.e2e.js`.
-- [x] **Deep link — open a file passed on the URL** (v0.58.0): `index.html?github=owner/repo[@ref]
-      [/path/to/file.scad]` (github.com blob/tree URLs accepted; `&file=<basename.scad>` picks the
-      entry when the spec has no file path) or `?file=<url>` (github URLs treated like `?github=`,
-      others fetched as plain text). Skips the seed cuboid, fetches the whole repo through
-      `fetchGithubRepoFiles`/`_scadFiles` (so sibling includes + nested tags resolve), promotes the
-      entry file to the editor, runs. See Editor.dc.html "DEEP LINK"; e2e scenario 2 in tests/.
 - [ ] *(Fallback: route binary-mesh import + font shaping through openscad-wasm if needed.)*
 
 ## Phase 11 — Modifier characters  `[x]`
@@ -227,14 +209,6 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 - [x] "Simple vs advanced" detector (`isAdvanced(ast)`): simple programs hydrate the GUI
       authoring tree (editable); advanced programs render **read-only** from the evaluated
       geometry tree, with the evaluated hierarchy shown in the Model Tree + a read-only badge.
-- [x] **Custom shapes — module instances in the tree viewer** (v0.59.0): calls to modules
-      defined in loaded include/use libraries (e.g. `capsule()` from an @github import) are
-      GUI-editable `custom` authoring nodes: named Model Tree rows ("capsule 1 · module"),
-      gizmo + panel translate/rotate, gizmo scale (emitted as a `scale([...])` prefix), raw
-      arg text preserved verbatim, geometry via a per-node engine run merged to one mesh
-      (feeds booleans/CSG). Engine tags every module instantiation (`kind:'group', module:
-      name`) so advanced/read-only trees also show named module rows. include/use header
-      lines (+ their `// @github:` tags) survive regenCode. e2e scenario 3 in tests/.
 - [x] `$fn/$fa/$fs` drive real tessellation in the evaluator.  [x] global `$fn` UI control wired to runs.
 - [x] Console panel for `echo`/`assert`/warnings (toggle in code drawer).  [x] error markers on code lines (scroll-synced line-number gutter; error lines tinted red).
 - [x] Color/modifier materials surfaced in the viewport.  [x] camera ↔ `$vp*` binding.

@@ -343,6 +343,9 @@
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3.5 7.5 8 5l4.5 2.5v5L8 15l-4.5-2.5v-5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M3.6 7.5 8 10l4.4-2.5M8 10v5" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" opacity=".5"/><path d="M14.5 10h3.5m0 0-1.6-1.5M18 10l-1.6 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </sc-if>
+    <button onClick="{{ pickMeasure }}" title="Measure between two points (D)" style="{{ btnMeasure }}">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 12.5 12.5 3l4.5 4.5L7.5 17 3 12.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5.6 10.1l1.4 1.4M8.1 7.6l1 1M10.6 5.1l1.4 1.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+    </button>
     <sc-if value="{{ showParamsBtn }}" hint-placeholder-val="{{ true }}">
       <div style="height:1px;background:#2C3037;margin:2px 4px;"></div>
       <button onClick="{{ toggleParams }}" title="Parameters / variables" style="{{ btnParams }}">
@@ -748,6 +751,57 @@
     </div>
   </sc-if>
 
+  <sc-if value="{{ showViewWidget }}" hint-placeholder-val="{{ false }}">
+  <div ref="{{ setViewWidget }}" style="{{ viewWidgetStyle }}">
+    <!-- zoom cluster -->
+    <div style="display:flex;flex-direction:column;gap:4px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:5px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
+      <button onClick="{{ zoomIn }}" title="Zoom in" style="{{ viewBtnStyle }}" style-hover="background:#23272E;color:#E6E9EE;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button onClick="{{ zoomOut }}" title="Zoom out" style="{{ viewBtnStyle }}" style-hover="background:#23272E;color:#E6E9EE;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <div style="height:1px;background:#2C3037;margin:1px 2px;"></div>
+      <button onClick="{{ fitToView }}" title="Zoom to fit (F)" style="{{ viewBtnStyle }}" style-hover="background:#23272E;color:#E6E9EE;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 5.5v-3h3M13.5 5.5v-3h-3M2.5 10.5v3h3M13.5 10.5v3h-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><rect x="5.6" y="5.6" width="4.8" height="4.8" rx="0.8" stroke="currentColor" stroke-width="1.1" opacity=".6"/></svg>
+      </button>
+    </div>
+    <!-- orientation triad + scale bar -->
+    <div style="display:flex;flex-direction:column;align-items:center;gap:7px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 10px 9px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
+      <svg width="64" height="64" viewBox="0 0 64 64" style="overflow:visible;cursor:pointer;">
+        <line data-axline="x" x1="32" y1="32" x2="58" y2="32" stroke="#c56a6a" stroke-width="2" stroke-linecap="round"/>
+        <line data-axline="y" x1="32" y1="32" x2="32" y2="6" stroke="#6ac57f" stroke-width="2" stroke-linecap="round"/>
+        <line data-axline="z" x1="32" y1="32" x2="32" y2="6" stroke="#6a8fc5" stroke-width="2" stroke-linecap="round"/>
+        <circle data-axdot="x" cx="58" cy="32" r="8.5" fill="#c56a6a" opacity="0" onClick="{{ snapX }}"/>
+        <circle data-axdot="y" cx="32" cy="6" r="8.5" fill="#6ac57f" opacity="0" onClick="{{ snapY }}"/>
+        <circle data-axdot="z" cx="32" cy="6" r="8.5" fill="#6a8fc5" opacity="0" onClick="{{ snapZ }}"/>
+        <text data-axlab="x" x="58" y="32" fill="#1B1E23" font-size="9" font-weight="700" text-anchor="middle" dominant-baseline="central" style="pointer-events:none;font-family:'IBM Plex Mono',monospace;">X</text>
+        <text data-axlab="y" x="32" y="6" fill="#1B1E23" font-size="9" font-weight="700" text-anchor="middle" dominant-baseline="central" style="pointer-events:none;font-family:'IBM Plex Mono',monospace;">Y</text>
+        <text data-axlab="z" x="32" y="6" fill="#1B1E23" font-size="9" font-weight="700" text-anchor="middle" dominant-baseline="central" style="pointer-events:none;font-family:'IBM Plex Mono',monospace;">Z</text>
+      </svg>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div data-scalebar style="width:56px;height:5px;border:1px solid #4A515B;border-top:none;box-sizing:border-box;"></div>
+        <span data-scalelab style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#8A9099;letter-spacing:.02em;">— mm</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ measureBarOn }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;left:50%;top:18px;transform:translateX(-50%);z-index:26;display:flex;align-items:center;gap:12px;background:rgba(27,30,35,.9);backdrop-filter:blur(12px);border:1px solid #3A4048;border-radius:11px;padding:9px 14px;box-shadow:0 10px 30px rgba(0,0,0,.45);">
+    <span style="font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:#F2B84B;">Measure</span>
+    <sc-if value="{{ hasMeasureResult }}" hint-placeholder-val="{{ false }}">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#F4D79A;font-weight:600;">{{ measureDist }} mm</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A9099;">Δx {{ measureDx }}  Δy {{ measureDy }}  Δz {{ measureDz }}</span>
+      <button onClick="{{ addAnnotation }}" title="Add as annotation" style="display:flex;align-items:center;gap:5px;background:#7A5A18;border:1px solid #A97E22;border-radius:7px;color:#F4D79A;font-size:11px;font-weight:600;padding:5px 10px;cursor:pointer;" style-hover="background:#8A6A22;">+ Annotate</button>
+    </sc-if>
+    <sc-if value="{{ measureIdle }}" hint-placeholder-val="{{ true }}">
+      <span style="font-size:11px;color:#8A9099;">{{ measureHint }}</span>
+    </sc-if>
+    <button onClick="{{ pickSelect }}" title="Exit measure (Esc)" style="background:transparent;border:none;color:#6B7280;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;" style-hover="color:#C7CCD4;">×</button>
+  </div>
+  </sc-if>
+
   <sc-if value="{{ ppHudOn }}" hint-placeholder-val="{{ false }}">
     <div style="{{ ppHudStyle }}">
       <div style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:#7FB2F0;margin-bottom:5px;">{{ ppHudLabel }}</div>
@@ -927,6 +981,7 @@ class Component extends DCLogic {
     readOnly: false,       // true when an advanced program is rendered from the SCAD evaluator
     ppPending: null,       // { mode:'linear'|'revolve', value } — deferred extrude awaiting confirm/edit
     ppHudPos: null,        // { x, y } screen anchor for the live extrude dimension box
+    measurePending: null,  // { a,b,d,dx,dy,dz } pending measurement awaiting "Annotate"
     consoleOpen: false,    // console panel visibility
     consoleLog: [],        // [{type:'echo'|'warn'|'error', msg, line}]
     errorLines: [],        // 1-based source lines the last run reported an error on (gutter markers)
@@ -945,8 +1000,7 @@ class Component extends DCLogic {
   shapes = [];             // FLAT mirror of all primitive leaves (rebuilt by reindex())
   _rendered = [];          // nodes currently added to the scene (for teardown)
   vars = [];               // [{ name, value }] ordered
-  headers = [];            // verbatim include/use lines (+ @github tags) re-emitted by _programText
-  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0, custom: 0 };
+  seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
 
   // ---- z-index scale: single source of truth for stacking order (low → high) ----
   // The static base-chrome tiers (hud/chrome/panel*) are ALSO written as literals in the template
@@ -1025,6 +1079,7 @@ class Component extends DCLogic {
   }
 
   setViewport = (el) => { if (el && !this._vp) { this._vp = el; this.attachMeshDrop(el); if (window.__threeReady && !this._inited) this.initThree(); } };
+  setViewWidget = (el) => { this._viewWidget = el; if (el) this.updateViewWidget(); };
   setCodeArea = (el) => { this._codeArea = el; };
   setGutter = (el) => { this._gutter = el; };
   onCodeScroll = (e) => { if (this._gutter) this._gutter.scrollTop = e.target.scrollTop; };
@@ -1071,6 +1126,11 @@ class Component extends DCLogic {
     controls.addEventListener('end', () => {
       if (this._applyingView) return;
       if (this.state.readOnly && this._readsViewport) { clearTimeout(this._vpTimer); this._vpTimer = setTimeout(() => this.runCode(), 90); }
+    });
+    // orientation triad + scale bar track every camera move (rAF-throttled, imperative DOM — no re-render)
+    controls.addEventListener('change', () => {
+      if (this._vwRaf) return;
+      this._vwRaf = requestAnimationFrame(() => { this._vwRaf = 0; this.updateViewWidget(); });
     });
 
     // transform gizmo (move / resize handles)
@@ -1146,18 +1206,10 @@ class Component extends DCLogic {
     this.setState({ ready: true, csgOk: !!this.CSG });
     window.__editor = this;
 
-    // seed with a cuboid so "draw a cube, highlight an edge" works immediately — unless the URL
-    // carries a deep link (?github= / ?file=), which opens that file as the main document instead.
+    // seed with a cuboid so "draw a cube, highlight an edge" works immediately.
     // The seed's regenCode() emits via window.ScadEmitter (an async-loaded helmet module); if THREE
     // fires three-ready before that script executes, wait for it so the first emit can't crash.
-    this._whenLibsReady(() => {
-      const dl = this.deepLink();
-      if (dl) this.openDeepLink(dl).catch(e => {
-        this.flashStatus('Open from URL failed: ' + (e && e.message ? e.message : String(e)));
-        this.addCuboid();
-      });
-      else this.addCuboid();
-    });
+    this._whenLibsReady(() => this.addCuboid());
   }
   // poll until the externally-loaded authoring modules are present, then run cb (immediately if ready)
   _whenLibsReady(cb) {
@@ -1197,6 +1249,127 @@ class Component extends DCLogic {
     const w = el.clientWidth || window.innerWidth, h = el.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h);
     this.applyViewOffset();
+    this.updateViewWidget();
+  }
+
+  // ============ VIEW CONTROLS (zoom / fit / orientation) ============
+  // Box3 over model geometry only — every model object carries a userData.shapeId up its ancestry;
+  // helpers (grid, axis Lines, gizmo, selection tubes, ghost, annotations) do not. Returns null if empty.
+  modelBox3() {
+    if (!this.scene) return null;
+    const THREE = this.THREE;
+    const box = new THREE.Box3(); let has = false;
+    const hasShapeId = (o) => { let c = o; while (c) { if (c.userData && c.userData.shapeId) return true; c = c.parent; } return false; };
+    this.scene.updateMatrixWorld(true);
+    this.scene.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.visible) return;
+      if (!hasShapeId(o)) return;
+      o.geometry.computeBoundingBox();
+      if (!o.geometry.boundingBox) return;
+      const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+      if (isFinite(b.min.x) && isFinite(b.max.x)) { box.union(b); has = true; }
+    });
+    return has ? box : null;
+  }
+  // frame the whole model: target = bbox center, dolly along the current view direction to fit the
+  // bounding sphere in the vertical FOV (offset-agnostic), clamped to the controls' distance range.
+  fitView() {
+    if (!this.cam || !this.controls) return;
+    const THREE = this.THREE;
+    const box = this.modelBox3();
+    const target = new THREE.Vector3();
+    let radius;
+    if (box) { box.getCenter(target); radius = box.getSize(new THREE.Vector3()).length() / 2; }
+    else { target.set(0, 0, 0); radius = 30; }
+    radius = Math.max(radius, 1);
+    const fov = this.cam.fov * Math.PI / 180;
+    let dist = (radius * 1.35) / Math.sin(fov / 2);
+    dist = Math.min(Math.max(dist, this.controls.minDistance + 0.01), this.controls.maxDistance - 0.01);
+    const dir = this.cam.position.clone().sub(this.controls.target);
+    if (dir.lengthSq() < 1e-6) dir.set(0.6, -0.78, 0.62);
+    dir.normalize();
+    this.controls.target.copy(target);
+    this.cam.position.copy(target).add(dir.multiplyScalar(dist));
+    this.cam.updateProjectionMatrix();
+    this.controls.update();
+    this.updateViewWidget();
+  }
+  // zoom by scaling the camera→target offset (factor<1 zooms in, >1 out), clamped to distance range.
+  dollyBy(factor) {
+    if (!this.cam || !this.controls) return;
+    const off = this.cam.position.clone().sub(this.controls.target);
+    let d = off.length() * factor;
+    d = Math.min(Math.max(d, this.controls.minDistance), this.controls.maxDistance);
+    off.setLength(d);
+    this.cam.position.copy(this.controls.target).add(off);
+    this.controls.update();
+    this.updateViewWidget();
+  }
+  zoomIn = () => this.dollyBy(0.8);
+  zoomOut = () => this.dollyBy(1.25);
+  fitToView = () => this.fitView();
+  snapX = () => this.snapAxis('x');
+  snapY = () => this.snapAxis('y');
+  snapZ = () => this.snapAxis('z');
+  // snap the camera onto a principal axis looking at the model center, keeping the current distance.
+  // Z-up: looking straight down the Z pole is degenerate for OrbitControls, so tilt the top/bottom
+  // views a hair off-pole (up stays +Z, view reads as top).
+  snapAxis(axis) {
+    if (!this.cam || !this.controls) return;
+    const THREE = this.THREE;
+    const box = this.modelBox3();
+    const target = new THREE.Vector3();
+    if (box) box.getCenter(target); else target.set(0, 0, 0);
+    const dist = Math.min(Math.max(this.cam.position.distanceTo(this.controls.target), this.controls.minDistance + 0.01), this.controls.maxDistance - 0.01);
+    const dir = { x: new THREE.Vector3(1, 0, 0), '-x': new THREE.Vector3(-1, 0, 0), y: new THREE.Vector3(0, 1, 0), '-y': new THREE.Vector3(0, -1, 0), z: new THREE.Vector3(0, -0.0015, 1), '-z': new THREE.Vector3(0, -0.0015, -1) }[axis];
+    if (!dir) return;
+    dir.normalize();
+    this.controls.target.copy(target);
+    this.cam.position.copy(target).add(dir.multiplyScalar(dist));
+    this.controls.update();
+    this.updateViewWidget();
+  }
+
+  // imperatively repaint the orientation triad (world axes projected into view space) + the scale bar.
+  // Called from the controls 'change' handler (rAF-throttled) and after fit/snap/resize — never per React
+  // render, so it must read/write the DOM directly through the container ref.
+  updateViewWidget() {
+    const el = this._viewWidget; if (!el || !this.cam) return;
+    const THREE = this.THREE;
+    const invQ = this.cam.quaternion.clone().invert();
+    const R = 26, cx = 32, cy = 32;               // triad SVG is 64×64
+    const axes = [
+      { k: 'x', v: new THREE.Vector3(1, 0, 0) },
+      { k: 'y', v: new THREE.Vector3(0, 1, 0) },
+      { k: 'z', v: new THREE.Vector3(0, 0, 1) },
+    ];
+    // depth-sort so axes pointing toward the viewer draw on top
+    const proj = axes.map(a => { const d = a.v.clone().applyQuaternion(invQ); return { k: a.k, x: cx + d.x * R, y: cy - d.y * R, z: d.z }; });
+    for (const p of proj) {
+      const line = el.querySelector('[data-axline="' + p.k + '"]');
+      const dot = el.querySelector('[data-axdot="' + p.k + '"]');
+      const lab = el.querySelector('[data-axlab="' + p.k + '"]');
+      const op = (0.45 + 0.55 * (p.z + 1) / 2).toFixed(2);   // -1..1 → 0.45..1.0
+      if (line) { line.setAttribute('x2', p.x.toFixed(1)); line.setAttribute('y2', p.y.toFixed(1)); line.setAttribute('opacity', op); }
+      if (dot) { dot.setAttribute('cx', p.x.toFixed(1)); dot.setAttribute('cy', p.y.toFixed(1)); dot.setAttribute('opacity', op); }
+      if (lab) { lab.setAttribute('x', p.x.toFixed(1)); lab.setAttribute('y', (p.y + 0.5).toFixed(1)); lab.setAttribute('opacity', op); }
+    }
+    // scale bar: pick a nice 1/2/5×10ⁿ mm whose on-screen width is ≈ 72px at the target distance
+    const bar = el.querySelector('[data-scalebar]');
+    const barLab = el.querySelector('[data-scalelab]');
+    if (bar && barLab && this.controls) {
+      const H = (this._vp && this._vp.clientHeight) || window.innerHeight || 800;
+      const D = this.cam.position.distanceTo(this.controls.target);
+      const worldPerPx = (2 * D * Math.tan(this.cam.fov * Math.PI / 360)) / H;
+      const raw = 72 * worldPerPx;
+      const exp = Math.floor(Math.log10(raw)); const f = raw / Math.pow(10, exp);
+      const nf = f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10;
+      const niceMM = nf * Math.pow(10, exp);
+      const px = Math.max(8, Math.min(120, niceMM / worldPerPx));
+      bar.style.width = px.toFixed(1) + 'px';
+      const lbl = niceMM >= 1 ? (Math.round(niceMM * 100) / 100) : niceMM.toPrecision(2);
+      barLab.textContent = lbl + ' mm';
+    }
   }
 
   // ============ EDGE GEOMETRY ============
@@ -1233,7 +1406,6 @@ class Component extends DCLogic {
     const g = new THREE.Group();
     g.position.set(shape.pos[0], shape.pos[1], shape.pos[2]);
     this.setEuler(g, shape.rot);
-    if (shape.scl) g.scale.set(shape.scl[0], shape.scl[1], shape.scl[2]);   // custom module instances only
 
     // edges list (local) — spheres have no treatable edges in v1
     shape.edges = shape.type === 'cuboid'
@@ -1242,8 +1414,21 @@ class Component extends DCLogic {
         ? ((shape.dims.sides && shape.dims.sides >= 3) ? [] : this.cylinderEdges(shape.dims))
         : [];
 
+    // Primitives with internal/feature edges the named-edge system can't express (tube inner rim,
+    // wedge notch) get the SAME detected-edge machinery as boolean groups: run detectGroupEdges on the
+    // local solid, expose group-style pick proxies, and (when treated) build the solid through the CSG
+    // fill/cut path. Concave picks union a fill tool exactly like groups do. Round-trips via the snapshot.
+    const featurePrim = this.primHasFeatureEdges(shape);
+    shape._edges = []; shape._edgeProxies = [];
+
     // solid (with CSG treatments)
-    const solid = this.buildSolid(shape);
+    let solid;
+    if (featurePrim) {
+      shape._rawGeo = this.solidGeometry(shape);
+      solid = this.buildFeaturePrimSolid(shape);
+    } else {
+      solid = this.buildSolid(shape);
+    }
     solid.castShadow = true; solid.receiveShadow = true;
     g.add(solid); shape.solid = solid;
 
@@ -1264,10 +1449,55 @@ class Component extends DCLogic {
       const proxy = this.makeEdgeProxy(shape, e);
       g.add(proxy); shape.proxies.push(proxy);
     }
+    // detected feature-edge proxies (tube/wedge): group-style, route through selectGroupEdge
+    if (featurePrim && shape._rawGeo) {
+      let edges = [];
+      try { edges = this.detectGroupEdges(shape._rawGeo); } catch (_) {}
+      shape._edges = edges;
+      for (const edge of edges) {
+        for (const seg of edge.segs) {
+          const p = this.makeGroupEdgeProxy(shape, edge, seg);
+          if (p) { g.add(p); shape._edgeProxies.push(p); shape.proxies.push(p); }
+        }
+      }
+    }
 
     g.userData.shapeId = shape.id;
     this.scene.add(g);
     shape.group = g;
+  }
+
+  // primitives whose internal/feature edges need the detected-edge (group) machinery, not named edges
+  primHasFeatureEdges(shape) { return shape.type === 'tube' || shape.type === 'wedge' || (shape.type === 'polygon' && this.polygonHasReflex(shape)); }
+  // a 2D polygon with a reflex (reentrant) vertex has real concave vertical edges on its slab — route it
+  // through the detected-edge machinery so those internal edges become pickable/fillable like tube/wedge.
+  polygonHasReflex(shape) {
+    const pts = shape && shape.dims && shape.dims.pts;
+    if (!pts || pts.length < 4) return false;
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a[0] * b[1] - b[0] * a[1]; }
+    const wind = area >= 0 ? 1 : -1;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[(i - 1 + pts.length) % pts.length], c = pts[i], n = pts[(i + 1) % pts.length];
+      const cross = (c[0] - p[0]) * (n[1] - c[1]) - (c[1] - p[1]) * (n[0] - c[0]);
+      if (cross !== 0 && (cross > 0 ? 1 : -1) !== wind) return true;
+    }
+    return false;
+  }
+  // build a feature primitive's solid, applying any id-keyed edgeTreatments (fillet/chamfer) via CSG
+  buildFeaturePrimSolid(shape) {
+    const THREE = this.THREE;
+    const geom = this.solidGeometry(shape);
+    if (!this.CSG || !shape.edgeTreatments || !Object.keys(shape.edgeTreatments).length) {
+      return new THREE.Mesh(geom, this.matFor(shape));
+    }
+    try {
+      const { Brush } = this.CSG;
+      let b = new Brush(geom); b.updateMatrixWorld(true);
+      b = this.applyEdgeTreatBrush(b, shape);
+      const mesh = new THREE.Mesh(b.geometry, this.matFor(shape));
+      return mesh;
+    } catch (e) { console.warn('feature-prim edge treatment failed', e); return new THREE.Mesh(geom, this.matFor(shape)); }
   }
 
   buildSolid(shape) {
@@ -1512,7 +1742,6 @@ class Component extends DCLogic {
       g.translate(0, 0, -T / 2); g.computeVertexNormals();
       return g;
     }
-    if (shape.type === 'custom') return this.customGeometry(shape);
     const base = new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z);
     const treats = Object.entries(shape.treatments || {});
     if (!treats.length || !this.CSG) return base;
@@ -1541,7 +1770,6 @@ class Component extends DCLogic {
       const b = new Brush(this.solidGeometry(node));
       b.position.set(node.pos[0], node.pos[1], node.pos[2]);
       this.setEuler(b, node.rot);
-      if (node.scl) b.scale.set(node.scl[0], node.scl[1], node.scl[2]);
       b.updateMatrixWorld(true);
       return b;
     }
@@ -2224,6 +2452,16 @@ class Component extends DCLogic {
     const edges = this.detectGroupEdges(u.geometry);
     return { ok: true, total: edges.length, convex: edges.filter(e => !e.convex === false).length, concave: edges.filter(e => !e.convex).length };
   }
+  // self-test fixture: a reflex-vertex (L-shape) polygon slab must expose ≥1 concave vertical edge via the
+  // same detected-edge machinery as tube/wedge. Guards item 1 (bare-primitive concave edges).
+  polygonReflexSelfTest() {
+    if (!this.THREE) return { ok: false, reason: 'THREE unavailable' };
+    const shape = { type: 'polygon', dims: { pts: [[-20, -20], [20, -20], [20, -6], [-6, -6], [-6, 20], [-20, 20]] } };
+    const reflex = this.polygonHasReflex(shape);
+    let edges = [];
+    try { edges = this.detectGroupEdges(this.solidGeometry(shape)); } catch (e) { return { ok: false, reason: 'detect threw: ' + (e.message || e) }; }
+    return { ok: true, reflex, feature: this.primHasFeatureEdges(shape), total: edges.length, concave: edges.filter(e => !e.convex).length };
+  }
   detectGroupEdges(geo) {
     if (!geo || !geo.attributes || !geo.attributes.position) return [];
     const pos = geo.attributes.position, idx = geo.index;
@@ -2389,12 +2627,51 @@ class Component extends DCLogic {
     const geos = [];
     for (const seg of t.segs) { const g = this.edgeToolSegGeom(seg, t.type, t.convex, t.size); if (g) geos.push(g); }
     if (!geos.length) return null;
+    // Joint bridging: flat-capped per-segment prisms leave slivers/gaps where two segments of a chain
+    // meet at an angle (e.g. the 3 edges of a box-pocket corner). For FILLET tools the rounding surface
+    // is a cylinder of radius r, so a sphere of radius r seated at the fillet arc-center bridges the two
+    // prisms exactly (a real router-bit ball). Only added at joints that actually turn (>15°) — a finely
+    // tessellated rim (near-collinear segments) needs none, keeping the CSG cheap.
+    if (t.type === 'fillet') {
+      for (const g of this.jointBallGeoms(t)) geos.push(g);
+    }
     const merged = this.mergeGeos(geos);
     merged.computeVertexNormals();
     const n = merged.attributes.position.count;
     merged.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(n * 2), 2));
     const b = new this.CSG.Brush(merged); b.updateMatrixWorld(true);
     return b;
+  }
+  // spheres seated at angled interior joints of a fillet chain (arc-center of the rounding cylinder)
+  jointBallGeoms(t) {
+    const THREE = this.THREE, out = [];
+    if (!t.segs.every(s => s.a && s.b)) return out;   // endpoints required (older persisted treatments lack them)
+    const Q = 1e3;
+    const pk = (p) => Math.round(p[0] * Q) + ',' + Math.round(p[1] * Q) + ',' + Math.round(p[2] * Q);
+    const dir = (s, from) => { const to = pk(s.a) === from ? s.b : s.a; const a = pk(s.a) === from ? s.a : s.b; const d = [to[0] - a[0], to[1] - a[1], to[2] - a[2]]; const L = Math.hypot(...d) || 1; return [d[0] / L, d[1] / L, d[2] / L]; };
+    // group segments by shared endpoint
+    const at = new Map();
+    for (const s of t.segs) for (const p of [s.a, s.b]) { const k = pk(p); if (!at.has(k)) at.set(k, []); at.get(k).push(s); }
+    const seen = new Set();
+    for (const [k, segs] of at) {
+      if (segs.length < 2) continue;                 // chain end or isolated — no interior joint
+      if (seen.has(k)) continue; seen.add(k);
+      const P = (pk(segs[0].a) === k) ? segs[0].a : segs[0].b;
+      // turn angle between the two incident segments
+      const d0 = dir(segs[0], k), d1 = dir(segs[1], k);
+      const dot = -(d0[0] * d1[0] + d0[1] * d1[1] + d0[2] * d1[2]); // both point away from joint
+      if (dot > Math.cos(15 * Math.PI / 180)) continue;            // near-straight — flat caps meet
+      const s = segs[0], r = t.size;
+      const U = new THREE.Vector3().fromArray(s.U), V = new THREE.Vector3().fromArray(s.V);
+      const C = new THREE.Vector3().fromArray(P);
+      if (t.convex) C.addScaledVector(U, -r).addScaledVector(V, -r); else C.addScaledVector(U, r).addScaledVector(V, r);
+      const cseg = Math.max(8, Math.round(this.state.fn / 2));
+      const ball = new THREE.SphereGeometry(r, cseg, Math.max(6, cseg >> 1));
+      ball.translate(C.x, C.y, C.z);
+      const nb = ball.index ? ball.toNonIndexed() : ball;
+      out.push(nb);
+    }
+    return out;
   }
   // subtract convex tools / union concave tools from a group's raw boolean brush
   applyEdgeTreatBrush(brush, node) {
@@ -2445,6 +2722,13 @@ class Component extends DCLogic {
       }
       return;
     }
+    if (this.state.tool === 'measure') {
+      const s = this.measureSnap(e);
+      this.showMeasureCursor(s ? s.p : null);
+      if (this._measureA && s) this.drawMeasureLive(this._measureA, s.p);
+      this.renderer.domElement.style.cursor = s ? 'crosshair' : 'default';
+      return;
+    }
     this.raycaster.setFromCamera(this.pointer, this.cam);
     const hit = this.raycaster.intersectObjects(this.allProxies(), false)[0];
     if (this.state.tool === 'select' && hit) {
@@ -2460,6 +2744,7 @@ class Component extends DCLogic {
     if (e.button !== 0 || !this.raycaster) return;
     if (this.tc && (this.tc.dragging || this.tc.axis)) return; // grabbing the gizmo
     this.ndc(e);
+    if (this.state.tool === 'measure') { this.measureClick(e); return; }
     if (this.state.tool === 'pushpull') {
       const face = this.pickFaceAtPointer();
       if (face) { try { this.renderer.domElement.setPointerCapture(e.pointerId); this._ppPointerId = e.pointerId; } catch (_) {} this.startPushPull(face, e); }
@@ -2481,6 +2766,160 @@ class Component extends DCLogic {
   onPointerUp(e) {
     if (this.pp) { try { this.renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {} this.endPushPull(); }
   }
+
+  // ============ MEASURE TOOL ============
+  // snap the pointer to the nearest meaningful point on the model: a triangle vertex of the hit face,
+  // or an edge-proxy endpoint / midpoint — whichever is closest in SCREEN space within a pixel radius.
+  // Falls back to the raw surface hit point (free point) when nothing snaps.
+  measureSnap(e) {
+    if (!this.raycaster || !this.cam) return null;
+    const THREE = this.THREE;
+    this.scene.updateMatrixWorld(true);
+    this.raycaster.setFromCamera(this.pointer, this.cam);
+    const solids = this.allSolids();
+    if (this._engineGroup) this._engineGroup.traverse(o => { if (o.isMesh) solids.push(o); });
+    const hit = this.raycaster.intersectObjects(solids, false)[0];
+    const cand = [];
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const toScreen = (v) => { const p = v.clone().project(this.cam); return [(p.x * 0.5 + 0.5) * rect.width, (-p.y * 0.5 + 0.5) * rect.height]; };
+    const px = e.clientX - rect.left, py = e.clientY - rect.top;
+    if (hit) {
+      // triangle verts of the hit face (in world space)
+      const g = hit.object.geometry, pos = g.attributes.position, idx = g.index;
+      if (hit.face) {
+        for (const vi of [hit.face.a, hit.face.b, hit.face.c]) {
+          const v = new THREE.Vector3().fromArray(pos.array, vi * 3).applyMatrix4(hit.object.matrixWorld);
+          cand.push(v);
+        }
+      }
+    }
+    // edge-proxy endpoints + midpoints
+    for (const pr of this.allProxies()) {
+      const ud = pr.userData; if (!ud) continue;
+      const segs = ud.segs || (ud.a && ud.b ? [{ a: ud.a, b: ud.b }] : null);
+      if (!segs) continue;
+      for (const sg of segs) {
+        if (!sg.a || !sg.b) continue;
+        const A = new THREE.Vector3().fromArray(sg.a), B = new THREE.Vector3().fromArray(sg.b);
+        cand.push(A, B, A.clone().add(B).multiplyScalar(0.5));
+      }
+    }
+    let best = null, bestD = 14; // px snap radius
+    for (const v of cand) {
+      const [sx, sy] = toScreen(v);
+      const d = Math.hypot(sx - px, sy - py);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    if (best) return { p: best.toArray(), snap: true };
+    if (hit) return { p: hit.point.toArray(), snap: false };
+    return null;
+  }
+  measureClick(e) {
+    const s = this.measureSnap(e);
+    if (!s) return;
+    if (!this._measureA) { this._measureA = s.p; this.showMeasureCursor(s.p); return; }
+    const a = this._measureA, b = s.p;
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    if (d < 1e-4) return;
+    this._measureA = null;
+    this.clearMeasureLive();
+    this.setState({ measurePending: { a, b, d, dx: b[0] - a[0], dy: b[1] - a[1], dz: b[2] - a[2] } });
+    this.drawMeasureLive(a, b, true);
+  }
+  cancelMeasure = () => { this._measureA = null; this.clearMeasureLive(); this.showMeasureCursor(null); this.setState({ measurePending: null }); };
+
+  // ---- transient visuals (helper group, excluded from fit + picking) ----
+  measureGroup() {
+    if (!this._measureGrp) { this._measureGrp = new this.THREE.Group(); this._measureGrp.userData.helper = true; this.scene.add(this._measureGrp); }
+    return this._measureGrp;
+  }
+  showMeasureCursor(p) {
+    const THREE = this.THREE; const g = this.measureGroup();
+    if (this._measCursor) { g.remove(this._measCursor); this._measCursor = null; }
+    if (this._measA_dot) { g.remove(this._measA_dot); this._measA_dot = null; }
+    if (this._measureA) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 12), new THREE.MeshBasicMaterial({ color: 0xF2B84B, depthTest: false }));
+      s.renderOrder = 999; s.position.fromArray(this._measureA); g.add(s); this._measA_dot = s;
+    }
+    if (p) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 12), new THREE.MeshBasicMaterial({ color: 0xF2B84B, depthTest: false }));
+      s.renderOrder = 999; s.position.fromArray(p); g.add(s); this._measCursor = s;
+    }
+  }
+  drawMeasureLive(a, b, locked) {
+    const THREE = this.THREE; const g = this.measureGroup();
+    this.clearMeasureLive();
+    const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3().fromArray(a), new THREE.Vector3().fromArray(b)]);
+    const mat = new THREE.LineBasicMaterial({ color: locked ? 0xF2B84B : 0x9AA3AE, depthTest: false, transparent: true, opacity: locked ? 1 : 0.8 });
+    const line = new THREE.Line(geo, mat); line.renderOrder = 998; g.add(line); this._measLive = line;
+  }
+  clearMeasureLive() { if (this._measLive) { this.measureGroup().remove(this._measLive); this._measLive.geometry.dispose(); this._measLive = null; } }
+
+  onPointerUp2() {}
+
+  // ============ ANNOTATIONS (persisted as `// @annotate measure {...}` comments) ============
+  // Inert to the OpenSCAD engine (comments are stripped before parse); the editor owns them, redraws
+  // them on load, and re-emits them through regenCode so they round-trip. Excluded from fit + picking.
+  ANN_RE = /\/\/\s*@annotate\s+measure\s+(\{.*?\})\s*$/gm;
+  parseAnnotations(txt) {
+    const out = []; if (!txt) return out;
+    this.ANN_RE.lastIndex = 0; let m;
+    while ((m = this.ANN_RE.exec(txt)) !== null) {
+      try { const o = JSON.parse(m[1]); if (Array.isArray(o.a) && Array.isArray(o.b)) out.push({ a: o.a, b: o.b, d: o.d, label: o.label || '' }); } catch (_) {}
+    }
+    return out;
+  }
+  annotationLines() {
+    return (this.annotations || []).map(an => '// @annotate measure ' + JSON.stringify({ a: an.a.map(n => +(+n).toFixed(4)), b: an.b.map(n => +(+n).toFixed(4)), d: +(+an.d).toFixed(4), label: an.label || '' })).join('\n');
+  }
+  addAnnotation = () => {
+    const p = this.state.measurePending; if (!p) return;
+    this.annotations = this.annotations || [];
+    this.annotations.push({ a: p.a, b: p.b, d: p.d, label: '' });
+    this.clearMeasureLive(); this.showMeasureCursor(null);
+    this.setState({ measurePending: null }, () => { this.drawAnnotations(); this.regenCode(); });
+    this.flashStatus('Annotation added');
+  };
+  removeAnnotation = (i) => {
+    if (!this.annotations || i < 0 || i >= this.annotations.length) return;
+    this.annotations.splice(i, 1);
+    this.drawAnnotations(); this.regenCode(); this.forceUpdate();
+  };
+  annotationsGroup() {
+    if (!this._annGrp) { this._annGrp = new this.THREE.Group(); this._annGrp.userData.helper = true; this.scene.add(this._annGrp); }
+    return this._annGrp;
+  }
+  drawAnnotations() {
+    const THREE = this.THREE; const g = this.annotationsGroup();
+    while (g.children.length) { const c = g.children.pop(); if (c.geometry) c.geometry.dispose(); if (c.material && c.material.map) c.material.map.dispose(); if (c.material) c.material.dispose(); }
+    for (const an of (this.annotations || [])) {
+      const A = new THREE.Vector3().fromArray(an.a), B = new THREE.Vector3().fromArray(an.b);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([A, B]), new THREE.LineBasicMaterial({ color: 0xF2B84B, depthTest: false, transparent: true }));
+      line.renderOrder = 996; g.add(line);
+      for (const P of [A, B]) { const dot = new THREE.Mesh(new THREE.SphereGeometry(0.8, 10, 10), new THREE.MeshBasicMaterial({ color: 0xF2B84B, depthTest: false })); dot.position.copy(P); dot.renderOrder = 997; g.add(dot); }
+      const label = (an.label ? an.label + '  ' : '') + this.fmt(an.d) + ' mm';
+      const spr = this.makeLabelSprite(label);
+      if (spr) { spr.position.copy(A.clone().add(B).multiplyScalar(0.5)); g.add(spr); }
+    }
+  }
+  makeLabelSprite(text) {
+    const THREE = this.THREE;
+    const pad = 10, fs = 34;
+    const cv = document.createElement('canvas'); const ctx = cv.getContext('2d');
+    ctx.font = '600 ' + fs + "px 'IBM Plex Mono', monospace";
+    const w = Math.ceil(ctx.measureText(text).width) + pad * 2, h = fs + pad * 2;
+    cv.width = w; cv.height = h;
+    ctx.font = '600 ' + fs + "px 'IBM Plex Mono', monospace";
+    ctx.fillStyle = 'rgba(20,22,26,0.9)'; this._roundRect(ctx, 0, 0, w, h, 8); ctx.fill();
+    ctx.strokeStyle = 'rgba(242,184,75,0.7)'; ctx.lineWidth = 2; this._roundRect(ctx, 1, 1, w - 2, h - 2, 7); ctx.stroke();
+    ctx.fillStyle = '#F4D79A'; ctx.textBaseline = 'middle'; ctx.fillText(text, pad, h / 2 + 1);
+    const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    spr.renderOrder = 998;
+    const scale = 0.11; spr.scale.set(w * scale, h * scale, 1);
+    return spr;
+  }
+  _roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
   shapeIdFromObject(o) {
     let cur = o;
@@ -2575,13 +3014,13 @@ class Component extends DCLogic {
   }
   applyGroupTreatment() {
     const se = this.state.selectedEdge; if (!se || !se.isGroupEdge) return;
-    const g = this.findNode(se.shapeId); if (!g || !this.isGroup(g)) return;
+    const g = this.findNode(se.shapeId); if (!g || !(this.isGroup(g) || this.primHasFeatureEdges(g))) return;
     const edge = (g._edges || []).find(e => e.id === se.edgeId); if (!edge) return;
     g.edgeTreatments = g.edgeTreatments || {};
     const size = Math.min(this.state.radius, this.groupEdgeMaxR(edge));
     g.edgeTreatments[se.edgeId] = {
       type: this.state.treatType, size, convex: edge.convex,
-      segs: edge.segs.map(s => ({ mid: s.mid.slice(), U: s.U.slice(), V: s.V.slice(), len: s.len })),
+      segs: edge.segs.map(s => ({ a: s.a.slice(), b: s.b.slice(), mid: s.mid.slice(), U: s.U.slice(), V: s.V.slice(), len: s.len })),
     };
     this.rebuildTopGroup(g, se);
   }
@@ -2593,7 +3032,7 @@ class Component extends DCLogic {
   }
   rebuildTopGroup(g, se) {
     if (g.group) { this.scene.remove(g.group); this.disposeGroup(g.group); g.group = null; g.solid = null; }
-    this.buildGroupRender(g);
+    if (this.isGroup(g)) this.buildGroupRender(g); else this.buildGroup(g);
     if (this.selTube) { this.scene.remove(this.selTube); this.disposeGroup(this.selTube); this.selTube = null; }
     this.selTube = this.makeGroupEdgeHighlight(g, se.edgeId, 0x3b82f6, 0.95);
     if (this.selTube) this.scene.add(this.selTube);
@@ -2652,7 +3091,6 @@ class Component extends DCLogic {
     g.add(fill); g.add(wire);
     g.position.set(node.pos[0], node.pos[1], node.pos[2]);
     this.setEuler(g, node.rot);
-    if (node.scl) g.scale.set(node.scl[0], node.scl[1], node.scl[2]);
     g.userData = { ghostFor: node.id };
     this.scene.add(g);
     this.ghost = g;
@@ -2710,7 +3148,7 @@ class Component extends DCLogic {
     } else if (n && !this.isGroup(n) && !this.isTopLevel(id)) {
       // nested member: show + drive a ghost proxy so negatives are visible and editable
       if (!this.ghost || this.ghost.userData.ghostFor !== n.id) this.buildGhost(n);
-      else { this.ghost.position.set(n.pos[0], n.pos[1], n.pos[2]); this.setEuler(this.ghost, n.rot); const gs = n.scl || [1, 1, 1]; this.ghost.scale.set(gs[0], gs[1], gs[2]); }
+      else { this.ghost.position.set(n.pos[0], n.pos[1], n.pos[2]); this.setEuler(this.ghost, n.rot); this.ghost.scale.set(1, 1, 1); }
       this._applyGizmoMode(this.ghost, true);
     } else {
       this.clearGhost();
@@ -2761,18 +3199,6 @@ class Component extends DCLogic {
       if (this.state.gizmoMode === 'scale' && obj && !this.isGroup(s)) {
         const sc = obj.scale;
         const changed = new Set(); const add = (vn) => { if (vn) changed.add(vn); };
-        if (s.type === 'custom') {
-          // no dims to bake into — the scale lives on the node and is emitted as scale([...])
-          const nz = (x) => { const v = +(+x).toFixed(4); return v || 1; };
-          s.scl = [nz(sc.x), nz(sc.y), nz(sc.z)];
-          if (s.scl[0] === 1 && s.scl[1] === 1 && s.scl[2] === 1) delete s.scl;
-          if (nested) {
-            this.rebuildAncestor(s);
-            this.buildGhost(s); this.tc.attach(this.ghost);
-          }
-          this.syncShapesState(); this.regenCode(); this.forceUpdate();
-          return;
-        }
         if (s.type === 'cuboid') {
           add(this.bakeDim(s, 'x', s.dims.x * sc.x));
           add(this.bakeDim(s, 'y', s.dims.y * sc.y));
@@ -3069,7 +3495,6 @@ class Component extends DCLogic {
   }
   defaultLabelFor(node) {
     if (this.isGroup(node)) return (node.op ? node.op[0].toUpperCase() + node.op.slice(1) : 'Group');
-    if (node.type === 'custom') return node.name || 'Custom';
     const t = node.type || 'shape';
     return t[0].toUpperCase() + t.slice(1);
   }
@@ -3620,7 +4045,6 @@ class Component extends DCLogic {
     }
     const f = { id: nid, type: n.type, label: (n.label || 'Shape') + ' copy', dims: JSON.parse(JSON.stringify(n.dims || {})), pos: (n.pos || [0, 0, 0]).slice(), treatments: JSON.parse(JSON.stringify(n.treatments || {})) };
     if (n.rot) f.rot = n.rot.slice();
-    if (n.type === 'custom') { f.name = n.name; f.argsSrc = n.argsSrc || ''; if (n.scl) f.scl = n.scl.slice(); }
     if (n.expr) f.expr = { ...n.expr };
     return f;
   }
@@ -3763,8 +4187,7 @@ class Component extends DCLogic {
       return {
         id: n.id, kind: 'prim', type: n.type, label: n.label, depth,
         treated: Object.keys(n.treatments || {}).length,
-        meta: n.type === 'custom' ? `${n.name}() \u00b7 module`
-          : (n.type === 'cuboid' || n.type === 'wedge') ? `${this.fmt(n.dims.x)}\u00d7${this.fmt(n.dims.y)}\u00d7${this.fmt(n.dims.z)}`
+        meta: (n.type === 'cuboid' || n.type === 'wedge') ? `${this.fmt(n.dims.x)}\u00d7${this.fmt(n.dims.y)}\u00d7${this.fmt(n.dims.z)}`
           : n.type === 'cylinder' ? `\u2300${this.fmt(n.dims.r * 2)} \u00d7 ${this.fmt(n.dims.h)}`
             : n.type === 'torus' ? `\u2300${this.fmt(n.dims.ring * 2)} / \u2300${this.fmt(n.dims.tube * 2)}`
               : n.type === 'tube' ? `\u2300${this.fmt(n.dims.r * 2)} / \u2300${this.fmt((n.dims.ri || 0) * 2)} \u00d7 ${this.fmt(n.dims.h)}`
@@ -3832,7 +4255,8 @@ class Component extends DCLogic {
   regenCode() {
     const prev = this.state.code;
     const code = this._programText();
-    const full = code + '\n' + this.treeMarker() + '\n';
+    const ann = this.annotationLines();
+    const full = code + '\n' + (ann ? ann + '\n' : '') + this.treeMarker() + '\n';
     this.setState({ code: full, dirty: false });
     if (this._codeArea && document.activeElement !== this._codeArea) this._codeArea.value = full;
     // record history for GUI edits; rebuild paths (hydrate / runCode-simple) set _suppressHist
@@ -3860,14 +4284,12 @@ class Component extends DCLogic {
       }
       const o = { type: n.type, label: n.label, dims: n.dims, pos: n.pos };
       if (n.rot) o.rot = n.rot;
-      if (n.type === 'custom') { o.name = n.name; o.argsSrc = n.argsSrc || ''; if (n.scl) o.scl = n.scl; }
       if (n.expr && Object.keys(n.expr).length) o.expr = n.expr;
       if (n.treatments && Object.keys(n.treatments).length) o.treatments = n.treatments;
+      if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) o.edgeTreatments = n.edgeTreatments;
       return o;
     };
-    const snap = { v: 1, fn: this.state.fn, vars: this.vars.map(v => ({ name: v.name, value: v.value })), tree: this.tree.map(clean) };
-    if (this.headers && this.headers.length) snap.headers = this.headers;
-    return JSON.stringify(snap);
+    return JSON.stringify({ v: 1, fn: this.state.fn, vars: this.vars.map(v => ({ name: v.name, value: v.value })), tree: this.tree.map(clean) });
   }
   readTreeSnapshot(txt) {
     const re = /(^|\n)\/\/ @scs-tree (.+?)[ \t]*$/m;
@@ -3875,7 +4297,7 @@ class Component extends DCLogic {
     try { const o = JSON.parse(m[2]); if (o && Array.isArray(o.tree)) return o; } catch (_) {}
     return null;
   }
-  stripSnapshot(txt) { return (txt || '').replace(/\n*[ \t]*\/\/ @scs-tree .*$/m, '').replace(/\s+$/, ''); }
+  stripSnapshot(txt) { return (txt || '').replace(/\n*[ \t]*\/\/ @scs-tree .*$/m, '').replace(/^\s*\/\/\s*@annotate\s+measure\s+\{.*?\}\s*$/gm, '').replace(/\s+$/, ''); }
   snapToNodes(arr) { return (arr || []).map(n => this.snapNode(n)); }
   snapNode(n) {
     const rid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -3893,8 +4315,8 @@ class Component extends DCLogic {
       pos: n.pos ? [...n.pos] : this.restingPos(n),
       treatments: n.treatments ? JSON.parse(JSON.stringify(n.treatments)) : {},
     };
+    if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) o.edgeTreatments = JSON.parse(JSON.stringify(n.edgeTreatments));
     if (n.rot) o.rot = [...n.rot];
-    if (n.type === 'custom') { o.name = n.name; o.argsSrc = n.argsSrc || ''; if (n.scl) o.scl = [...n.scl]; }
     if (n.expr && Object.keys(n.expr).length) o.expr = JSON.parse(JSON.stringify(n.expr));
     return o;
   }
@@ -3904,19 +4326,17 @@ class Component extends DCLogic {
     const fn = (snap.fn != null ? snap.fn : prevFn);
     const tree = this.snapToNodes(snap.tree);
     const vars = (snap.vars || []).map(v => ({ name: v.name, value: v.value }));
-    const prevHeaders = this.headers;
-    this.headers = snap.headers || [];
     this.state.fn = fn; this.tree = tree; this.vars = vars; this.reindex();
     const expected = this._programText().replace(/\s+$/, '');
     const bare = this.stripSnapshot(txt);
     if (expected !== bare) {                 // stale / hand-edited code -> let the normal path handle it
-      this.state.fn = prevFn; this.tree = prevTree; this.vars = prevVars; this.headers = prevHeaders; this.reindex();
+      this.state.fn = prevFn; this.tree = prevTree; this.vars = prevVars; this.reindex();
       return false;
     }
     this.clearEngineRender();
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
     this._rendered = [];
-    this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0, custom: 0 };
+    this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
     const vmap = this.varMap();
     for (const s of this.shapes) if (s.expr) this.resolveShape(s, vmap);
     this.clampAllTreatments();
@@ -3936,11 +4356,6 @@ class Component extends DCLogic {
     out.push('// Generated by SCAD Studio');
     out.push('$fn = ' + this.state.fn + ';');
     out.push('');
-    if (this.headers && this.headers.length) {
-      out.push('// --- libraries ---');
-      for (const h of this.headers) out.push(h);
-      out.push('');
-    }
     if (this.vars.length) {
       out.push('// --- parameters ---');
       for (const v of this.vars) out.push(`${v.name} = ${F(v.value)};`);
@@ -3987,13 +4402,8 @@ class Component extends DCLogic {
   // ============ CODE -> MODEL (base solids; tolerant of our own format) ============
   runCode = () => {
     const txt = (this._codeArea ? this._codeArea.value : this.state.code) || '';
-    // `// @github: owner/repo` above an include/use, target not loaded yet -> fetch it first,
-    // then re-run. Once cached (or once the spec has failed once) this check is a no-op scan.
-    if (this.needsGithubFetch(txt)) {
-      this.flashStatus('Fetching library from GitHub…');
-      this.ensureGithubImports(txt).then(() => this.runCode());
-      return;
-    }
+    this.annotations = this.parseAnnotations(txt);
+    if (this.scene) setTimeout(() => this.drawAnnotations(), 0);
     // --- faithful round-trip: if the file carries a valid authoring-tree snapshot that still
     // matches the code, rebuild the GUI tree from it so the Model Tree is identical to the GUI ---
     const snap = this.readTreeSnapshot(txt);
@@ -4007,8 +4417,6 @@ class Component extends DCLogic {
     if (advanced && window.ScadEngine) { this.runAdvanced(txt); return; }
     this._readsViewport = false;
 
-    this._customSet = this.knownLibModules(ast);   // library modules callable as custom shapes
-    this.headers = this.extractHeaders(txt);       // include/use (+ @github tags) re-emitted verbatim
     const parsed = this.parseScad(txt);
     const count = this.collectPrimitives(parsed.tree || []).length;
     if (!count && !parsed.vars.length) { this.flashStatus('No shapes or parameters found'); return; }
@@ -4016,7 +4424,7 @@ class Component extends DCLogic {
     // wipe and rebuild
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
     this._rendered = [];
-    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0, custom: 0 };
+    this.tree = []; this.seq = { cuboid: 0, cylinder: 0, sphere: 0, torus: 0, tube: 0, wedge: 0, circle: 0, square: 0, polygon: 0, extrude: 0, group: 0 };
     this.vars = parsed.vars.map(v => ({ name: v.name, value: v.value }));
     this.tree = (parsed.tree || []).map(p => this.buildNodeFromParsed(p));
     this.reindex();
@@ -4060,23 +4468,8 @@ class Component extends DCLogic {
       if (s.children) for (const c of s.children.stmts) if (!extrudeBodySimple(c)) return false;
       return true;
     };
-    // calls to KNOWN library modules (defined in loaded include/use files) round-trip as opaque
-    // 'custom' authoring nodes — raw arg text preserved verbatim — so they stay GUI-simple.
-    // A child block on the call (children()-style) has no authoring representation -> advanced.
-    const custom = this.knownLibModules(ast);
-    const customCallSimple = (s) => s.t === 'call' && custom.has(s.name) && !SIMPLE.has(s.name)
-      && (!s.children || !(s.children.stmts || []).length);
     const callSimple = (s) => {
-      if (!SIMPLE.has(s.name)) {
-        if (customCallSimple(s)) return true;
-        // scale() is representable only as a prefix on a custom node (parseScad drops it on
-        // primitives) -> simple iff it wraps exactly one custom-call statement
-        if (s.name === 'scale' && s.children && (s.children.stmts || []).length === 1) {
-          const c = s.children.stmts[0];
-          return customCallSimple(c) || (c.t === 'call' && c.name === 'scale' && callSimple(c));
-        }
-        return false;
-      }
+      if (!SIMPLE.has(s.name)) return false;
       if (s.args.some(a => !argSimple(a.expr))) return false;
       if (s.name === 'linear_extrude' || s.name === 'rotate_extrude') {
         if (s.children) for (const c of s.children.stmts) if (!extrudeBodySimple(c)) return false;
@@ -4086,12 +4479,7 @@ class Component extends DCLogic {
       return true;
     };
     const stmtSimple = (s) => {
-      switch (s.t) {
-        case 'assign': return exprSimple(s.expr);
-        case 'call': return callSimple(s);
-        case 'include': case 'use': return true;   // preserved verbatim as header lines
-        default: return false;
-      }
+      switch (s.t) { case 'assign': return exprSimple(s.expr); case 'call': return callSimple(s); default: return false; }
     };
     return !(ast.stmts || []).every(stmtSimple);
   }
@@ -4234,7 +4622,7 @@ class Component extends DCLogic {
 
   finishAdvanced(txt, res) {
     for (const n of this._rendered) { if (n.group) { this.scene.remove(n.group); this.disposeGroup(n.group); } }
-    this._rendered = []; this.tree = []; this.shapes = []; this.headers = []; this.clearEdge();
+    this._rendered = []; this.tree = []; this.shapes = []; this.clearEdge();
     if (this.tc) { this.tc.detach(); this.tc.visible = false; }
     this.clearEngineRender();
     // render
@@ -4248,7 +4636,7 @@ class Component extends DCLogic {
       sub.userData = { roTopIndex: i };
       // per-node guard: a single failing part (e.g. a heavy CSG) must not abort the whole render
       try { this.realizeNode(n, this.IDENTITY(), null, sub); }
-      catch (e) { console.warn('[render-part]', e && e.stack || e); res.errors = res.errors.concat([{ msg: 'render part ' + (i + 1) + ': ' + (e.message || e) }]); }
+      catch (e) { res.errors = res.errors.concat([{ msg: 'render part ' + (i + 1) + ': ' + (e.message || e) }]); }
       grp.add(sub);
       this._roGroups[i] = sub;
     });
@@ -4411,7 +4799,8 @@ class Component extends DCLogic {
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-      return this.padGeoAttrs(g);
+      g.computeVertexNormals();
+      return g;
     }
     return null;
   }
@@ -4559,18 +4948,13 @@ class Component extends DCLogic {
     for (const g of plain) { const a = g.attributes.position.array; out.set(a, o); o += a.length; }
     const merged = new THREE.BufferGeometry(); merged.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); return merged;
   }
-  // three-bvh-csg requires matching attributes across CSG operands; primitives carry
-  // normal + uv, so every geometry that can meet one in Evaluator.evaluate must too, or the
-  // lib crashes indexing the missing attribute ("Cannot read properties of undefined").
-  padGeoAttrs(geo) {
-    if (!geo || !geo.attributes || !geo.attributes.position) return geo;
-    if (!geo.attributes.normal) geo.computeVertexNormals();
-    if (!geo.attributes.uv) { const c = geo.attributes.position.count; geo.setAttribute('uv', new this.THREE.Float32BufferAttribute(new Float32Array(c * 2), 2)); }
-    return geo;
-  }
   ringsToSolid(rings, mode, params) {
     const geo = mode === 'rotate' ? this.revolveSolid(rings, params) : this.linearSolid(rings, params);
-    return this.padGeoAttrs(geo);
+    // three-bvh-csg requires matching attributes across operands; primitives carry uv, so the
+    // extrude solids must too (the twist loft / revolve don't emit uv) or CSG with a primitive
+    // throws "Attribute uv not available on geometry".
+    if (geo && !geo.attributes.uv) { const c = geo.attributes.position.count; geo.setAttribute('uv', new this.THREE.Float32BufferAttribute(new Float32Array(c * 2), 2)); }
+    return geo;
   }
 
   // ---- authoring-tree 2D -> rings -> extrude solid (Slice 4) ----
@@ -4691,7 +5075,7 @@ class Component extends DCLogic {
       if (op === 'hull') {
         let pts = []; for (const b of brushes) pts = pts.concat(vertsOf(b));
         if (pts.length < 4) return this.unionBrushes(brushes);
-        const br = new this.CSG.Brush(this.padGeoAttrs(new CG(pts))); br.updateMatrixWorld(); return br;
+        const br = new this.CSG.Brush(new CG(pts)); br.updateMatrixWorld(); return br;
       }
       let acc = vertsOf(brushes[0]);
       for (let i = 1; i < brushes.length; i++) {
@@ -4699,7 +5083,7 @@ class Component extends DCLogic {
         for (const a of A) { for (const b of B) { sum.push(new THREE.Vector3(a.x+b.x, a.y+b.y, a.z+b.z)); } if (sum.length > cap) break; }
         acc = sum;
       }
-      const br = new this.CSG.Brush(this.padGeoAttrs(new CG(acc))); br.updateMatrixWorld(); return br;
+      const br = new this.CSG.Brush(new CG(acc)); br.updateMatrixWorld(); return br;
     } catch (e) { return this.unionBrushes(brushes); }
   }
   unionBrushes(brushes) { brushes = (brushes||[]).filter(Boolean); if (!brushes.length) return null; if (brushes.length === 1) return brushes[0]; if (!this._ev) this._ev = new this.CSG.Evaluator(); let acc = brushes[0]; for (let i = 1; i < brushes.length; i++) acc = this._ev.evaluate(acc, brushes[i], this.CSG.ADDITION); acc.updateMatrixWorld(); return acc; }
@@ -4876,11 +5260,6 @@ class Component extends DCLogic {
       const op = node.kind === 'op' ? node.op : 'group';
       const kids = (node.children || []).map((c, i) => this.collapseGeomRow(this.serializeGeomRaw(c, i, depth + 1), depth + 1)).filter(Boolean);
       const isColor = node.kind === 'group' && !!node.color;
-      const isModule = node.kind === 'group' && !!node.module;
-      if (isModule) {
-        // a module instance reads as one named thing; children stay inspectable underneath
-        return { id, kind: 'group', op: 'module', structural: false, label: node.module, depth, count: kids.length, children: kids, readOnly: true };
-      }
       const label = op === 'group' ? (isColor ? 'Color' : 'Group') : (op[0].toUpperCase() + op.slice(1));
       return { id, kind: 'group', op, structural: op === 'group' && !isColor, label, depth, count: kids.length, children: kids, readOnly: true };
     }
@@ -4980,15 +5359,6 @@ class Component extends DCLogic {
       if (p.dims) node.dims = p.dims;
       return node;
     }
-    if (p.type === 'custom') {
-      this.seq.custom = (this.seq.custom || 0) + 1;
-      return {
-        id: 'cs' + Date.now() + Math.random().toString(36).slice(2, 6), type: 'custom',
-        name: p.name, argsSrc: p.argsSrc || '', label: p.name + ' ' + this.seq.custom,
-        dims: {}, pos: p.pos || [0, 0, 0], rot: p.rot || undefined, scl: p.scl || undefined, treatments: {},
-        expr: (p.expr && Object.keys(p.expr).length) ? p.expr : undefined,
-      };
-    }
     this.seq[p.type] = (this.seq[p.type] || 0) + 1;
     const labelMap = { cuboid: 'Cuboid ', sphere: 'Sphere ', cylinder: 'Cylinder ', circle: 'Circle ', square: 'Square ', polygon: 'Polygon ' };
     const label = (labelMap[p.type] || 'Shape ') + this.seq[p.type];
@@ -5009,134 +5379,12 @@ class Component extends DCLogic {
     if (node.type === 'tube') return [0, 0, node.dims.h / 2];
     if (node.type === 'torus') return [0, 0, node.dims.tube];
     if (node.type === 'circle' || node.type === 'square' || node.type === 'polygon') return [0, 0, 0.3];
-    if (node.type === 'custom') {
-      // rest on the floor using the evaluated geometry's bounding box (if already built)
-      const g = this._customGeoCache && this._customGeoCache.get(this.customGeoKey(node));
-      if (g) { if (!g.boundingBox) g.computeBoundingBox(); const sz = node.scl ? node.scl[2] : 1; return [0, 0, -g.boundingBox.min.z * sz]; }
-      return [0, 0, 0];
-    }
     return [0, 0, node.dims.r];
   }
   // SCAD -> authoring-tree reconstruction lives in scad-authoring.js. Wrapper threads editor scope in.
   parseScad(txt) {
-    const cs = this._customSet;
-    const r = window.ScadAuthoring.parseScad(txt, {
-      reserved: (nm) => this.reserved(nm),
-      restingPos: (nd) => this.restingPos(nd),
-      isCustom: (nm) => !!(cs && cs.has(nm)),
-    });
+    const r = window.ScadAuthoring.parseScad(txt, { reserved: (nm) => this.reserved(nm), restingPos: (nd) => this.restingPos(nd) });
     return { vars: r.vars, tree: r.tree };
-  }
-
-  // ---- custom module-instance support (library modules as GUI shapes) ----
-  // module names defined in _scadFiles sources reachable from the include/use lines of the AST
-  // (recursive, cycle-guarded). Locally-defined modules are NOT included: the authoring emitter
-  // cannot re-emit their definitions, so programs using them stay on the advanced path.
-  knownLibModules(ast) {
-    const names = new Set();
-    if (!this._scadFiles || !this._scadFiles.size) return names;
-    const queue = [], seen = new Set();
-    for (const s of ((ast && ast.stmts) || [])) {
-      if (s && (s.t === 'include' || s.t === 'use')) queue.push((s.path || '').split('/').pop().toLowerCase());
-    }
-    while (queue.length) {
-      const key = queue.shift();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      const f = this._scadFiles.get(key);
-      if (!f || !f.source) continue;
-      let m;
-      const md = /\bmodule\s+([A-Za-z_]\w*)\s*\(/g;
-      while ((m = md.exec(f.source)) !== null) names.add(m[1]);
-      const inc = /\b(?:include|use)\s*<([^>]+)>/g;
-      while ((m = inc.exec(f.source)) !== null) queue.push(m[1].split('/').pop().toLowerCase());
-    }
-    return names;
-  }
-  // include/use lines (plus their contiguous // @github: tag comments) from the ORIGINAL source,
-  // preserved verbatim so regenCode can re-emit them — parseScad strips comments and skips includes.
-  extractHeaders(txt) {
-    const lines = (txt || '').split('\n');
-    const out = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (!/^\s*(include|use)\s*</.test(lines[i])) continue;
-      let j = i;
-      while (j - 1 >= 0 && /^\s*\/\/\s*@github:/i.test(lines[j - 1])) j--;
-      for (; j <= i; j++) { const l = lines[j].trim(); if (!out.includes(l)) out.push(l); }
-    }
-    return out;
-  }
-  // one custom shape = one engine run of "headers + params + name(args);", realized and merged
-  // into a single BufferGeometry (world transforms baked, uv zeroed for three-bvh-csg).
-  customGeoKey(s) {
-    return s.name + '(' + (s.argsSrc || '') + ')|fn' + this.state.fn
-      + '|' + this.vars.map(v => v.name + '=' + v.value).join(',')
-      + '|f' + (this._scadFiles ? this._scadFiles.size : 0);
-  }
-  customGeometry(shape) {
-    this._customGeoCache = this._customGeoCache || new Map();
-    const key = this.customGeoKey(shape);
-    let g = this._customGeoCache.get(key);
-    if (!g) {
-      g = this.buildCustomGeometry(shape);
-      // keep the cache bounded; a var/args/fn change re-keys every entry
-      if (this._customGeoCache.size > 64) { for (const [k, v] of this._customGeoCache) { v.dispose(); this._customGeoCache.delete(k); } }
-      this._customGeoCache.set(key, g);
-    }
-    return g.clone();   // callers dispose per-node geometry on rebuild; the master stays cached
-  }
-  buildCustomGeometry(shape) {
-    const THREE = this.THREE;
-    const fallback = () => new THREE.BoxGeometry(5, 5, 5);
-    try {
-      const prog = [];
-      for (const h of (this.headers || [])) prog.push(h);
-      for (const v of this.vars) prog.push(v.name + ' = ' + this.fmt(v.value) + ';');
-      prog.push(shape.name + '(' + (shape.argsSrc || '') + ');');
-      const res = window.ScadEngine.run(prog.join('\n'), { $fn: this.state.fn, files: this.scadFilesMap() });
-      // text() inside the module needs font shaping (async on first use): shape now if the font
-      // is loaded, otherwise render without it and rebuild once the font arrives.
-      const texts = []; this.collectTextNodes(res.geom, texts);
-      if (texts.length) {
-        if (this._font) { for (const n of texts) { try { n.rings = this.textToRings(n.params, this._font); } catch (e) { console.warn('custom text shape', e); } } }
-        else {
-          this._customFontPending = true;
-          this.ensureFont().then(f => { if (f && this._customFontPending) { this._customFontPending = false; this._customGeoCache = new Map(); this.rebuildScene(); } });
-        }
-      }
-      const tmp = new THREE.Group();
-      for (const n of (res.geom || [])) {
-        try { this.realizeNode(n, this.IDENTITY(), null, tmp); }
-        catch (e) { console.warn('custom realize', shape.name, e); }
-      }
-      tmp.updateMatrixWorld(true);
-      const pos = [], norm = [];
-      const v = new THREE.Vector3(), nm3 = new THREE.Matrix3();
-      tmp.traverse(o => {
-        if (!o.isMesh || !o.geometry) return;
-        const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
-        const pa = geo.getAttribute('position'), na = geo.getAttribute('normal');
-        if (!pa) return;
-        nm3.getNormalMatrix(o.matrixWorld);
-        for (let i = 0; i < pa.count; i++) {
-          v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld); pos.push(v.x, v.y, v.z);
-          if (na) { v.fromBufferAttribute(na, i).applyMatrix3(nm3).normalize(); norm.push(v.x, v.y, v.z); }
-        }
-        if (geo !== o.geometry) geo.dispose();
-      });
-      this.disposeGroup(tmp);
-      if (!pos.length) {
-        console.warn('custom shape produced no geometry:', shape.name);
-        this.flashStatus(shape.name + '(): no geometry — check the library import');
-        return fallback();
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      if (norm.length === pos.length) g.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
-      else g.computeVertexNormals();
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
-      return g;
-    } catch (e) { console.warn('customGeometry failed', shape.name, e); return fallback(); }
   }
 
   onCodeChange = (e) => { this.setState({ code: e.target.value, dirty: true }); };
@@ -5289,162 +5537,38 @@ class Component extends DCLogic {
     try { const r = await fetch('https://api.github.com/repos/' + owner + '/' + repo); if (r.ok) { const j = await r.json(); return j.default_branch || 'main'; } } catch (_) {}
     return 'main';
   }
-  // Core fetch, shared by the manual Library dialog (fetchGithubLib) and the automatic
-  // "// @github: owner/repo[@ref][/subdir]" tag scan (ensureGithubImports) below. Throws on
-  // failure; caller decides how to surface that (UI message vs. flashStatus + a failed-spec cache).
-  async fetchGithubRepoFiles(specStr) {
-    const s = this.parseGithubSpec(specStr);
-    if (!s) throw new Error('invalid github spec: ' + specStr);
-    const ref = await this.resolveRef(s.owner, s.repo, s.ref);
-    const tr = await fetch('https://api.github.com/repos/' + s.owner + '/' + s.repo + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1');
-    if (!tr.ok) throw new Error(tr.status === 404 ? 'repo or branch not found' : (tr.status === 403 ? 'GitHub rate limit \u2014 try again shortly' : 'GitHub error ' + tr.status));
-    const tree = await tr.json();
-    let blobs = (tree.tree || []).filter(n => n.type === 'blob' && /\.scad$/i.test(n.path));
-    if (s.subdir) { const d = s.subdir.replace(/^\/+|\/+$/g, '').toLowerCase() + '/'; blobs = blobs.filter(n => n.path.toLowerCase().startsWith(d)); }
-    if (!blobs.length) throw new Error('no .scad files found' + (s.subdir ? ' under ' + s.subdir : ''));
-    const truncated = blobs.length > 500; if (truncated) blobs = blobs.slice(0, 500);
-    if (!this._scadFiles) this._scadFiles = new Map();
-    let ok = 0;
-    await Promise.all(blobs.map(async n => {
-      try {
-        const res = await fetch('https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + ref + '/' + n.path.split('/').map(encodeURIComponent).join('/'));
-        if (!res.ok) return;
-        const src = await res.text();
-        const base = (n.path.split('/').pop() || n.path).toLowerCase();
-        this._scadFiles.set(base, { name: s.repo + '/' + (n.path.split('/').pop() || n.path), key: base, source: src, lines: src.split('\n').length, repo: s.owner + '/' + s.repo, ref });
-        ok++;
-      } catch (_) {}
-    }));
-    return { ok, truncated, owner: s.owner, repo: s.repo };
-  }
   async fetchGithubLib(spec) {
     if (this.state.libBusy) return;
-    const specStr = spec != null ? spec : this.state.libSpec;
-    const s = this.parseGithubSpec(specStr);
+    const s = this.parseGithubSpec(spec != null ? spec : this.state.libSpec);
     if (!s) { this.setState({ libMsg: 'Enter owner/repo, owner/repo@tag, or a GitHub URL' }); return; }
     this.setState({ libBusy: true, libMsg: 'Resolving ' + s.owner + '/' + s.repo + '\u2026' });
     try {
-      const { ok, truncated, owner, repo } = await this.fetchGithubRepoFiles(specStr);
-      this.setState({ libBusy: false, libSpec: '', libMsg: 'Loaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo + (truncated ? ' (capped at 500)' : '') + '. Reference with include <\u2026>.' });
-      this.flashStatus('Imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo);
+      const ref = await this.resolveRef(s.owner, s.repo, s.ref);
+      const tr = await fetch('https://api.github.com/repos/' + s.owner + '/' + s.repo + '/git/trees/' + encodeURIComponent(ref) + '?recursive=1');
+      if (!tr.ok) throw new Error(tr.status === 404 ? 'repo or branch not found' : (tr.status === 403 ? 'GitHub rate limit \u2014 try again shortly' : 'GitHub error ' + tr.status));
+      const tree = await tr.json();
+      let blobs = (tree.tree || []).filter(n => n.type === 'blob' && /\.scad$/i.test(n.path));
+      if (s.subdir) { const d = s.subdir.replace(/^\/+|\/+$/g, '').toLowerCase() + '/'; blobs = blobs.filter(n => n.path.toLowerCase().startsWith(d)); }
+      if (!blobs.length) throw new Error('no .scad files found' + (s.subdir ? ' under ' + s.subdir : ''));
+      const truncated = blobs.length > 500; if (truncated) blobs = blobs.slice(0, 500);
+      this.setState({ libMsg: 'Fetching ' + blobs.length + ' file' + (blobs.length !== 1 ? 's' : '') + '\u2026' });
+      if (!this._scadFiles) this._scadFiles = new Map();
+      let ok = 0;
+      await Promise.all(blobs.map(async n => {
+        try {
+          const res = await fetch('https://raw.githubusercontent.com/' + s.owner + '/' + s.repo + '/' + ref + '/' + n.path.split('/').map(encodeURIComponent).join('/'));
+          if (!res.ok) return;
+          const src = await res.text();
+          const base = (n.path.split('/').pop() || n.path).toLowerCase();
+          this._scadFiles.set(base, { name: s.repo + '/' + (n.path.split('/').pop() || n.path), key: base, source: src, lines: src.split('\n').length, repo: s.owner + '/' + s.repo, ref });
+          ok++;
+        } catch (_) {}
+      }));
+      this.setState({ libBusy: false, libSpec: '', libMsg: 'Loaded ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo + (truncated ? ' (capped at 500)' : '') + '. Reference with include <\u2026>.' });
+      this.flashStatus('Imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + s.owner + '/' + s.repo);
       this.forceUpdate(); this.runCode();
     } catch (e) {
       this.setState({ libBusy: false, libMsg: 'Failed: ' + (e && e.message ? e.message : String(e)) });
-    }
-  }
-
-  // ============ GITHUB IMPORT TAG (automatic) ============
-  // A `// @github: owner/repo[@ref][/subdir]` comment sitting directly above an `include <...>`
-  // or `use <...>` line is BOTH documentation (tells a human where the file comes from \u2014 real
-  // OpenSCAD just sees a comment) AND a machine-readable fetch hint for this GUI: if the
-  // included file isn't already loaded, we fetch that repo the same way the manual Library
-  // dialog does, keyed into the same `_scadFiles` map, so `include`/`use` resolves without the
-  // user opening the dialog by hand.
-  scanGithubImportTags(txt) {
-    const lines = (txt || '').split('\n');
-    const out = [];
-    for (let i = 0; i < lines.length - 1; i++) {
-      const tag = lines[i].match(/^\s*\/\/\s*@github:\s*(\S+)\s*$/);
-      if (!tag) continue;
-      const inc = lines[i + 1].match(/^\s*(?:include|use)\s*<([^>]+)>/);
-      if (!inc) continue;
-      const file = (inc[1].split('/').pop() || inc[1]).toLowerCase();
-      out.push({ spec: tag[1], file });
-    }
-    return out;
-  }
-  // Tags can live in fetched libraries too (a library's own include <...> tagged with the repo
-  // it comes from), so every scan covers the editor text PLUS every loaded .scad source.
-  _allImportSources(txt) {
-    const out = [txt || ''];
-    if (this._scadFiles) for (const [, v] of this._scadFiles) out.push(v.source || '');
-    return out;
-  }
-  _pendingGithubSpecs(txt) {
-    const specs = new Set();
-    for (const src of this._allImportSources(txt))
-      for (const t of this.scanGithubImportTags(src))
-        if (!(this._scadFiles && this._scadFiles.has(t.file)) && !(this._githubFailed && this._githubFailed.has(t.spec)))
-          specs.add(t.spec);
-    return [...specs];
-  }
-  needsGithubFetch(txt) { return this._pendingGithubSpecs(txt).length > 0; }
-
-  // ============ DEEP LINK (open a file passed on the URL) ============
-  // index.html?github=owner/repo[@ref][/path/to/file.scad]   (github.com URLs also accepted;
-  //   optional &file=<basename.scad> picks the entry file when the spec has no file path)
-  // index.html?file=<url-to-.scad>   (github.com blob / raw.githubusercontent.com URLs are
-  //   treated like ?github= so sibling includes resolve; other URLs fetch as plain text)
-  deepLink() {
-    let q; try { q = new URLSearchParams(window.location.search); } catch (_) { return null; }
-    const gh = q.get('github'), file = q.get('file');
-    // github.com blob/raw file URLs (in either param) -> owner/repo@ref/path spec
-    const asSpec = (u) => {
-      const m = (u || '').match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/([^/]+)\/(.+?)[?#]?$/i)
-             || (u || '').match(/^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+?)[?#]?$/i);
-      return m ? m[1] + '/' + m[2] + '@' + m[3] + '/' + m[4] : null;
-    };
-    if (gh) return { kind: 'github', spec: asSpec(gh) || gh, entry: (file || '').split('/').pop().toLowerCase() };
-    if (!file) return null;
-    const spec = asSpec(file);
-    if (spec) return { kind: 'github', spec, entry: '' };
-    return { kind: 'url', url: file };
-  }
-  async openDeepLink(d) {
-    if (d.kind === 'url') {
-      this.flashStatus('Opening ' + d.url + '…');
-      const r = await fetch(d.url);
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + d.url);
-      const src = await r.text();
-      this.openAsMain((d.url.split('/').pop() || 'file.scad'), src);
-      return;
-    }
-    const s = this.parseGithubSpec(d.spec);
-    if (!s) throw new Error('invalid github spec: ' + d.spec);
-    // a file path in the spec names the entry; the WHOLE repo is fetched regardless so that
-    // sibling includes (and their nested @github tags) resolve like the Library dialog's fetch
-    let entry = d.entry;
-    const sub = (s.subdir || '').replace(/^\/+|\/+$/g, '');
-    if (/\.scad$/i.test(sub)) entry = sub.split('/').pop().toLowerCase();
-    this.flashStatus('Opening ' + s.owner + '/' + s.repo + '…');
-    const before = this._scadFiles ? new Set(this._scadFiles.keys()) : new Set();
-    const { ok, owner, repo } = await this.fetchGithubRepoFiles(s.owner + '/' + s.repo + (s.ref ? '@' + s.ref : ''));
-    if (!entry) {
-      const fresh = [...this._scadFiles.keys()].filter(k => !before.has(k));
-      if (fresh.length === 1) entry = fresh[0];
-    }
-    const rec = entry && this._scadFiles.get(entry);
-    if (!rec) {
-      // no unambiguous entry: leave the repo loaded as include chips and say so
-      this.forceUpdate();
-      throw new Error(entry ? entry + ' not found in ' + owner + '/' + repo
-        : ok + ' files loaded from ' + owner + '/' + repo + ' — add &file=<name.scad> to pick one');
-    }
-    this._scadFiles.delete(rec.key); // it's the main document now, not an include
-    this.openAsMain(rec.name, rec.source);
-  }
-  openAsMain(name, src) {
-    if (this._codeArea) this._codeArea.value = src;
-    this.setState({ code: src, dirty: false }, () => this.runCode());
-    this.flashStatus('Opened ' + name);
-    this.forceUpdate();
-  }
-  async ensureGithubImports(txt) {
-    // multi-pass: a fetched repo can itself carry @github tags for its own includes; rescan
-    // after each round until nothing new is pending (depth-capped; failures are remembered)
-    for (let pass = 0; pass < 5; pass++) {
-      const specs = this._pendingGithubSpecs(txt);
-      if (!specs.length) break;
-      for (const spec of specs) {
-        try {
-          const { ok, owner, repo } = await this.fetchGithubRepoFiles(spec);
-          this.flashStatus('Auto-imported ' + ok + ' file' + (ok !== 1 ? 's' : '') + ' from ' + owner + '/' + repo);
-        } catch (e) {
-          if (!this._githubFailed) this._githubFailed = new Set();
-          this._githubFailed.add(spec);
-          this.flashStatus('@github import failed (' + spec + '): ' + (e && e.message ? e.message : String(e)));
-        }
-      }
     }
   }
 
@@ -5787,9 +5911,10 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
   }
 
   // ============ TOOLS / UI ============
-  pickSelect = () => { this._ppPend = null; this.setState({ tool: 'select', ppPending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); }); };
-  pickMove = () => { this._ppPend = null; this.setState({ gizmoMode: 'translate', tool: 'select', ppPending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.updateGizmo(); }); };
+  pickSelect = () => { this._ppPend = null; this._measureA = null; this.setState({ tool: 'select', ppPending: null, measurePending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.clearMeasureLive(); this.showMeasureCursor(null); }); };
+  pickMove = () => { this._ppPend = null; this._measureA = null; this.setState({ gizmoMode: 'translate', tool: 'select', ppPending: null, measurePending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.clearMeasureLive(); this.showMeasureCursor(null); this.updateGizmo(); }); };
   pickPush = () => { if (this.state.mode !== 'advanced') { this.flashStatus('Push/pull is an Advanced-mode tool'); return; } this._ppPend = null; this.clearEdge(); this.selectShape(null); this.setState({ tool: 'pushpull', ppPending: null }); };
+  pickMeasure = () => { this._ppPend = null; this._measureA = null; this.clearEdge(); this.selectShape(null); this.setState({ tool: 'measure', ppPending: null, measurePending: null }, () => { this.clearPPHover(); this.clearPPGhost(); this.clearHinge(); this.showMeasureCursor(null); }); };
   setPPMode = (m) => { this._ppPend = null; this.setState({ ppMode: m, ppPending: null }, () => { this.clearPPGhost(); this.clearHinge(); }); };
   toggleDrawer = () => this.setState({ drawerOpen: !this.state.drawerOpen });
   setMode = (m) => {
@@ -5823,6 +5948,9 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
     else if (k === 's') this.addSphere();
     else if (k === 'm') this.pickMove();
     else if (k === 'e') this.pickPush();
+    else if (k === 'f') this.fitView();
+    else if (k === 'd') this.pickMeasure();
+    else if (k === 'escape' && this.state.tool === 'measure') this.cancelMeasure();
     else if (k === 'delete' || k === 'backspace') this.deleteSelected();
     else if (k === 'escape') { if (this.state.tool === 'pushpull') { this.cancelPushPull(); this.pickSelect(); return; } this.clearEdge(); this.selectShape(null); }
   }
@@ -5880,7 +6008,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
     const flat = [];
     const walk = (rows) => { for (const r of rows) { flat.push(r); if (r.kind === 'group' && expanded[r.id] !== false) walk(r.children); } };
     walk(st.tree || []);
-    const opGlyph = (op) => op === 'union' ? '\u222a' : op === 'difference' ? '\u2212' : op === 'hull' ? '\u2b22' : op === 'minkowski' ? '\u2295' : op === 'group' ? '\u25a1' : op === 'linear_extrude' ? '\u21a5' : op === 'rotate_extrude' ? '\u21bb' : op === 'module' ? '\u25c8' : '\u2229';
+    const opGlyph = (op) => op === 'union' ? '\u222a' : op === 'difference' ? '\u2212' : op === 'hull' ? '\u2b22' : op === 'minkowski' ? '\u2295' : op === 'group' ? '\u25a1' : op === 'linear_extrude' ? '\u21a5' : op === 'rotate_extrude' ? '\u21bb' : '\u2229';
     const treeRows = flat.map(r => {
       const isGroup = r.kind === 'group';
       const isSel = r.id === st.selectedShapeId || selIds.includes(r.id);
@@ -5896,7 +6024,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         glyph: isGroup ? opGlyph(r.op) : '',
         dotStyle: isGroup
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
-          : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon' || r.type === 'custom') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
+          : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
         rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
         onSelect: (e) => { if (this._lpFired) { this._lpFired = false; return; } if (st.readOnly) { if (!r.root) return; const mult = e && (e.metaKey || e.ctrlKey || e.shiftKey); if (mult) { this.toggleSelectReadOnly(r.id); } else { this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }, () => this.updateGizmo()); } return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
         onCtx: (e) => { e.preventDefault(); e.stopPropagation(); this.showCtxFor(r.id, e.clientX, e.clientY); },
@@ -6019,7 +6147,6 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         : ssh.type === 'circle' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
         : ssh.type === 'square' ? [this.buildField(ssh, 'x', 'X'), this.buildField(ssh, 'y', 'Y')]
         : ssh.type === 'polygon' ? []
-        : ssh.type === 'custom' ? []
         : ssh.type === 'sphere' ? [this.buildField(ssh, 'd', '\u2300 diameter')]
           : cylExtended ? (ssh.dims.sides
             ? [this.buildField(ssh, 'd', '\u2300 base'), this.buildField(ssh, 'd2', '\u2300 top'), this.buildField(ssh, 'h', 'Z (height)'), this.buildField(ssh, 'sides', 'sides')]
@@ -6092,6 +6219,17 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       btnSphere: this.toolBtn(false),
       btnMove: this.toolBtn(st.gizmoMode === 'translate' && !!st.selectedShapeId && !sel),
       btnPush: this.toolBtn(st.tool === 'pushpull'),
+      btnMeasure: this.toolBtn(st.tool === 'measure'),
+      pickMeasure: this.pickMeasure,
+      measureBarOn: st.tool === 'measure',
+      hasMeasureResult: !!st.measurePending,
+      measureIdle: !st.measurePending,
+      measureHint: this._measureA ? 'Click the second point' : 'Click a point (snaps to vertices & edges)',
+      measureDist: st.measurePending ? this.fmt(st.measurePending.d) : '',
+      measureDx: st.measurePending ? this.fmt(st.measurePending.dx) : '',
+      measureDy: st.measurePending ? this.fmt(st.measurePending.dy) : '',
+      measureDz: st.measurePending ? this.fmt(st.measurePending.dz) : '',
+      addAnnotation: this.addAnnotation,
       pickPush: this.pickPush,
       ppToolActive: st.tool === 'pushpull',
       ppLinear: () => this.setPPMode('linear'),
@@ -6187,6 +6325,13 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       treeScrollStyle: `max-height:${st.treeHeight || 210}px;overflow-y:auto;padding:6px;` + ((st.isMobile && !st.mobileTreeOpen) ? 'display:none;' : ''),
       isMobile: st.isMobile,
       showStatusBar: !st.isMobile,
+      showViewWidget: st.ready,
+      viewWidgetStyle: 'position:absolute;bottom:16px;z-index:25;display:flex;align-items:flex-end;gap:10px;'
+        + (st.isMobile ? 'right:16px;' : 'right:' + ((st.drawerOpen ? drawerW : 0) + 16) + 'px;'),
+      viewBtnStyle: 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:transparent;border:none;border-radius:7px;color:#9AA3AE;cursor:pointer;padding:0;',
+      zoomIn: this.zoomIn, zoomOut: this.zoomOut, fitToView: this.fitToView,
+      snapX: this.snapX, snapY: this.snapY, snapZ: this.snapZ,
+      setViewWidget: this.setViewWidget,
       onTreeHeaderClick: () => { if (this.state.isMobile) this.setState(s => ({ mobileTreeOpen: !s.mobileTreeOpen })); },
       treeCaretStyle: `display:${st.isMobile ? 'flex' : 'none'};align-items:center;justify-content:center;width:16px;height:16px;color:#6B7280;font-size:11px;transition:transform .15s;transform:rotate(${st.mobileTreeOpen ? '90deg' : '0deg'});`,
       treeResizeStyle: `height:11px;display:${st.isMobile ? 'none' : 'flex'};align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;border-top:1px solid #23272E;`,

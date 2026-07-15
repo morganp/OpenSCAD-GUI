@@ -1,116 +1,83 @@
 # ===================================================================================================
-# HANDOFF — v0.59.0 — FEATURE: custom shapes (module instances) in the tree viewer
+# FEATURE PLAN (IN PROGRESS) — View controls, measurement/annotation, and reader docs
 # ===================================================================================================
-# REQUEST (user): deep link ?github=morganp/openscad-interesting-shapes/examples/capsule_example.scad
-# renders 3 capsules but the Model Tree shows nothing recognizable (anonymous Union rows, read-only).
-# Detect module instances, show them as named nodes in the tree viewer, allow translate/rotate/scale.
+# REQUEST (user): (1) zoom control incl. zoom-to-fit; (2) an XYZ orientation control with a scale;
+# (3) measure between 2 points or lines, addable as an annotation stored as a formatted comment;
+# (4) document the special comments (annotation + library pull-in) in the reader (README).
+# Phased into releases so each ships + verifies independently.
 #
-# CURRENT ARCHITECTURE (verified):
-# - runCode (Editor.dc.html:3957): snapshot-hydrate -> isAdvanced(ast) gate (4006) -> simple path
-#   (parseScad -> buildNodeFromParsed -> GUI tree) or runAdvanced (engine eval -> read-only render,
-#   tree rows via serializeGeom:4791, top rows transformable via applyReadOnlyTransform:3456).
-# - Engine instantiateModule (scad-engine.js:760) returns the module body geometry UNWRAPPED —
-#   module name is lost, so a capsule() shows as "Union".
-# - Authoring tree: parseScad (scad-authoring.js:309, unknown calls SKIPPED at parseBlock:302),
-#   emit via scad-emitter.js, per-node render solidGeometry (Editor:1455), CSG evalBrush (1532),
-#   gizmo pos/rot live on node (onGizmoChange:2715), scale baked into dims (onGizmoEnd:2749).
+# ARCHITECTURE NOTES (verified in code):
+#   - Camera: PerspectiveCamera (fov 42, Z-up), OrbitControls (damping; minDistance 18, maxDistance 900).
+#     Desktop uses cam.setViewOffset(fullW,H, W*0.40,0,W,H) to shift the model left of the right drawer;
+#     fit math must be FOV/bbox based (offset-agnostic). rAF loop at initThree (~line 1138) calls
+#     controls.update()+render each frame.
+#   - Model discriminator: every model object carries userData.shapeId up its ancestry; helpers (grid,
+#     axes Lines, TransformControls, selTube/hoverTube, ghost, hinge) do NOT. So modelBox3() = expand a
+#     Box3 over scene meshes that have a shapeId ancestor. Axis colors: X #c56a6a, Y #6ac57f, Z #6a8fc5.
+#   - Tools: state.tool ∈ {'select','pushpull'}; pickSelect/pickPush set it. Left tool rail ~line 265.
+#     Bottom-center status pill ~line 713. Overlays keyed off the Z table (hud:25).
+#   - Comments: scad-engine strips //line and /* */ before parse; parseScad (scad-authoring.js) strips the
+#     same. So a persisted annotation must survive as a comment the editor re-reads itself (like the
+#     existing `// @scs-tree {json}` snapshot), NOT something the engine needs to interpret.
+#   - Library pull-in already exists: `use <file>` / `include <file>` resolved via the GitHub library
+#     importer + drag-drop .scad provider (Phase 10). Only needs DOCUMENTING, not building.
 #
-# PLAN — three parts:
-# 1. ENGINE TAG [done]: instantiateModule wraps its output in
-#    { kind:'group', module:<name>, children, matrix:identity, dim:dimOf } so every consumer can
-#    see "this subtree is one module instance". Verify conformance stays 113/113 (node runner).
-# 2. READ-ONLY TREE NAMES [done]: serializeGeomRaw/collapseGeomRow treat module-tagged groups as
-#    non-structural rows labeled with the module name (meta 'module'). Advanced programs now show
-#    "capsule" rows; existing root-row move/rotate/scale/delete applies unchanged.
-# 3. AUTHORING CUSTOM SHAPES [done]: programs made of include/use + assigns + (translate/rotate/
-#    scale-wrapped) calls to KNOWN library modules stay GUI-EDITABLE:
-#    - knownLibModules(): module names regex-scanned from _scadFiles sources reachable from the
-#      include/use lines in the editor text (recursive, cycle-guarded). Locally-defined modules
-#      stay on the advanced path (regen can't re-emit their defs).
-#    - isAdvanced admits: include/use stmts; calls to known lib modules w/o child blocks (any
-#      args — kept as raw text); scale() wrapping only custom calls.
-#    - parseScad: ctx.isCustom(name); captures scale prefix; unknown-call branch emits
-#      { type:'custom', name, argsSrc(raw), pos, pexpr, rot, scl }. parseScad also returns
-#      headers[] = include/use lines + contiguous preceding // @github: comments (from the
-#      ORIGINAL text, editor-side, since parseScad strips comments).
-#    - _programText emits headers after the $fn line; buildNodeFromParsed 'custom' -> node with
-#      seq counter label "<name> N"; snapshot serializeTree/snapNode carry name/argsSrc/scl.
-#    - Render: solidGeometry 'custom' branch -> customGeometry(shape): mini-program
-#      headers + params + "<name>(argsSrc);" through ScadEngine.run(files: scadFilesMap()),
-#      realizeNode into a temp group, meshes merged into ONE BufferGeometry (world-transform
-#      baked, uv zeroed for CSG). Cached by name+args+$fn+vars+file-revision; clones returned
-#      (rebuildScene disposes per-node geometry).
-#    - scale: node.scl [sx,sy,sz]; group + evalBrush apply it; gizmo scale-end multiplies into
-#      node.scl for custom (dims-bake skipped); emitter writes scale([..]) wrapper line.
-#    - Panel: custom shows Position/Rotation fields (no dims); tree row meta "module".
-#    - restingPos: custom -> bbox of cached geometry (drop-to-floor works); fallback 0.
+# ── Release B (v0.57.0) — MEASURE + ANNOTATION-AS-COMMENT  [SHIPPED] ──────────────────────────────
+#   - Measure tool (tool='measure', rail button + D key; Esc cancels). measureSnap raycasts solids +
+#     engine group, gathers candidates (hit-triangle verts + edge-proxy endpoints/midpoints), snaps to
+#     the nearest within a 14px screen radius, else the raw surface hit. Two clicks: measureClick stores
+#     A, second locks a pending {a,b,d,dx,dy,dz}; top-center HUD shows Δ + dx/dy/dz + "＋ Annotate".
+#     Live rubber-band line + snap dots via a helper group (userData.helper → excluded from fit + picking).
+#   - Annotations persist as `// @annotate measure {"a":[…],"b":[…],"d":…,"label":""}` — inert to the
+#     engine (stripped as a comment). parseAnnotations regex-reads them on every runCode; annotationLines()
+#     re-emits in regenCode BEFORE the @scs-tree marker; stripSnapshot also strips them so the snapshot
+#     round-trip equality still holds. Redrawn as a dim line + 2 dots + a canvas-sprite label in a helper
+#     group. addAnnotation/removeAnnotation round-trip through regenCode.
+#   - VERIFIED (eval, since html-to-image can't capture WebGL): corner-aim snaps exactly to the vertex;
+#     two-click top-face diagonal = 56.57mm (√(40²+40²)); annotate → comment emitted → parses back (d=40)
+#     → survives a full runCode reload (annCount 1, group redrawn, program stays GUI-editable). GUI battery
+#     +1 (annotation round-trip) → 16/16; engine 113/113; clean console.
 #
-# TEST: conformance node-runner 113/113 + runGui battery updated for the new simple classifications;
-# e2e scenario 3: deep link capsule_example.scad -> 3 named editable capsule rows, gizmo transform
-# regens translate(...) capsule(...) code. Release v0.59.0 (VERSION + badge + releases/ zip).
-# STATUS: shipped in v0.59.0.
+# ── Release C (v0.57.0) — READER DOCS  [SHIPPED] ──────────────────────────────────────────────────
+#   README "Special comments" (`@annotate` grammar + example; `@scs-tree` managed-snapshot note) and
+#   "Pulling in libraries" (`use` vs `include` semantics + drag-drop / GitHub-panel resolution). Repo-layout
+#   list refreshed (scad-authoring.js, scad-emitter.js, mesh-parsers.js, conformance.js, Roboto TTF).
 # ===================================================================================================
 
-# ===================================================================================================
-# HANDOFF — v0.58.0 — FEATURE: open a file passed on the URL (deep link)
-# ===================================================================================================
-# REQUEST (user, todo.md): shareable link that opens a .scad file on startup, e.g. a pointer to a
-# GitHub example (morganp/OpenSCAD_case examples/hinged_box_demo.scad).
+# ── Release A (v0.56.0) — VIEW CONTROLS  [SHIPPED] ────────────────────────────────────────────────
+#   Bottom-right viewport cluster (z=hud), right-offset clears the 420px code drawer when open.
+#   1. [x] modelBox3() — Box3 over shapeId meshes (null if empty).
+#   2. [x] fitView() — target=bbox center; dolly along current view dir to fit bounding sphere in vertical
+#          FOV (margin 1.35), clamp [minDistance,maxDistance]. Empty model → radius 30 default. Key: F.
+#   3. [x] dollyBy(factor) — zoomIn 0.8 / zoomOut 1.25, clamp distance. Buttons + / − / fit.
+#   4. [x] Orientation triad — inline SVG, 3 axis spokes projected via cam.quaternion.inverted(), depth-
+#          dimmed opacity; X/Y/Z tips clickable → snapAxis (camera onto +axis at current distance; Z=top,
+#          tiny -Y tilt dodges the Z-up pole singularity).
+#   5. [x] Scale bar — nice 1/2/5×10ⁿ mm, pixel width ≈72px at target distance (worldPerPx=2·D·tan(fov/2)/H).
+#   6. [x] Live update: controls 'change' → rAF-throttled updateViewWidget() (imperative DOM via container
+#          ref _viewWidget; no React churn). Also after fit/snap/resize.
+#   7. [x] VERIFIED (eval + pixel-sample, since html-to-image can't capture the WebGL canvas): dolly clamps
+#          18↔900; triad endpoints track a real controls.update() 'change'; axis snap; scale bar 10/20mm;
+#          model renders (14 tris sampled on canvas); clean console. Shipped 0.56.0 + badge.
 #
-# URL GRAMMAR (index.html query params):
-#   ?github=<spec>            spec = owner/repo[@ref][/path/to/file.scad]  OR a github.com URL
-#                             (blob/tree URLs OK). Optional &file=<basename.scad> picks the entry
-#                             file when the spec has no file path.
-#   ?file=<url>               direct URL to a .scad. github.com blob / raw.githubusercontent.com
-#                             URLs are recognized and treated like ?github= (whole repo fetched so
-#                             sibling includes resolve); any other URL is fetched as plain text.
+# ── Release B (v0.57.0) — MEASURE + ANNOTATION-AS-COMMENT  [NOT STARTED] ──────────────────────────
+#   - Measure tool (tool='measure', tool-rail button + M key). Pick two snap points: vertices/edge
+#     endpoints/edge-midpoints via raycast against model + edge proxies; live rubber-band + distance HUD
+#     (reuse the ppHud styling). Second pick locks it; show Δ + dx,dy,dz.
+#   - "Add annotation" → persist as a FORMATTED COMMENT the editor owns (proposed grammar, to finalize):
+#       // @annotate measure v0.57 { "a":[x,y,z], "b":[x,y,z], "d":<dist>, "label":"optional" }
+#     Parsed on load (regex over raw code, like @scs-tree) → re-drawn as a dimension line + billboard label
+#     in a dedicated annotations group (userData.helper — excluded from modelBox3/fit and from picking).
+#     Deleting the comment (or an annotations panel row) removes it. Round-trips through regenCode.
+#   - Annotations are inert to the engine (comment) so advanced + simple programs both keep them.
+#   - Tests: GUI battery asserts the comment round-trips (parse→emit stable) + a measured cube diagonal.
 #
-# BEHAVIOR: on startup (initThree tail, _whenLibsReady), if a deep link is present the default
-# seed cuboid is skipped. GitHub deep links fetch the WHOLE repo via the existing
-# fetchGithubRepoFiles/_scadFiles path (so include <../lib.scad> and nested // @github: tags
-# resolve exactly like the Library dialog), then promote the entry file to the editor (removed
-# from the include store, same as the chip "open as main" path) and runCode(). Entry pick order:
-# file path in spec > &file= param > the only fetched file if exactly one. Failures flashStatus
-# and fall back to the normal seed cuboid.
-#
-# KEY METHODS (public/Editor.dc.html, "DEEP LINK" section next to the @github tag scan):
-# deepLink() parses location.search; openDeepLink(d) does the fetch/promote/run; initThree seeds
-# via deep link when present. Reuses parseGithubSpec (spec grammar), fetchGithubRepoFiles,
-# _scadFiles, runCode.
-#
-# TEST: tests/github-import-case.e2e.js scenario 2 loads index.html?github=morganp/OpenSCAD_case/
-# examples/hinged_box_demo.scad and asserts the demo lands in the editor, both repos auto-fetch
-# (nested tag), it renders read-only with no console-panel errors. DONE — 12/12 with scenario 1.
-# ===================================================================================================
-
-# ===================================================================================================
-# HANDOFF — v0.57.0 — FIX x2: nested @github import tags + hull/polyhedron CSG uv crash
-# ===================================================================================================
-# CONTEXT: e2e test of `// @github: morganp/OpenSCAD_case` + include <case_library.scad> +
-# hinged_box(...) (tests/github-import-case.e2e.js, repeatable: cd tests && npm install && npm test).
-# Direct-repo fetch worked; two bugs found:
-#
-# BUG 1 — nested @github tags not scanned. case_library.scad itself carries
-#   `// @github: morganp/OpenSCAD_hinge` above `include <../OpenSCAD_hinge/hinge_library.scad>`,
-#   but runCode's pre-scan (needsGithubFetch/ensureGithubImports) only read the EDITOR text, never
-#   the fetched sources in _scadFiles → hinge_library.scad "file not loaded", unknown module
-#   'living_hinge'.
-#   FIX: _allImportSources() = editor txt + every _scadFiles source; needsGithubFetch scans all of
-#   them; ensureGithubImports loops passes (cap 5) so each newly fetched repo's own tags are scanned
-#   until stable. _githubFailed still short-circuits broken specs; already-loaded basenames skip.
-#
-# BUG 2 — "render part N: Cannot read properties of undefined (reading 'array')" from
-#   three-bvh-csg prepareAttributesData. hullMinkBrush's ConvexGeometry output has position+normal
-#   but NO uv; when that brush later meets a uv-carrying operand (Box/Cylinder/ringsToSolid pads uv)
-#   in Evaluator.evaluate, the lib indexes the missing uv attribute. Trigger in the wild:
-#   _rounded_rect = hull() of circles inside linear_extrude, then difference() in _box_shell.
-#   Same latent hole in primGeometry polyhedron (position+normal only).
-#   FIX: padGeoAttrs(geo) helper (compute normals if absent, zero-fill uv if absent) applied to
-#   hullMinkBrush output (hull + minkowski branches) and polyhedron primGeometry.
-#   (ringsToSolid already did its own uv pad — now shares the helper's behavior.)
-#
-# VERIFIED: tests/github-import-case.e2e.js 7/7 (was 4/7); conformance battery still green via
-# editor "run tests". Hinged box renders: shell + dividers + living hinge + TOOLS lid text.
+# ── Release C (v0.57.0 same cut or v0.58.0) — READER DOCS  [NOT STARTED] ──────────────────────────
+#   - README "Special comments" section: (a) `// @annotate …` grammar + example (from Release B);
+#     (b) `// @scs-tree …` GUI snapshot (brief, "managed — don't hand-edit"); (c) library pull-in
+#     `use <file>` vs `include <file>` semantics + how the GitHub importer / drag-drop provider resolve
+#     them. Also refresh the stale repo-layout list (mesh-parsers.js, scad-authoring.js, scad-emitter.js,
+#     conformance.js are missing today).
 # ===================================================================================================
 
 # ===================================================================================================
@@ -155,24 +122,44 @@
 # REQUEST (user): "add chamfers and fillets for internal edges."
 # SHIPPED v0.55.0: internal (concave) edges of BOOLEAN results (union/difference/intersection) and extrudes
 #   are now detected (unwelded-seam pairing), selectable, and fillet/chamfer-fillable. See the v0.55.0 entry.
+# SHIPPED v0.58.0 (build-order step 1 — unify edge detection across primitives+groups): bare TUBE and
+#   WEDGE, which had ZERO treatable edges before, now run detectGroupEdges on their local solid geometry and
+#   expose the SAME group-style pick proxies + id-keyed edgeTreatments (fillet/chamfer via applyEdgeTreatBrush
+#   CSG) as booleans. buildGroup: primHasFeatureEdges(tube|wedge) → stash _rawGeo, buildFeaturePrimSolid
+#   (Brush + applyEdgeTreatBrush when treated), lay _edges/_edgeProxies into shape.proxies. applyGroupTreatment
+#   + rebuildTopGroup now accept feature primitives (not just isGroup). Snapshot (serializeTree + snapNode)
+#   persists edgeTreatments on primitive nodes, so it ROUND-TRIPS via @scs-tree even though the OpenSCAD
+#   emitter doesn't yet write these (that is item 5 — a raw .scad export loses the primitive fillet for now).
+#   VERIFIED: tube → 4 rim edges + 192 pickable proxies (was 0); wedge → 9 edges (was 0); apply chamfer →
+#   persists + survives full reload (edgeTreatments 1, re-detects 4, stays editable); GUI battery +1 → 17/17;
+#   engine 113/113; clean console. NOTE: a plain wedge is geometrically ALL-CONVEX (triangular prism, no
+#   reentrant edge) — the old "wedge notch" note was wrong; a true bare-primitive concave edge needs a
+#   reflex-vertex polygon profile (still under item 1's polygon/extrude sub-case, not yet done).
 # REMAINING (not started):
-#   1. CONCAVE-AWARE primitives that DO have internal edges — wedge (its notch), tube (inner rim where the
-#      bore meets each end face), polygon/extrude profiles with reflex vertices. Today their concave edges
-#      are only reachable IF the shape happens to be a _rawGeo group; a bare primitive's solidGeometry path
-#      (buildCuboidSolid / buildCylinderSolid / Lathe / ExtrudeGeometry) never runs detectGroupEdges, so a
-#      bare tube/wedge/reflex-polygon exposes no concave edge to pick. PLAN: run detectGroupEdges on every
-#      primitive's raw geometry (not just booleans/extrudes), unify primitive + group edges behind ONE
-#      pick/treat model keyed by stable edge id, and let a concave pick union a fill tool the same way
-#      groups already do.
+#   1. ✅ SHIPPED v0.59.0 — CONCAVE-AWARE primitives that DO have internal edges. Tube inner rim + wedge
+#      landed in v0.58.0; the last sub-case, reflex-vertex POLYGONS, ships now: primHasFeatureEdges returns
+#      true for a polygon whose profile has a reentrant vertex (polygonHasReflex: shoelace winding vs.
+#      per-vertex turn sign), so the bare-polygon slab runs detectGroupEdges and exposes its concave vertical
+#      edge through the SAME group-style pick proxies + id-keyed edgeTreatments fill/cut path as tube/wedge —
+#      no new fill code, the generic machinery handles it. (Extruded reflex polygons were already covered by
+#      the v0.55.0 group/extrude path; the gap was only the bare 2D slab.) Round-trips via the snapshot.
+#      TEST: polygonReflexSelfTest builds the default L-shape polygon, asserts reflex detected + routed as a
+#      feature prim + ≥1 concave edge; conformance runGui case "bare reflex polygon exposes concave edge".
+#      GUI battery now 19/19. NOTE: item 1's "unify all primitives behind one edge model" ambition overlaps
+#      item 2 (unified data model) — deferred there; today tube/wedge/reflex-polygon are the primitives that
+#      HAVE internal edges, and all three are now covered, so item 1's user-facing goal is met.
 #   2. UNIFIED DATA MODEL: collapse shape.treatments (name-keyed, convex-only) and node.edgeTreatments
 #      (id-keyed, convex|concave) into a single per-node edgeTreatments map carrying {type, size, convex}.
 #      Migration: read old shape.treatments on load and convert. Keep regenCode byte-stable for existing
 #      convex primitive treatments (don't churn saved files needlessly).
-#   3. ROBUSTNESS of the concave FILL tool: the current union tool is a straight prism along one edge; at a
-#      corner where 3 concave edges meet (inside corner of a box pocket) the prisms overlap/leave slivers.
-#      PLAN: miter adjacent concave fills at shared endpoints, or sphere-cap the joints, like a real router
-#      bit. Acceptance: a rectangular pocket (difference of two cubes) filleted on all 4 vertical + 4 bottom
-#      internal edges shows a continuous radius with no sliver/no z-fight.
+#   3. ✅ SHIPPED v0.59.0 (folded in — was coded but unreleased) — ROBUSTNESS of the concave FILL tool.
+#      buildEdgeToolBrush now sphere-caps angled fillet joints (jointBallGeoms): at any chain vertex that
+#      turns >15°, a sphere of radius r seated at the rounding-cylinder arc-center bridges the two flat-capped
+#      prisms (a real router-bit ball) — subtracted for convex, unioned for concave. Acceptance met: a box
+#      pocket (difference of two cubes) filleted on all internal edges shows a continuous radius, volume
+#      increases (fill, not cut), no sliver. TEST: conformance runGui "concave fill adds material (pocket,
+#      ball-joints)". (Original PLAN also listed miter — the sphere-cap covers the acceptance case; miter
+#      left as a future refinement if a non-fillet/chamfer joint ever needs it.)
 #   4. CODE EMISSION: extend the primitive emit path (emitPrimitive in scad-emitter.js) to emit concave
 #      fills for primitive-level internal edges using the existing edge_round_in / edge_chamfer_in modules
 #      (currently only emitGroupWithEdges does). Keep convex output byte-identical.
@@ -182,11 +169,27 @@
 #      that builds each internal-edge case, applies a known radius, and asserts (a) the edge is detected +
 #      classified concave, (b) post-treat solid VOLUME increased (fill) for concave vs decreased (cut) for
 #      convex, (c) bounding box unchanged. Wire into ScadConformance.runGui so the "run tests" chip covers it.
+#   7. CONVEX↔CONCAVE BLEND AT A SHARED VERTEX (user-reported): where an EXTERNAL (convex, subtracted) fillet
+#      and an INTERNAL (concave, unioned) fillet meet at the same corner, the transition is not smooth — a
+#      visible sharp step / sliver. Cause: each treatment is a merge of straight per-segment PRISMS
+#      (edgeToolSegGeom) with FLAT end-caps, and applyEdgeTreatBrush runs them as independent passes —
+#      subtract ALL convex tools, THEN union ALL concave tools. Nothing blends where a subtracted prism and
+#      a unioned prism terminate at a shared vertex, and pass ordering (cut-then-fill) makes the fill clip
+#      against the freshly-cut convex corner instead of merging with it. PLAN: (a) at any vertex where ≥2
+#      treated edges of MIXED convexity meet, replace the flat prism caps with a spherical blend (radius =
+#      min of the meeting fillets) seated at the vertex — subtract the sphere for the convex side, union it
+#      for the concave side; (b) build the unified per-node tool set so a single CSG sequence places convex
+#      and concave tools in a corner-consistent order rather than two global passes, so the fillet surfaces
+#      are tangent-continuous across the junction. Depends on items 1-3 (unified edge model + miter joints).
+#      Acceptance: a cube with one external top edge filleted that runs into an internal edge of a unioned
+#      step shows a continuous, tangent blend at the meeting vertex (no sliver, no facet, no z-fight); add a
+#      GUI test asserting the merged solid is watertight (manifold edge count even) at that corner.
 #
 # BUILD ORDER (when picked up): (1) unify edge detection across primitives+groups → (2) unified
-# edgeTreatments data model + migration → (3) concave fill tool + joint mitering → (4) clamping by wall
-# thickness → (5) scad-emitter concave primitive emission → (6) GUI volume/bbox test battery. Each step
-# renders + round-trips before the next. Update CLAUDE.md ROADMAP (Phase 12 viewer/GUI line) when shipped.
+# edgeTreatments data model + migration → (3) concave fill tool + joint mitering (+ convex↔concave vertex
+# blend, item 7) → (4) clamping by wall thickness → (5) scad-emitter concave primitive emission → (6) GUI
+# volume/bbox + watertight-junction test battery. Each step renders + round-trips before the next. Update
+# CLAUDE.md ROADMAP (Phase 12 viewer/GUI line) when shipped.
 # RISK: the concave UNION fill changes a solid's volume, so it must run INSIDE the node's CSG accumulation
 # before the result feeds a parent boolean — verify ordering against applyEdgeTreatBrush's current place in
 # buildGroup/opMesh so a filled child still differences/intersects correctly in an ancestor.

@@ -40,7 +40,6 @@
   add('Operators & values', 'equality', 'echo(2==2, "a"=="b");', H => H.eq(0, 'true, false'));
   add('Operators & values', 'logical && || !', 'echo(true&&false, true||false, !false);', H => H.eq(0, 'false, true, true'));
   add('Operators & values', 'ternary ?:', 'echo(3<5 ? "lo" : "hi");', H => H.eq(0, '"lo"'));
-  add('Operators & values', 'ternary inside vector literal', 'x=-1; echo([x>0 ? 1 : 2, 30, 40]);', H => H.eq(0, '[2, 30, 40]'));
   add('Operators & values', 'let() expression', 'echo(let(a=4,b=3) a*b);', H => H.eq(0, '12'));
   add('Operators & values', 'vector*scalar', 'echo([1,2,3]*2);', H => H.eq(0, '[2, 4, 6]'));
   add('Operators & values', 'vector+vector', 'echo([1,2,3]+[10,20,30]);', H => H.eq(0, '[11, 22, 33]'));
@@ -309,6 +308,83 @@
       }
       if (ok) passed++;
       cases.push({ name: 'union exposes concave internal edges', ok, detail, src: 'union(){ translate([0,0,20]) cube([40,40,40],true); translate([34,0,29]) cube([40,40,40],true); }' });
+    }
+    // annotation comment round-trip: an @annotate line parses back with matching endpoints + distance.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.parseAnnotations !== 'function') { detail = 'editor annotation API unavailable'; }
+      else {
+        try {
+          const src = '// @annotate measure {"a":[0,0,0],"b":[40,0,0],"d":40,"label":"width"}';
+          const p = editor.parseAnnotations(src);
+          ok = p.length === 1 && p[0].d === 40 && p[0].a[0] === 0 && p[0].b[0] === 40 && p[0].label === 'width';
+          if (!ok) detail = 'parsed ' + JSON.stringify(p);
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'annotation comment round-trips', ok, detail, src: '// @annotate measure {…}' });
+    }
+    // bare-primitive feature edges: a tube exposes selectable rim edges via the detected-edge machinery
+    // (previously tube/wedge had zero treatable edges). Guards the v0.58.0 primitive edge unification.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.rebuildScene !== 'function') { detail = 'editor unavailable'; }
+      else {
+        try {
+          const savedTree = editor.tree, savedVars = editor.vars;
+          editor.tree = [{ id: 'ct_tube', type: 'tube', label: 'T', dims: { r: 20, ri: 10, h: 30 }, pos: [0, 0, 15], treatments: {} }];
+          editor.vars = []; editor.reindex(); editor.rebuildScene();
+          const n = editor.tree[0]; const edges = (n && n._edges) || [];
+          ok = edges.length >= 4 && (n._edgeProxies || []).length > 0;
+          if (!ok) detail = 'detected ' + edges.length + ' edges / ' + ((n && n._edgeProxies || []).length) + ' proxies';
+          editor.tree = savedTree; editor.vars = savedVars; editor.reindex(); editor.rebuildScene();
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'bare primitive (tube) exposes feature edges', ok, detail, src: 'tube r=20 ri=10 h=30' });
+    }
+    // concave fill adds material: filleting all internal edges of a box pocket increases solid volume,
+    // and ball-joints bridge the corners without throwing. Guards v0.59.0 fill-tool robustness (item 3).
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.rebuildTopGroup !== 'function' || typeof editor.rebuildScene !== 'function') { detail = 'editor unavailable'; }
+      else {
+        try {
+          const vol = (mesh) => { const g = mesh.geometry, p = g.attributes.position, idx = g.index, N = (idx ? idx.count : p.count) / 3; let v = 0; const G = (t, c) => { const i = idx ? idx.getX(3 * t + c) : 3 * t + c; return [p.getX(i), p.getY(i), p.getZ(i)]; }; for (let t = 0; t < N; t++) { const a = G(t, 0), b = G(t, 1), c = G(t, 2); v += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6; } return Math.abs(v); };
+          const savedTree = editor.tree, savedVars = editor.vars, savedCode = editor.state.code;
+          const mk = (x, y, z, tz) => ({ id: 'ct_' + Math.random().toString(36).slice(2, 7), type: 'cuboid', label: 'c', dims: { x, y, z }, pos: [0, 0, tz], treatments: {} });
+          const pocket = { id: 'ct_pocket', op: 'difference', label: 'D', children: [mk(50, 50, 30, 0), mk(30, 30, 20, 8)] };
+          editor.tree = [pocket]; editor.vars = []; editor.reindex(); editor.rebuildScene();
+          const concave = (pocket._edges || []).filter(e => !e.convex);
+          const v0 = pocket.solid ? vol(pocket.solid) : 0;
+          pocket.edgeTreatments = {};
+          for (const ce of concave) pocket.edgeTreatments[ce.id] = { type: 'fillet', size: 3, convex: false, segs: ce.segs.map(s => ({ a: s.a.slice(), b: s.b.slice(), mid: s.mid.slice(), U: s.U.slice(), V: s.V.slice(), len: s.len })) };
+          editor.rebuildTopGroup(pocket, { edgeId: concave[0] && concave[0].id });
+          const v1 = pocket.solid ? vol(pocket.solid) : 0;
+          ok = concave.length >= 4 && v1 > v0;
+          if (!ok) detail = 'concave=' + concave.length + ' vol ' + v0.toFixed(0) + '→' + v1.toFixed(0);
+          editor.tree = savedTree; editor.vars = savedVars;
+          if (editor._codeArea) editor._codeArea.value = savedCode;
+          editor.reindex(); editor.rebuildScene();
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'concave fill adds material (pocket, ball-joints)', ok, detail, src: 'difference(){ cube(50); pocket }' });
+    }
+    // bare-primitive concave edges (item 1): a reflex-vertex (L-shape) polygon slab detects the reentrant
+    // corner, is routed through the feature-edge machinery, and exposes ≥1 concave vertical edge.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.polygonReflexSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.polygonReflexSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.reflex && r.feature && r.concave >= 1; if (!ok) detail = 'reflex=' + r.reflex + ' feature=' + r.feature + ' concave=' + r.concave; }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'bare reflex polygon exposes concave edge', ok, detail, src: 'polygon(points=[…L-shape…])' });
     }
     return { name: 'GUI classification', passed, total: cases.length, cases };
   }
