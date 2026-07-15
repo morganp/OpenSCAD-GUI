@@ -386,6 +386,21 @@
       if (ok) passed++;
       cases.push({ name: 'bare reflex polygon exposes concave edge', ok, detail, src: 'polygon(points=[…L-shape…])' });
     }
+    // unified edge model (item 2): one node.edgeTreatments map — namedTreats view separates named/seg
+    // entries, legacy shape.treatments migrates on load, treated cuboid still emits edge_fillet.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.unifiedTreatmentSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.unifiedTreatmentSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.sepOk && r.migOk && r.emitOk; if (!ok) detail = 'sep=' + r.sepOk + ' migrate=' + r.migOk + ' emit=' + r.emitOk; }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'unified edgeTreatments model (named+seg, migrate, emit)', ok, detail, src: 'shape.treatments ∪ edgeTreatments → edgeTreatments' });
+    }
     return { name: 'GUI classification', passed, total: cases.length, cases };
   }
 

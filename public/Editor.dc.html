@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.59.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.60.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -993,7 +993,7 @@ class Component extends DCLogic {
 
   // ---- non-react engine state ----
   // tree node (PRIMITIVE leaf): {id, type:'cuboid'|'cylinder'|'sphere', label, dims, pos,
-  //                              treatments:{}, edges:[], group, solid, proxies:[], expr:{}, parent}
+  //                              edgeTreatments:{}, edges:[], group, solid, proxies:[], expr:{}, parent}
   // tree node (GROUP branch):    {id, op:'union'|'difference'|'intersection', label,
   //                              children:[node...], group, solid, parent}
   tree = [];               // ordered TOP-LEVEL nodes (primitives and/or groups)
@@ -1555,7 +1555,7 @@ class Component extends DCLogic {
   }
   buildCylinderSolid(shape) {
     const THREE = this.THREE;
-    const pts = this.cylProfile(shape.dims.r, shape.dims.r2 != null ? shape.dims.r2 : shape.dims.r, shape.dims.h, shape.treatments || {});
+    const pts = this.cylProfile(shape.dims.r, shape.dims.r2 != null ? shape.dims.r2 : shape.dims.r, shape.dims.h, this.namedTreats(shape));
     const v2 = pts.map(p => new THREE.Vector2(p[0], p[1]));
     const geom = new THREE.LatheGeometry(v2, this.gfn());
     geom.rotateX(Math.PI / 2);
@@ -1698,7 +1698,7 @@ class Component extends DCLogic {
         g.rotateX(Math.PI / 2); g.computeVertexNormals();
         return g;
       }
-      const pts = this.cylProfile(d.r, rTop, d.h, shape.treatments || {});
+      const pts = this.cylProfile(d.r, rTop, d.h, this.namedTreats(shape));
       const geom = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), this.gfn());
       geom.rotateX(Math.PI / 2); geom.computeVertexNormals();
       return geom;
@@ -1743,7 +1743,7 @@ class Component extends DCLogic {
       return g;
     }
     const base = new THREE.BoxGeometry(shape.dims.x, shape.dims.y, shape.dims.z);
-    const treats = Object.entries(shape.treatments || {});
+    const treats = Object.entries(this.namedTreats(shape));
     if (!treats.length || !this.CSG) return base;
     try {
       const { Brush, Evaluator, SUBTRACTION } = this.CSG;
@@ -2462,6 +2462,28 @@ class Component extends DCLogic {
     try { edges = this.detectGroupEdges(this.solidGeometry(shape)); } catch (e) { return { ok: false, reason: 'detect threw: ' + (e.message || e) }; }
     return { ok: true, reflex, feature: this.primHasFeatureEdges(shape), total: edges.length, concave: edges.filter(e => !e.convex).length };
   }
+  // self-test fixture (item 2 — unified edge model): namedTreats ignores seg (detected) entries; a legacy
+  // shape.treatments migrates through snapNode into edgeTreatments (convex:true); a treated cuboid still
+  // emits edge_fillet from the unified store.
+  unifiedTreatmentSelfTest() {
+    const grp = { op: 'union', children: [], edgeTreatments: { e1: { type: 'fillet', size: 3, convex: false, segs: [{}] }, R: { type: 'fillet', size: 2, convex: true } } };
+    const gn = this.namedTreats(grp);
+    const sepOk = !gn.e1 && !!gn.R && gn.R.size === 2 && !('segs' in gn.R);
+    const snapped = this.snapNode({ type: 'cylinder', label: 'cy', dims: { r: 20, h: 40 }, pos: [0, 0, 20], treatments: { TOP: { type: 'chamfer', size: 2 } } });
+    const migOk = !snapped.treatments && !!(snapped.edgeTreatments && snapped.edgeTreatments.TOP) && snapped.edgeTreatments.TOP.convex === true && snapped.edgeTreatments.TOP.type === 'chamfer';
+    let emitOk = false;
+    if (typeof this.rebuildScene === 'function' && window.ScadEmitter) {
+      const savedTree = this.tree, savedVars = this.vars, savedCode = this.state.code;
+      try {
+        const cub = { id: 't_cub_ut', type: 'cuboid', label: 'Cuboid', dims: { x: 40, y: 40, z: 40 }, pos: [0, 0, 20] };
+        this.tree = [cub]; this.vars = []; this.reindex(); this.rebuildScene();
+        const en = cub.edges && cub.edges[0] && cub.edges[0].name;
+        if (en) { cub.edgeTreatments = { [en]: { type: 'fillet', size: 4, convex: true } }; this.buildGroup(cub); const out = []; this.emitNode(cub, 0, out); emitOk = /edge_fillet/.test(out.join('\n')); }
+      } catch (e) { return { ok: false, reason: 'emit threw: ' + (e.message || e) }; }
+      finally { this.tree = savedTree; this.vars = savedVars; if (this._codeArea) this._codeArea.value = savedCode; this.reindex(); this.rebuildScene(); }
+    } else { emitOk = true; }
+    return { ok: true, sepOk, migOk, emitOk };
+  }
   detectGroupEdges(geo) {
     if (!geo || !geo.attributes || !geo.attributes.position) return [];
     const pos = geo.attributes.position, idx = geo.index;
@@ -2979,7 +3001,7 @@ class Component extends DCLogic {
     if (this.selTube) { this.scene.remove(this.selTube); this.disposeGroup(this.selTube); this.selTube = null; }
     this.selTube = this.makeHighlight(ud, 0x3b82f6, 0.95);
     if (this.selTube) this.scene.add(this.selTube);
-    const existing = (shape.treatments || {})[e.name];
+    const existing = (shape.edgeTreatments || {})[e.name];
     this.setState({
       selectedEdge: { shapeId: ud.shapeId, edgeName: e.name, label: e.name },
       selectedShapeId: ud.shapeId,
@@ -3239,10 +3261,10 @@ class Component extends DCLogic {
     const se = this.state.selectedEdge; if (!se) return;
     if (se.isGroupEdge) { this.applyGroupTreatment(); return; }
     const shape = this.shapes.find(s => s.id === se.shapeId); if (!shape) return;
-    shape.treatments = shape.treatments || {};
+    shape.edgeTreatments = shape.edgeTreatments || {};
     const maxR = this.edgeMaxRadius(shape, se.edgeName);
     const size = Math.min(this.state.radius, maxR);
-    shape.treatments[se.edgeName] = { type: this.state.treatType, size };
+    shape.edgeTreatments[se.edgeName] = { type: this.state.treatType, size, convex: true };
     this.buildGroup(shape);
     // re-make selection highlight (group rebuilt)
     this.selectEdgeAfterRebuild(se);
@@ -3263,7 +3285,7 @@ class Component extends DCLogic {
     const se = this.state.selectedEdge; if (!se) return;
     if (se.isGroupEdge) { this.removeGroupTreatment(); return; }
     const shape = this.shapes.find(s => s.id === se.shapeId); if (!shape) return;
-    if (shape.treatments) delete shape.treatments[se.edgeName];
+    if (shape.edgeTreatments) { delete shape.edgeTreatments[se.edgeName]; if (!Object.keys(shape.edgeTreatments).length) delete shape.edgeTreatments; }
     this.buildGroup(shape);
     this.selectEdgeAfterRebuild(se);
     this.syncShapesState(); this.regenCode();
@@ -3272,11 +3294,11 @@ class Component extends DCLogic {
     const se = this.state.selectedEdge; if (!se) return null;
     if (se.isGroupEdge) { const g = this.findNode(se.shapeId); return (g && g.edgeTreatments && g.edgeTreatments[se.edgeId]) ? g.edgeTreatments[se.edgeId].type : null; }
     const s = this.shapes.find(x => x.id === se.shapeId);
-    return (s && s.treatments && s.treatments[se.edgeName]) ? s.treatments[se.edgeName].type : null;
+    return (s && s.edgeTreatments && s.edgeTreatments[se.edgeName]) ? s.edgeTreatments[se.edgeName].type : null;
   }
   setFillet = () => { if (this.appliedType() === 'fillet') { this.removeTreatmentBtn(); return; } this.setState({ treatType: 'fillet' }, () => this.applyTreatment()); };
   setChamfer = () => { if (this.appliedType() === 'chamfer') { this.removeTreatmentBtn(); return; } this.setState({ treatType: 'chamfer' }, () => this.applyTreatment()); };
-  shapeHasTreatment(se) { if (se.isGroupEdge) { const g = this.findNode(se.shapeId); return !!(g && g.edgeTreatments && g.edgeTreatments[se.edgeId]); } const s = this.shapes.find(x => x.id === se.shapeId); return !!(s && s.treatments && s.treatments[se.edgeName]); }
+  shapeHasTreatment(se) { if (se.isGroupEdge) { const g = this.findNode(se.shapeId); return !!(g && g.edgeTreatments && g.edgeTreatments[se.edgeId]); } const s = this.shapes.find(x => x.id === se.shapeId); return !!(s && s.edgeTreatments && s.edgeTreatments[se.edgeName]); }
   onRadiusSlide = (e) => { const v = Math.max(0.5, parseFloat(e.target.value) || 0.5); const se = this.state.selectedEdge; const has = se && this.shapeHasTreatment(se); this.setState({ radius: v }, () => { if (has) this.applyTreatment(); }); };
   onRadiusInput = (e) => { const v = Math.max(0.5, parseFloat(e.target.value) || 0.5); const se = this.state.selectedEdge; const has = se && this.shapeHasTreatment(se); this.setState({ radius: v }, () => { if (has) this.applyTreatment(); }); };
 
@@ -3301,7 +3323,7 @@ class Component extends DCLogic {
     this.setFieldValueRespectingBinding(s, 'pz', target);
   };
   rebuildShape(s) {
-    for (const [n, t] of Object.entries(s.treatments || {})) { const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
+    for (const [n, t] of Object.entries(s.edgeTreatments || {})) { if (t.segs) continue; const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
     this.buildGroup(s);
     const se = this.state.selectedEdge;
     if (se && se.shapeId === s.id) this.selectEdgeAfterRebuild(se);
@@ -3348,8 +3370,17 @@ class Component extends DCLogic {
     }
     return hadDim;
   }
+  // UNIFIED EDGE MODEL (item 2): node.edgeTreatments is the SINGLE source of truth for both named
+  // primitive rim edges (cuboid/cylinder) — stored { [edgeName]: {type,size,convex:true} }, no segs — and
+  // detected group/feature-prim edges — { [edgeId]: {type,size,convex,segs} }. namedTreats is the
+  // name->{type,size} view the analytic cylinder profile, the cuboid CSG mask, and the emitter consume.
+  namedTreats(node) {
+    const out = {};
+    for (const [k, t] of Object.entries((node && node.edgeTreatments) || {})) if (t && !t.segs) out[k] = { type: t.type, size: t.size };
+    return out;
+  }
   clampTreatments(s) {
-    for (const [n, t] of Object.entries(s.treatments || {})) { const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
+    for (const [n, t] of Object.entries(s.edgeTreatments || {})) { if (t.segs) continue; const mx = this.edgeMaxRadius(s, n); if (t.size > mx) t.size = mx; }
   }
   resolveAll() {
     const vars = this.varMap();
@@ -3707,67 +3738,67 @@ class Component extends DCLogic {
     this.seq.cuboid++;
     const dims = { x: 40, y: 40, z: 40 };
     const pos = this.nextPos(); pos[2] = dims.z / 2;
-    this.addPrimitive({ id: 'cb' + Date.now() + this.seq.cuboid, type: 'cuboid', label: 'Cuboid ' + this.seq.cuboid, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'cb' + Date.now() + this.seq.cuboid, type: 'cuboid', label: 'Cuboid ' + this.seq.cuboid, dims, pos });
   };
   addCylinder = () => {
     if (!this.scene) return;
     this.seq.cylinder++;
     const dims = { r: 20, h: 50 };
     const pos = this.nextPos(); pos[2] = dims.h / 2;
-    this.addPrimitive({ id: 'cy' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cylinder ' + this.seq.cylinder, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'cy' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cylinder ' + this.seq.cylinder, dims, pos });
   };
   addCone = () => {
     if (!this.scene) return;
     this.seq.cylinder = (this.seq.cylinder || 0) + 1;
     const dims = { r: 20, r2: 0, h: 50 };
     const pos = this.nextPos(); pos[2] = dims.h / 2;
-    this.addPrimitive({ id: 'cn' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cone ' + this.seq.cylinder, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'cn' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Cone ' + this.seq.cylinder, dims, pos });
   };
   addPyramid = () => {
     if (!this.scene) return;
     this.seq.cylinder = (this.seq.cylinder || 0) + 1;
     const dims = { r: 26, r2: 0, h: 50, sides: 4 };
     const pos = this.nextPos(); pos[2] = dims.h / 2;
-    this.addPrimitive({ id: 'py' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Pyramid ' + this.seq.cylinder, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'py' + Date.now() + this.seq.cylinder, type: 'cylinder', label: 'Pyramid ' + this.seq.cylinder, dims, pos });
   };
   addTorus = () => {
     if (!this.scene) return;
     this.seq.torus = (this.seq.torus || 0) + 1;
     const dims = { ring: 30, tube: 9 };
     const pos = this.nextPos(); pos[2] = dims.tube;
-    this.addPrimitive({ id: 'to' + Date.now() + this.seq.torus, type: 'torus', label: 'Torus ' + this.seq.torus, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'to' + Date.now() + this.seq.torus, type: 'torus', label: 'Torus ' + this.seq.torus, dims, pos });
   };
   addTube = () => {
     if (!this.scene) return;
     this.seq.tube = (this.seq.tube || 0) + 1;
     const dims = { r: 24, ri: 15, h: 44 };
     const pos = this.nextPos(); pos[2] = dims.h / 2;
-    this.addPrimitive({ id: 'tb' + Date.now() + this.seq.tube, type: 'tube', label: 'Tube ' + this.seq.tube, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'tb' + Date.now() + this.seq.tube, type: 'tube', label: 'Tube ' + this.seq.tube, dims, pos });
   };
   addWedge = () => {
     if (!this.scene) return;
     this.seq.wedge = (this.seq.wedge || 0) + 1;
     const dims = { x: 44, y: 44, z: 44 };
     const pos = this.nextPos(); pos[2] = dims.z / 2;
-    this.addPrimitive({ id: 'wd' + Date.now() + this.seq.wedge, type: 'wedge', label: 'Wedge ' + this.seq.wedge, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'wd' + Date.now() + this.seq.wedge, type: 'wedge', label: 'Wedge ' + this.seq.wedge, dims, pos });
   };
   addCircle2D = () => {
     if (!this.scene) return;
     this.seq.circle = (this.seq.circle || 0) + 1;
     const dims = { r: 22 };
-    this.addPrimitive({ id: 'c2' + Date.now() + this.seq.circle, type: 'circle', label: 'Circle ' + this.seq.circle, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+    this.addPrimitive({ id: 'c2' + Date.now() + this.seq.circle, type: 'circle', label: 'Circle ' + this.seq.circle, dims, pos: [...this.nextPos().slice(0, 2), 0.3] });
   };
   addSquare2D = () => {
     if (!this.scene) return;
     this.seq.square = (this.seq.square || 0) + 1;
     const dims = { x: 40, y: 40 };
-    this.addPrimitive({ id: 'sq' + Date.now() + this.seq.square, type: 'square', label: 'Square ' + this.seq.square, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+    this.addPrimitive({ id: 'sq' + Date.now() + this.seq.square, type: 'square', label: 'Square ' + this.seq.square, dims, pos: [...this.nextPos().slice(0, 2), 0.3] });
   };
   addPolygon2D = () => {
     if (!this.scene) return;
     this.seq.polygon = (this.seq.polygon || 0) + 1;
     const dims = { pts: [[-20, -20], [20, -20], [20, -6], [-6, -6], [-6, 20], [-20, 20]] };
-    this.addPrimitive({ id: 'pg' + Date.now() + this.seq.polygon, type: 'polygon', label: 'Polygon ' + this.seq.polygon, dims, pos: [...this.nextPos().slice(0, 2), 0.3], treatments: {} });
+    this.addPrimitive({ id: 'pg' + Date.now() + this.seq.polygon, type: 'polygon', label: 'Polygon ' + this.seq.polygon, dims, pos: [...this.nextPos().slice(0, 2), 0.3] });
   };
   pickShape = (n) => {
     this.setState({ shapeMenuOpen: false });
@@ -3781,7 +3812,7 @@ class Component extends DCLogic {
     this.seq.sphere++;
     const dims = { r: 22 };
     const pos = this.nextPos(); pos[2] = dims.r;
-    this.addPrimitive({ id: 'sp' + Date.now() + this.seq.sphere, type: 'sphere', label: 'Sphere ' + this.seq.sphere, dims, pos, treatments: {} });
+    this.addPrimitive({ id: 'sp' + Date.now() + this.seq.sphere, type: 'sphere', label: 'Sphere ' + this.seq.sphere, dims, pos });
   };
 
   selectShape = (id) => {
@@ -4043,7 +4074,8 @@ class Component extends DCLogic {
       f.pos = (n.pos || [0, 0, 0]).slice(); if (n.rot) f.rot = n.rot.slice();
       return f;
     }
-    const f = { id: nid, type: n.type, label: (n.label || 'Shape') + ' copy', dims: JSON.parse(JSON.stringify(n.dims || {})), pos: (n.pos || [0, 0, 0]).slice(), treatments: JSON.parse(JSON.stringify(n.treatments || {})) };
+    const f = { id: nid, type: n.type, label: (n.label || 'Shape') + ' copy', dims: JSON.parse(JSON.stringify(n.dims || {})), pos: (n.pos || [0, 0, 0]).slice() };
+    if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) f.edgeTreatments = JSON.parse(JSON.stringify(n.edgeTreatments));
     if (n.rot) f.rot = n.rot.slice();
     if (n.expr) f.expr = { ...n.expr };
     return f;
@@ -4186,7 +4218,7 @@ class Component extends DCLogic {
       };
       return {
         id: n.id, kind: 'prim', type: n.type, label: n.label, depth,
-        treated: Object.keys(n.treatments || {}).length,
+        treated: Object.keys(this.namedTreats(n)).length,
         meta: (n.type === 'cuboid' || n.type === 'wedge') ? `${this.fmt(n.dims.x)}\u00d7${this.fmt(n.dims.y)}\u00d7${this.fmt(n.dims.z)}`
           : n.type === 'cylinder' ? `\u2300${this.fmt(n.dims.r * 2)} \u00d7 ${this.fmt(n.dims.h)}`
             : n.type === 'torus' ? `\u2300${this.fmt(n.dims.ring * 2)} / \u2300${this.fmt(n.dims.tube * 2)}`
@@ -4285,7 +4317,6 @@ class Component extends DCLogic {
       const o = { type: n.type, label: n.label, dims: n.dims, pos: n.pos };
       if (n.rot) o.rot = n.rot;
       if (n.expr && Object.keys(n.expr).length) o.expr = n.expr;
-      if (n.treatments && Object.keys(n.treatments).length) o.treatments = n.treatments;
       if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) o.edgeTreatments = n.edgeTreatments;
       return o;
     };
@@ -4313,9 +4344,9 @@ class Component extends DCLogic {
       id: rid(n.type || 'nd'), type: n.type, label: n.label,
       dims: JSON.parse(JSON.stringify(n.dims || {})),
       pos: n.pos ? [...n.pos] : this.restingPos(n),
-      treatments: n.treatments ? JSON.parse(JSON.stringify(n.treatments)) : {},
     };
     if (n.edgeTreatments && Object.keys(n.edgeTreatments).length) o.edgeTreatments = JSON.parse(JSON.stringify(n.edgeTreatments));
+    if (n.treatments) { o.edgeTreatments = o.edgeTreatments || {}; for (const [nm, t] of Object.entries(n.treatments)) if (t && !(nm in o.edgeTreatments)) o.edgeTreatments[nm] = { type: t.type, size: t.size, convex: true }; if (!Object.keys(o.edgeTreatments).length) delete o.edgeTreatments; }
     if (n.rot) o.rot = [...n.rot];
     if (n.expr && Object.keys(n.expr).length) o.expr = JSON.parse(JSON.stringify(n.expr));
     return o;
@@ -4362,7 +4393,7 @@ class Component extends DCLogic {
       out.push('');
     }
     let usesMask = false;
-    for (const s of this.shapes) if (Object.keys(s.treatments || {}).length && s.type === 'cuboid') usesMask = true;
+    for (const s of this.shapes) if (Object.keys(this.namedTreats(s)).length && s.type === 'cuboid') usesMask = true;
     let usesConvex = false, usesConcave = false;
     const scanET = (arr) => { for (const n of arr) { if (this.isGroup(n)) { for (const t of Object.values(n.edgeTreatments || {})) { if (t.convex) usesConvex = true; else usesConcave = true; } scanET(n.children); } } };
     scanET(this.tree);
@@ -4395,6 +4426,7 @@ class Component extends DCLogic {
       edgeMatrix: (e, r) => this.edgeMatrix(e, r),
       groupEdgeMatrix: (seg, r, convex) => this.groupEdgeMatrix(seg, r, convex),
       matStr: (M) => this.matStr(M),
+      namedTreats: (n) => this.namedTreats(n),
     }));
   }
   emitNode(node, level, out) { return this._emit().emitNode(node, level, out); }
@@ -6131,7 +6163,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       applied = (selShapeObj.edgeTreatments || {})[sel.edgeId] || null;
     } else if (selShapeObj) {
       radiusMax = this.edgeMaxRadius(selShapeObj, sel.edgeName);
-      applied = (selShapeObj.treatments || {})[sel.edgeName] || null;
+      applied = (selShapeObj.edgeTreatments || {})[sel.edgeName] || null;
     }
     const ssh = st.selectedShapeId ? this.findNode(st.selectedShapeId) : null;
     const sshIsGroup = this.isGroup(ssh);

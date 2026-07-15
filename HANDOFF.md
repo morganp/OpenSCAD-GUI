@@ -148,10 +148,19 @@
 #      GUI battery now 19/19. NOTE: item 1's "unify all primitives behind one edge model" ambition overlaps
 #      item 2 (unified data model) — deferred there; today tube/wedge/reflex-polygon are the primitives that
 #      HAVE internal edges, and all three are now covered, so item 1's user-facing goal is met.
-#   2. UNIFIED DATA MODEL: collapse shape.treatments (name-keyed, convex-only) and node.edgeTreatments
-#      (id-keyed, convex|concave) into a single per-node edgeTreatments map carrying {type, size, convex}.
-#      Migration: read old shape.treatments on load and convert. Keep regenCode byte-stable for existing
-#      convex primitive treatments (don't churn saved files needlessly).
+#   2. ✅ SHIPPED v0.60.0 — UNIFIED DATA MODEL. node.edgeTreatments is now the SINGLE per-node source of
+#      truth for edge treatments. Named primitive rim edges (cuboid/cylinder) live here keyed by edge NAME
+#      as {type,size,convex:true} (no segs); detected group/feature-prim edges keyed by edge ID as
+#      {type,size,convex,segs}. The legacy shape.treatments field is gone. New helper namedTreats(node)
+#      returns the name→{type,size} view that the analytic cylinder profile (cylProfile), the cuboid CSG
+#      mask, the emitter (via ctx.namedTreats), the "treated" model-tree badge, and the usesMask emit-scan
+#      all consume; clamp loops iterate edgeTreatments skipping seg entries. MIGRATION: snapNode folds any
+#      old shape.treatments from a loaded @scs-tree snapshot into edgeTreatments (convex:true), preserving
+#      insertion order so re-emit is byte-identical → no churn on existing saved files (the hydrate
+#      equality check still passes). Byte-stability held: the emitter reads the same name-keyed {type,size}
+#      data, just sourced from the unified map. VERIFIED: conformance runGui "unified edgeTreatments model"
+#      asserts (a) namedTreats separates named vs seg entries, (b) legacy treatments migrate via snapNode
+#      with convex:true, (c) a treated cuboid still emits edge_fillet. GUI battery now 20/20.
 #   3. ✅ SHIPPED v0.59.0 (folded in — was coded but unreleased) — ROBUSTNESS of the concave FILL tool.
 #      buildEdgeToolBrush now sphere-caps angled fillet joints (jointBallGeoms): at any chain vertex that
 #      turns >15°, a sphere of radius r seated at the rounding-cylinder arc-center bridges the two flat-capped

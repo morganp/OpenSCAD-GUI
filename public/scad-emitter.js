@@ -24,7 +24,7 @@
   window.ScadEmitter = function (ctx) {
     const fmt = ctx.fmt, gfn = ctx.gfn, isGroup = ctx.isGroup, isExtrude = ctx.isExtrude,
       cylProfile = ctx.cylProfile, edgeMatrix = ctx.edgeMatrix,
-      groupEdgeMatrix = ctx.groupEdgeMatrix, matStr = ctx.matStr;
+      groupEdgeMatrix = ctx.groupEdgeMatrix, matStr = ctx.matStr, namedTreats = ctx.namedTreats;
 
     function ind(level) { return '  '.repeat(level); }
 
@@ -99,7 +99,7 @@
     function emitPrimitive(s, level, out) {
       const F = (n) => fmt(n);
       const pad = ind(level);
-      const treats = Object.entries(s.treatments || {});
+      const treats = Object.entries(namedTreats(s));
       const is2D = s.type === 'circle' || s.type === 'square' || s.type === 'polygon';
       // 2D shapes carry a small viewport-only z lift (restingPos 0.3) to avoid z-fighting the floor;
       // never emit it — OpenSCAD 2D geometry lives at z=0 and extrudes ignore the source z anyway.
@@ -177,7 +177,7 @@
       return `cylinder(h = ${dimTok(s, 'h')}, r1 = ${dimTok(s, 'r1')}, r2 = ${dimTok(s, 'r2')}, center = true${fn})`;
     }
     function cylinderScad(s) {
-      const pts = cylProfile(s.dims.r, s.dims.r2 != null ? s.dims.r2 : s.dims.r, s.dims.h, s.treatments || {});
+      const pts = cylProfile(s.dims.r, s.dims.r2 != null ? s.dims.r2 : s.dims.r, s.dims.h, namedTreats(s));
       const poly = pts.map(p => `[${fmt(p[0])}, ${fmt(p[1])}]`).join(', ');
       const note = (s.expr && (s.expr.d || s.expr.h)) ? '  // note: treated cylinder \u2014 dimensions baked numerically\n    ' : '';
       return `${note}rotate_extrude()\n    polygon([${poly}])`;
