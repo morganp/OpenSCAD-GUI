@@ -515,6 +515,36 @@
       if (ok) passed++;
       cases.push({ name: 'mixed convex/concave junction blends', ok, detail, src: 'convex fillet ∩ concave fillet at one vertex' });
     }
+    // wall-thickness clamping (item 5, v0.65.0): a thin-floor pocket's long concave edges clamp to the
+    // ~2mm floor (well below the length bound); a wide convex box edge is not over-clamped.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.wallClampSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.wallClampSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.floorOk && r.convOk; if (!ok) detail = 'floor[' + r.floorDetail + '] conv=' + r.convOk + '(' + r.convMax + ')'; }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'edge radius clamped by wall thickness', ok, detail, src: 'thin-floor pocket vs wide box edge' });
+    }
+    // internal-edge volume/bbox battery (item 6, v0.65.0): convex cut lowers volume, concave fill raises
+    // it, both keep the bounding box, and each edge is detected + correctly classified.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.edgeTreatBatterySelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.edgeTreatBatterySelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.allOk; if (!ok) detail = r.cases.map(c => c.name + '{det:' + c.detOk + ' cls:' + c.classOk + ' vol:' + c.volOk + ' bbox:' + c.bboxOk + '}').join(' '); }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'internal-edge volume/bbox battery', ok, detail, src: 'convex cut ↓vol · concave fill ↑vol · bbox held' });
+    }
     // deep-link URL parsing (v0.58.0, re-implemented v0.62.0): all four accepted ?github= forms
     // reduce to owner/repo/ref/path; exercised via parseGithubSpec + the loader's URL regex.
     {

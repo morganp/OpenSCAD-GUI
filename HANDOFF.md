@@ -1,4 +1,28 @@
 # ===================================================================================================
+# FEATURE (v0.65.0, SHIPPED) — Internal-edge backlog ITEMS 5 (wall-thickness clamping) + 6 (test battery)
+# VERIFIED: GUI battery 29/29 (2 new cases), engine 115/115, clean boot.
+# ===================================================================================================
+# ITEM 5 — CLAMPING. Before: groupEdgeMaxR bounded a radius by edge LENGTH only (minLen/2), so a fillet on
+# a long-but-thin-walled internal edge (tube inner rim, thin pocket floor) could exceed the wall and punch
+# through. Now edgeWallLimit(geo, edge) raycasts from the edge's middle segment INTO the solid along each
+# adjacent face's inward normal (a DoubleSide temp mesh + a cached THREE.Raycaster); the nearest opposite
+# surface is that wall's thickness. Convex CUT ≤ thickness/2 (two opposite treatments would otherwise meet
+# — matches the old cuboid min(x,y,z)/2 rule); concave FILL ≤ FULL thickness (the fillet arc rides up each
+# adjacent face). detectGroupEdges stashes edge.wallR per chain; groupEdgeMaxR = max(0.3, min(lengthBound,
+# wallR-0.2)). Radius slider max + apply-time clamps (applyGroupEdgeTreatment, selectGroupEdge) inherit it
+# for free. VERIFIED: 2mm-floor pocket with 40mm-long concave edges clamps maxR to 1.80 (was ~19.8 by
+# length); a 40mm convex box edge stays 19.8 (not over-clamped).
+#
+# ITEM 6 — TEST BATTERY. edgeTreatBatterySelfTest builds a convex-edge box + a concave-edge pocket, applies
+# a known fillet through applyEdgeTreatBrush, and asserts per case: (a) the edge is detected + correctly
+# classified (convex/concave), (b) volume DECREASES for the convex cut / INCREASES for the concave fill,
+# (c) the bounding box is unchanged (±0.6). Wired into ScadConformance.runGui as "internal-edge volume/bbox
+# battery". NOTE: ~4s (real three-bvh-csg per case) — when combined with the whole runGui + engine run it
+# can approach the 10s eval cap, so run the heavy self-tests standalone when spot-checking.
+#
+# ALSO FIXED here: a duplicated _isWatertight method (leftover from the v0.64.0 two-step edit) removed.
+#
+# ===================================================================================================
 # FEATURE (v0.64.0, IN PROGRESS) — Internal-edge backlog ITEM 7: convex↔concave blend at a shared vertex
 # ===================================================================================================
 # RESTATED: where an EXTERNAL (convex, subtracted) fillet and an INTERNAL (concave, unioned) fillet meet
@@ -293,12 +317,19 @@
 #      emit sides are deterministic). VERIFIED: conformance runGui "primitive feature-edge fill emits +
 #      defines module" builds a tube, applies a rim treatment, asserts the emitted primitive contains the
 #      wrapped module call AND regenCode defines that module. GUI battery now 21/21.
-#   5. CLAMPING: groupEdgeMaxR / edgeMaxRadius must bound an internal radius by the THINNEST adjacent wall
-#      (e.g. tube wall thickness, pocket floor depth), not just edge length, or the fill punches through.
-#   6. TEST COVERAGE (the v0.54.0 lesson — render-path features need their own battery): add a GUI battery
-#      that builds each internal-edge case, applies a known radius, and asserts (a) the edge is detected +
-#      classified concave, (b) post-treat solid VOLUME increased (fill) for concave vs decreased (cut) for
-#      convex, (c) bounding box unchanged. Wire into ScadConformance.runGui so the "run tests" chip covers it.
+#   5. CLAMPING: ✅ SHIPPED v0.65.0 — groupEdgeMaxR now bounds an internal radius by the THINNEST adjacent
+#      wall, not just edge length. New edgeWallLimit(geo, edge): from the mid segment, raycast INTO the solid
+#      along each adjacent face's inward normal (DoubleSide mesh) → the nearest opposite surface is that
+#      wall's thickness; convex cut ≤ thickness/2 (two opposite treatments would meet), concave fill ≤ full
+#      thickness (its arc rides up each face — tube wall width, pocket floor depth). detectGroupEdges stashes
+#      edge.wallR; groupEdgeMaxR = max(0.3, min(lengthBound, wallR-0.2)). VERIFIED: thin-floor pocket
+#      (2mm floor, 40mm-long concave edges) clamps maxR 40/2-bound → 1.80; a 40mm convex box edge stays 19.8
+#      (not over-clamped). GUI case "edge radius clamped by wall thickness".
+#   6. TEST COVERAGE: ✅ SHIPPED v0.65.0 — edgeTreatBatterySelfTest builds a convex-edge box + a concave-edge
+#      pocket, applies a known fillet, and asserts (a) edge detected + correctly classified, (b) volume
+#      DECREASES for the convex cut / INCREASES for the concave fill, (c) bounding box unchanged (±0.6).
+#      GUI case "internal-edge volume/bbox battery". (~4s CSG-heavy; run standalone if the combined eval
+#      approaches the 10s cap.)
 #   7. ✅ SHIPPED v0.64.0 — CONVEX↔CONCAVE BLEND AT A SHARED VERTEX (user-reported): where an EXTERNAL (convex, subtracted) fillet
 #      and an INTERNAL (concave, unioned) fillet meet at the same corner, the transition is not smooth — a
 #      visible sharp step / sliver. Cause: each treatment is a merge of straight per-segment PRISMS

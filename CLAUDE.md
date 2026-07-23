@@ -226,7 +226,8 @@ transforms into ring points. Bare 2D renders as a thin filled slab.
 
 ## Phase 12 — Viewer / GUI reconciliation  `[x]`
 - [x] Live CSG viewport; Model Tree; draggable inspector panels; edge fillet/chamfer (GUI ext),
-      incl. internal (concave) edges + convex↔concave blend at shared vertices (v0.64.0).
+      incl. internal (concave) edges + convex↔concave blend at shared vertices (v0.64.0) +
+      radius clamped by adjacent wall thickness (v0.65.0).
 - [x] "Simple vs advanced" detector (`isAdvanced(ast)`): simple programs hydrate the GUI
       authoring tree (editable); advanced programs render **read-only** from the evaluated
       geometry tree, with the evaluated hierarchy shown in the Model Tree + a read-only badge.
