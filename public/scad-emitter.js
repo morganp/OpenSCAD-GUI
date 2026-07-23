@@ -90,10 +90,15 @@
     }
 
     function rotLine(node, pad) {
-      const r = node.rot || [0, 0, 0];
-      if (!r[0] && !r[1] && !r[2]) return null;
+      const r = node.rot || [0, 0, 0], m = node.mir || [0, 0, 0];
       const F = (n) => fmt(n);
-      return pad + `rotate([${F(r[0])}, ${F(r[1])}, ${F(r[2])}])`;
+      const lines = [];
+      if (r[0] || r[1] || r[2]) lines.push(pad + `rotate([${F(r[0])}, ${F(r[1])}, ${F(r[2])}])`);
+      // per-axis mirror() — each checked axis reflects independently (== scale -1 on that axis)
+      if (m[0]) lines.push(pad + `mirror([1, 0, 0])`);
+      if (m[1]) lines.push(pad + `mirror([0, 1, 0])`);
+      if (m[2]) lines.push(pad + `mirror([0, 0, 1])`);
+      return lines.length ? lines.join('\n') : null;
     }
 
     // Slice 5 for feature primitives (tube/wedge/reflex-polygon): wrap the placed base with the same
@@ -219,6 +224,16 @@
       if (s.type === 'polygon') {
         const pts = (s.dims.pts && s.dims.pts.length >= 3) ? s.dims.pts : [[-20, -20], [20, -20], [20, 20]];
         return `polygon([${pts.map(p => `[${fmt(p[0])}, ${fmt(p[1])}]`).join(', ')}])`;
+      }
+      if (s.type === 'text') {
+        const d = s.dims || {};
+        const esc = (str) => String(str == null ? '' : str).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const parts = [`"${esc(d.text)}"`, `size = ${fmt(d.size || 10)}`];
+        if (d.halign && d.halign !== 'left') parts.push(`halign = "${d.halign}"`);
+        if (d.valign && d.valign !== 'baseline') parts.push(`valign = "${d.valign}"`);
+        if (d.spacing != null && d.spacing !== 1) parts.push(`spacing = ${fmt(d.spacing)}`);
+        parts.push(`$fn = ${gfn()}`);
+        return `text(${parts.join(', ')})`;
       }
       const d = s.dims;
       const sides = (d.sides && d.sides >= 3) ? Math.round(d.sides) : 0;

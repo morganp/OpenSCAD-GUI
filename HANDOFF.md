@@ -1,4 +1,84 @@
 # ===================================================================================================
+# FEATURE (v0.67.0, SHIPPED) — GUI text() primitive + 2D/3D shape-menu split
+# VERIFIED: text emits `text("Hi!", size=14, halign="center", $fn=48)`, renders shaped glyphs
+#   (1336 tris flat), edits (string/size/spacing/h+v-align) live, extrudes to a 3D solid
+#   (linear_extrude(30) text("GO") → 15191 tris), round-trips via @scs-tree. Engine 115/115, GUI 29/29.
+# ===================================================================================================
+# TEXT PRIMITIVE (backlog item 4): new 2D authoring primitive `type:'text'`, dims =
+#   {text,size,halign,valign,spacing}. Reused the existing engine-side shaper:
+#   - ensureFont() (Roboto TTF via opentype.js) + textToRings(dims, font) → y-up, aligned rings.
+#   - RENDER: solidGeometry() text branch → ringsToShapes(textToRings) → ExtrudeGeometry(0.6 slab).
+#     ringsForType() + collectAuthored2DRings() + restingPos() extended so text flows through the
+#     same 2D→flat-slab / extrude-push-down pipeline as circle/square/polygon.
+#   - EMIT: baseCall() text branch → `text("…", size=…, [halign], [valign], [spacing], $fn=…)` with
+#     string escaping; defaults (left/baseline/spacing 1) omitted.
+#   - UI: 2D-shapes flyout "Text" entry (addText2D — loads font async then rebuilds); shape-inspector
+#     sshIsText block (text input + size/spacing + h-align + v-align toggle rows), setTextField().
+#     extrudeSelection() + ctx-menu nIs2D + tree meta ("…" · 2D) all accept 'text'. seq.text counter.
+#   - ROUND-TRIP: dims serialize verbatim in the @scs-tree snapshot (no new fields needed). Text is
+#     NOT in isAdvanced SIMPLE, so a hand-written text() renders read-only via the engine (correct).
+#
+# 2D/3D SHAPE-MENU SPLIT (UX request): replaced the single "More shapes…" flyout with TWO tool-rail
+#   flyouts — "3D shapes" (cuboid/cylinder/cone/pyramid/sphere/torus/tube/wedge + Hardware) and
+#   "2D shapes" (circle/square/polygon/text + "profiles extrude to 3D" hint). State: menu3DOpen /
+#   menu2DOpen (mutually exclusive; both close on Basic mode + on pick). 2D shapes are no longer gated
+#   behind advanced-mode inside a solids menu — they have their own clearly-labeled menu. Context menu
+#   also gained Minkowski (Group-as + change-op) alongside Hull.
+#   BASIC-MODE DECLUTTER: the whole 2D-shapes button+flyout is gated behind advanced mode (2D work is
+#   inherently extrude/advanced), so Basic mode shows solids only (3D shapes + select/move/measure) —
+#   directly answering "get out of the way in basic mode". Full contextual-menu pass still open.
+#
+# ===================================================================================================
+# FEATURE (v0.66.0, SHIPPED) — GUI Minkowski + Mirror ops; inspector-panel docking fix
+# VERIFIED: minkowski emits `minkowski(){}` + renders (cube⊕sphere bbox ~87³) + round-trips; mirror
+#   emits `mirror([1,0,0])` after translate + renders reflected + round-trips via @scs-tree snapshot.
+# ===================================================================================================
+# MINKOWSKI (backlog item 2): parallels the existing `hull` group-op. hullMinkBrush already had the
+#   minkowski branch (vertex pairwise-sum → ConvexGeometry); wired the AUTHORING path that was missing:
+#   - buildGroupSolid: `if (op==='hull'||op==='minkowski')` → hullMinkBrush (single-child minkowski = child).
+#   - emitter emits `node.op + '()'` so `minkowski(){}` came for free.
+#   - group panel "⊕ Minkowski" button + groupMinkTab + setGroupMink(changeOp); multi-select + read-only
+#     combine buttons (groupMinkowski / roGroupMink); opGlyph already mapped minkowski→⊕; labels already
+#     had minkowski cases. Added 'minkowski' to isAdvanced SIMPLE set so it stays GUI-editable.
+#
+# MIRROR (backlog item 1): new per-primitive transform, per-axis toggles (Mirror X/Y/Z) in the shape
+#   inspector, stored as node.mir = [bx,by,bz].
+#   - RENDER: applyNodeXform(obj,node) folds mir into object scale (mirrored axis *= -1); THREE flips
+#     triangle winding for negative-determinant matrices so lit meshes stay correct. Wired into buildGroup,
+#     evalBrush (leaf), buildGhost, and the drag-ghost update (replacing the old `if(node.scl)` scale.set).
+#   - EMIT: rotLine() (scad-emitter.js) now also appends one `mirror([1,0,0])/[0,1,0]/[0,0,1]` per checked
+#     axis after the rotate line (order: translate → rotate → mirror → prim), matching the render's T·R·S.
+#   - ROUND-TRIP: mir persisted in serializeTree (group+leaf), snapNode (group+leaf), and _cloneForDup.
+#     NOTE: mirror is deliberately NOT in isAdvanced SIMPLE — the simple-parser has no mirror→p.mir mapping,
+#     so a HAND-WRITTEN mirror() renders read-only via the engine (correct). GUI-authored mirror round-trips
+#     through the @scs-tree snapshot regardless. toggleMirror rebuilds via rebuildShape/rebuildAncestor.
+#   - TODO/caveat: mirror exposed on leaf primitives only (not groups); a mirrored leaf INSIDE a boolean
+#     bakes a negative-determinant matrix into three-bvh-csg — verify winding on a mirrored-cut before
+#     relying on it (standalone + additive cases verified good).
+#
+# INSPECTOR DOCKING FIX (reported "annotation menus overlap the file menu"): the shape/group/edge
+#   inspector panels defaulted to top:16px;left:50%;translateX(-50%) — dead-center over the top toolbar
+#   (version badge + File + Run). They are mutually exclusive (all gated on !sel / sel), so they now share
+#   one slot docked top:64px;left:84px (beside the tool rail), clear of the toolbar AND the code drawer.
+#   Draggable panelPos overrides + mobile bottom-sheet unchanged.
+#
+# ===================================================================================================
+# BACKLOG (added 2026-07-21) — Feature-request TODOs + menu/UX overhaul
+# ===================================================================================================
+# FEATURE-REQUEST TODOs:
+#   1. [x] Mirror op — GUI-editable mirror() transform (v0.66.0).
+#   2. [x] Minkowski op — GUI-editable multi-object minkowski() (v0.66.0).
+#   3. [~] Polygon primitive — already GUI-editable (miPolygon + point editor + linear/rotate extrude).
+#   4. [x] Text primitive — GUI-editable text() (2D text-to-outline) (v0.67.0).
+#
+# UX / MENU OVERHAUL (requested 2026-07-21):
+#   - [x] Split shape insertion into a "2D shapes" menu and a "3D shapes" menu (v0.67.0).
+#   - [x] BUG: inspector panels overlapped the file menu (fixed by docking top-left, v0.66.0).
+#   - [ ] Multiple menu structures are getting confusing. Move to a more systematic approach to
+#         contextual menus: offer features intuitively, and get out of the way in basic mode.
+#         (PARTIAL: 2D/3D split + inspector docking done; a full contextual-menu pass is still open.)
+#
+# ===================================================================================================
 # FEATURE (v0.65.0, SHIPPED) — Internal-edge backlog ITEMS 5 (wall-thickness clamping) + 6 (test battery)
 # VERIFIED: GUI battery 29/29 (2 new cases), engine 115/115, clean boot.
 # ===================================================================================================
