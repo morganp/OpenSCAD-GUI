@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.68.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.69.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -712,11 +712,12 @@
         </div>
       </sc-for>
       <sc-if value="{{ readOnlyTree }}" hint-placeholder-val="{{ false }}">
-        <div style="margin-top:6px;padding:8px 9px;border-radius:8px;background:#1B1814;border:1px solid #3A3322;display:flex;flex-direction:column;gap:7px;">
-          <div style="display:flex;align-items:center;gap:7px;">
-            <span style="font-size:10.5px;color:#C9A867;line-height:1.45;flex:1;">{{ roTreeHint }}</span>
-            <button onClick="{{ exitReadOnly }}" style="background:#23272E;border:1px solid #3A3322;color:#C9A867;font:inherit;font-size:10.5px;padding:4px 8px;border-radius:6px;cursor:pointer;flex:none;">Clear</button>
+        <div style="margin-top:6px;padding:9px 10px;border-radius:8px;background:#15191F;border:1px solid #263041;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="#6FA8F5" stroke-width="1.2"/><path d="M8 7.1v3.6" stroke="#6FA8F5" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".85" fill="#6FA8F5"/></svg>
+            <span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#7FA8DA;font-weight:600;">Read-only render</span>
           </div>
+          <span style="font-size:10.5px;color:#9AA6B4;line-height:1.5;">{{ roTreeHint }}</span>
           <sc-if value="{{ roXformOn }}" hint-placeholder-val="{{ false }}">
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">
               <button onClick="{{ setGizmoMove }}" style="{{ roMoveTab }}">Move</button>
@@ -810,8 +811,7 @@
   <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
     <div style="{{ roBadgeStyle }}">
       <span style="width:8px;height:8px;border-radius:50%;background:#E0A33B;box-shadow:0 0 8px #E0A33B;flex:none;"></span>
-      <span style="font-size:11.5px;color:#E7C98A;">read-only — evaluated from code</span>
-      <button onClick="{{ exitReadOnly }}" style="background:transparent;border:none;color:#9C8550;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;" style-hover="color:#E7C98A;">×</button>
+      <span style="font-size:11.5px;color:#E7C98A;">read-only — rendered from code</span>
     </div>
   </sc-if>
 
@@ -4845,8 +4845,11 @@ class Component extends DCLogic {
     // --- decide: simple GUI-editable program, or advanced -> evaluate & render read-only ---
     let advanced = false, ast = null;
     if (window.ScadEngine) {
-      try { const pp = window.ScadEngine.parse(txt); ast = pp.ast; advanced = pp.errors.length ? true : this.isAdvanced(ast); }
-      catch (e) { advanced = true; }
+      try {
+        const pp = window.ScadEngine.parse(txt); ast = pp.ast; advanced = pp.errors.length ? true : this.isAdvanced(ast);
+        if (advanced) this._advReason = pp.errors.length ? 'code with a syntax detail the visual editor can\u2019t map to shapes' : this.advancedReason(ast);
+      }
+      catch (e) { advanced = true; this._advReason = 'code the visual editor can\u2019t parse into editable shapes'; }
     }
     if (advanced && window.ScadEngine) { this.runAdvanced(txt); return; }
     this._readsViewport = false;
@@ -4938,6 +4941,33 @@ class Component extends DCLogic {
       }
     };
     return !(ast.stmts || []).every(stmtSimple);
+  }
+
+  // Plain-language summary of WHY a program renders read-only — the named constructs that have no
+  // editable GUI representation. Best-effort classification of top-level statements (not a full
+  // re-run of isAdvanced); drives the read-only notice so the user understands the mode.
+  advancedReason(ast) {
+    if (!ast || !ast.stmts) return 'advanced language features';
+    const SIMPLE = new Set(['translate', 'rotate', 'cube', 'cylinder', 'sphere', 'union', 'difference', 'intersection', 'hull', 'minkowski', 'linear_extrude', 'rotate_extrude', 'circle', 'square', 'polygon']);
+    const custom = this.knownLibModules(ast);
+    const found = [];
+    const add = (s) => { if (!found.includes(s)) found.push(s); };
+    for (const s of ast.stmts) {
+      switch (s.t) {
+        case 'for': case 'intersection_for': add('for loops'); break;
+        case 'if': add('if / else logic'); break;
+        case 'letblock': add('let() blocks'); break;
+        case 'moduledef': add('module definitions'); break;
+        case 'functiondef': add('function definitions'); break;
+        case 'block': add('nested blocks'); break;
+        case 'call': if (!SIMPLE.has(s.name) && !custom.has(s.name)) add('the ' + s.name + '() operation'); break;
+        default: break;
+      }
+    }
+    if (!found.length) return 'advanced language features';
+    if (found.length === 1) return found[0];
+    if (found.length === 2) return found[0] + ' and ' + found[1];
+    return found.slice(0, 2).join(', ') + ', and more';
   }
 
   // ============ VIEWPORT ($vp*) ↔ CAMERA BINDING (Phase 12) ============
@@ -5105,7 +5135,7 @@ class Component extends DCLogic {
     const errorLines = Array.from(new Set(res.errors.map(er => er.line || 0).filter(n => n > 0)));
     const meshCount = (() => { let c = 0; grp.traverse(o => { if (o.isMesh) c++; }); return c; })();
     this.setState({
-      readOnly: true, selectedShapeId: null, selectedIds: [], code: txt,
+      readOnly: true, selectedShapeId: null, selectedIds: [], code: txt, roReason: this._advReason || 'advanced language features',
       tree: (roots.length ? roots : (res.geom || [])).map((n, i) => this.serializeGeom(n, i, 0, true)).filter(Boolean),
       consoleLog: log, consoleOpen: log.some(l => l.type !== 'echo') || (this.state.consoleOpen),
       errorLines,
@@ -7202,8 +7232,9 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         : '\u2318/Ctrl-click to multi-select \u00b7 drag to reorder or into a group \u00b7 right-click for actions',
       isEmpty: treeRows.length === 0,
       readOnlyTree: st.readOnly,
-      roTreeHint: 'Evaluated view (read-only). Select a top-level item to move / rotate / scale it as a group, or delete it. '
-        + (this.isCoarsePointer() ? 'Tick 2+ items' : '\u2318/Ctrl-click 2+ items') + ' to combine them. Individual generated instances can\u2019t be edited.',
+      roTreeHint: 'This model uses ' + (st.roReason || 'advanced language features')
+        + ' that the visual editor can\u2019t turn into editable gizmos, so it\u2019s rendered directly from your code \u2014 the geometry is complete and correct. Edit the code to change it, or select a top-level item to move, rotate, scale, or delete it. '
+        + (this.isCoarsePointer() ? 'Tick 2+ items' : '\u2318/Ctrl-click 2+ items') + ' to combine them.',
       roXformOn: st.readOnly && (st.selectedIds || []).length < 2 && !!(st.selectedShapeId && this.findTreeRow(st.tree, st.selectedShapeId) && this.findTreeRow(st.tree, st.selectedShapeId).root),
       roCanCombine: this.canCombineReadOnly(),
       roCombineHint: (st.selectedIds || []).length + ' selected — first row is the difference base',
