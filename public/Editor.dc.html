@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.67.0</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.68.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -4493,17 +4493,53 @@ class Component extends DCLogic {
     this.reindex();
     this.setState({ ctxMenu: null, dragOver: null }, () => { this.rebuildScene(); this.updateGizmo(); this.syncShapesState(); this.regenCode(); });
   }
-  reorderNode(dragId, targetId, after) {
-    if (dragId === targetId) return;
-    const arr = this.parentArrayOf(dragId);
-    if (!arr || arr !== this.parentArrayOf(targetId)) { this.flashStatus('Drop onto a sibling to reorder'); return; }
+  // Cross-level move: reorder within a parent OR reparent into/out of a group.
+  // zone: 'before' | 'after' (sibling of target) | 'into' (append inside target group).
+  moveNode(dragId, targetId, zone) {
+    if (!zone || dragId === targetId) { if (this.state.dragOver) this.setState({ dragOver: null }); return; }
+    if (this.isAncestorOf(dragId, targetId)) { this.flashStatus('Can\u2019t drop a group inside itself'); this.setState({ dragOver: null }); return; }
     const dn = this.findNode(dragId), tn = this.findNode(targetId);
-    const from = arr.indexOf(dn); if (from < 0) return;
-    arr.splice(from, 1);
-    let to = arr.indexOf(tn); if (to < 0) { arr.splice(from, 0, dn); return; }
-    if (after) to += 1;
-    arr.splice(to, 0, dn);
+    const srcArr = this.parentArrayOf(dragId);
+    if (!dn || !tn || !srcArr) { this.setState({ dragOver: null }); return; }
+    let destArr, destIdx;
+    if (zone === 'into') {
+      if (!this.isGroup(tn)) { this.setState({ dragOver: null }); return; }
+      destArr = tn.children; destIdx = destArr.length;      // append as last child
+    } else {
+      destArr = this.parentArrayOf(targetId);
+      if (!destArr) { this.setState({ dragOver: null }); return; }
+      destIdx = destArr.indexOf(tn) + (zone === 'after' ? 1 : 0);
+    }
+    const from = srcArr.indexOf(dn); if (from < 0) { this.setState({ dragOver: null }); return; }
+    srcArr.splice(from, 1);
+    if (srcArr === destArr && from < destIdx) destIdx -= 1;   // account for the just-removed node
+    destArr.splice(Math.max(0, Math.min(destIdx, destArr.length)), 0, dn);
+    const reparented = srcArr !== destArr;
+    if (reparented) {
+      this.pruneEmptyGroups();
+      if (this.isGroup(tn) && zone === 'into') this.setState({ expanded: { ...this.state.expanded, [tn.id]: true } });
+    }
+    this.setState({ selectedShapeId: dragId, selectedIds: [dragId] });
     this.commitReorder();
+    if (reparented) this.flashStatus('Moved \u201c' + (dn.label || 'shape') + '\u201d');
+  }
+  // true if nodeId is ancestorId itself or lives anywhere inside ancestorId's subtree
+  isAncestorOf(ancestorId, nodeId) {
+    const anc = this.findNode(ancestorId); if (!anc) return false;
+    let found = false;
+    const walk = (n) => { if (found) return; if (n.id === nodeId) { found = true; return; } if (this.isGroup(n)) n.children.forEach(walk); };
+    walk(anc); return found;
+  }
+  // drop empty groups left behind after a child is dragged out (a difference/union with no
+  // members renders nothing and is just clutter)
+  pruneEmptyGroups() {
+    const walk = (arr) => {
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const n = arr[i];
+        if (this.isGroup(n)) { walk(n.children); if (!n.children.length) arr.splice(i, 1); }
+      }
+    };
+    walk(this.tree);
   }
   moveNodeBy(id, dir) {
     const arr = this.parentArrayOf(id);
@@ -4519,20 +4555,24 @@ class Component extends DCLogic {
   };
   onTreeDragOver = (id, e) => {
     if (!this._dragId || this._dragId === id) return;
-    if (this.parentArrayOf(this._dragId) !== this.parentArrayOf(id)) return;  // siblings only
+    if (this.isAncestorOf(this._dragId, id)) return;   // can't drop a group into its own subtree
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const tn = this.findNode(id), isGrp = this.isGroup(tn);
     const rect = e.currentTarget.getBoundingClientRect();
-    const after = (e.clientY - rect.top) > rect.height / 2;
-    const key = id + (after ? ':after' : ':before');
+    const rel = rect.height ? (e.clientY - rect.top) / rect.height : 0.5;
+    // group rows get a 3-zone hit test (above / inside / below); leaves get above / below
+    const zone = isGrp ? (rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'into') : (rel > 0.5 ? 'after' : 'before');
+    const key = id + ':' + zone;
     if (this.state.dragOver !== key) this.setState({ dragOver: key });
   };
   onTreeDrop = (id, e) => {
     e.preventDefault(); e.stopPropagation();
     const dragId = this._dragId; this._dragId = null;
-    const after = this.state.dragOver ? this.state.dragOver.endsWith(':after') : false;
-    if (dragId) this.reorderNode(dragId, id, after);
-    else if (this.state.dragOver) this.setState({ dragOver: null });
+    const over = this.state.dragOver;
+    if (!dragId) { if (over) this.setState({ dragOver: null }); return; }
+    const zone = (over && over.indexOf(id + ':') === 0) ? over.slice(id.length + 1) : null;
+    this.moveNode(dragId, id, zone);
   };
   onTreeDragEnd = () => { this._dragId = null; if (this.state.dragOver) this.setState({ dragOver: null }); };
 
@@ -6721,7 +6761,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
         dotStyle: isGroup
           ? `font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1;color:${isSel ? '#9CC2F5' : '#7E96B8'};`
           : `width:9px;height:9px;border-radius:${(r.type === 'cuboid' || r.type === 'wedge' || r.type === 'square' || r.type === 'polygon' || r.type === 'custom') ? '2px' : '50%'};background:${isSel ? '#3B82F6' : '#6B7280'};`,
-        rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : ''}`,
+        rowStyle: `display:flex;align-items:center;gap:7px;padding:6px 7px;border-radius:8px;cursor:grab;margin-bottom:2px;margin-left:${r.depth * 14}px;border:1px solid ${isSel ? '#2C4D78' : 'transparent'};background:${isSel ? '#17283f' : (isGroup ? '#16191E' : 'transparent')};${st.dragOver === r.id + ':before' ? 'box-shadow:inset 0 2px 0 #3B82F6;' : st.dragOver === r.id + ':after' ? 'box-shadow:inset 0 -2px 0 #3B82F6;' : st.dragOver === r.id + ':into' ? 'box-shadow:inset 0 0 0 2px #3B82F6;background:#15243a;' : ''}`,
         onSelect: (e) => { if (this._lpFired) { this._lpFired = false; return; } if (st.readOnly) { if (!r.root) return; const mult = e && (e.metaKey || e.ctrlKey || e.shiftKey); if (mult) { this.toggleSelectReadOnly(r.id); } else { this.setState({ selectedShapeId: r.id, selectedIds: [r.id] }, () => this.updateGizmo()); } return; } this.clearEdge(); if (e && (e.metaKey || e.ctrlKey || e.shiftKey)) this.toggleSelect(r.id); else this.selectShape(r.id); },
         onCtx: (e) => { e.preventDefault(); e.stopPropagation(); this.showCtxFor(r.id, e.clientX, e.clientY); },
         onPressDown: (e) => this.treePressStart(r.id, e),
@@ -7159,7 +7199,7 @@ module hole_cutter(d, len, kind, headd, depth, tol, seg) {
       treeRows,
       treeFooterHint: this.isCoarsePointer()
         ? 'Tap to select \u00b7 long-press a row or tap \u22ee for actions'
-        : '\u2318/Ctrl-click to multi-select \u00b7 right-click or \u22ee for actions',
+        : '\u2318/Ctrl-click to multi-select \u00b7 drag to reorder or into a group \u00b7 right-click for actions',
       isEmpty: treeRows.length === 0,
       readOnlyTree: st.readOnly,
       roTreeHint: 'Evaluated view (read-only). Select a top-level item to move / rotate / scale it as a group, or delete it. '
