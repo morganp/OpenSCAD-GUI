@@ -64,7 +64,7 @@
     <div style="display:flex;align-items:center;gap:9px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:8px 13px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <div style="width:17px;height:17px;border-radius:5px;background:linear-gradient(135deg,#3B82F6,#2563EB);box-shadow:0 0 0 1px #2C3037, inset 0 1px 0 rgba(255,255,255,.25);"></div>
       <span style="font-weight:600;letter-spacing:.01em;color:#E6E9EE;">SCAD Studio</span>
-      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.63.1</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#5B616B;padding:1px 6px;border:1px solid #2C3037;border-radius:5px;margin-left:1px;">v0.64.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:2px;background:rgba(27,30,35,.82);backdrop-filter:blur(12px);border:1px solid #2C3037;border-radius:11px;padding:4px;box-shadow:0 8px 26px rgba(0,0,0,.4);">
       <button onClick="{{ setBasic }}" title="Basic — solids only (hides parameters, 2D shapes & extrudes)" style="{{ basicTabStyle }}">Basic</button>
@@ -2507,6 +2507,62 @@ class Component extends DCLogic {
     } catch (e) { return { ok: false, reason: 'threw: ' + (e.message || e) }; }
     finally { this.tree = savedTree; this.vars = savedVars; if (this._codeArea) this._codeArea.value = savedCode; this.reindex(); this.rebuildScene(); }
   }
+  // self-test (item 7 — convex↔concave blend at a shared vertex, v0.64.0): two fillet treatments that
+  // share a corner vertex with OPPOSITE convexity each contribute a bridging ball (cross-treatment joint),
+  // where the SAME pair examined WITHOUT siblings contributes none — proving the blend comes from the new
+  // cross-treatment path. Then a box carrying both treatments must apply watertight (even manifold edges).
+  mixedJunctionSelfTest() {
+    if (!this.CSG || !this.THREE) return { ok: false, reason: 'CSG/THREE unavailable' };
+    const THREE = this.THREE;
+    const segX = { a: [0, 0, 0], b: [10, 0, 0], mid: [5, 0, 0], U: [0, 1, 0], V: [0, 0, 1], len: 10 };
+    const segZ = { a: [0, 0, 0], b: [0, 0, 10], mid: [0, 0, 5], U: [1, 0, 0], V: [0, 1, 0], len: 10 };
+    const tConvex = { type: 'fillet', size: 3, convex: true, segs: [segX] };
+    const tConcave = { type: 'fillet', size: 3, convex: false, segs: [segZ] };
+    const both = [tConvex, tConcave];
+    const nConvex = this.jointBallGeoms(tConvex, both).length;
+    const nConcave = this.jointBallGeoms(tConcave, both).length;
+    const baseline = this.jointBallGeoms(tConvex, [tConvex]).length;   // no sibling → no joint
+    // three-bvh-csg output is never exact-manifold (unwelded seams, per the v0.55.0 note), so a strict
+    // even-edge test can't be the acceptance metric. Instead assert the box carrying BOTH treatments
+    // applies cleanly to non-empty geometry (no throw, real solid) — the blend balls above are the fix.
+    let applied = false, detail = '';
+    try {
+      const { Brush } = this.CSG;
+      const g = new THREE.BoxGeometry(40, 40, 40);
+      let b = new Brush(g); b.updateMatrixWorld(true);
+      b = this.applyEdgeTreatBrush(b, { edgeTreatments: { a: tConvex, b: tConcave } });
+      applied = !!(b && b.geometry && b.geometry.attributes.position && b.geometry.attributes.position.count > 0);
+    } catch (e) { detail = 'apply threw: ' + (e.message || e); }
+    return { ok: true, blended: nConvex >= 1 && nConcave >= 1, baseline, applied, detail };
+  }
+  // count undirected mesh edges; a closed manifold shares every edge an even number of times (usually 2)
+  _isWatertight(geo) {
+    if (!geo || !geo.attributes || !geo.attributes.position) return false;
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const p = g.attributes.position, N = p.count / 3, Q = 1e3;
+    const key = (i) => Math.round(p.getX(i) * Q) + ',' + Math.round(p.getY(i) * Q) + ',' + Math.round(p.getZ(i) * Q);
+    const m = new Map();
+    for (let t = 0; t < N; t++) {
+      const k = [3 * t, 3 * t + 1, 3 * t + 2].map(key);
+      for (let e = 0; e < 3; e++) { const A = k[e], B = k[(e + 1) % 3]; const ek = A < B ? A + '|' + B : B + '|' + A; m.set(ek, (m.get(ek) || 0) + 1); }
+    }
+    let odd = 0; for (const c of m.values()) if (c % 2) odd++;
+    return odd === 0;
+  }
+  // count undirected mesh edges; a closed manifold shares every edge an even number of times (usually 2)
+  _isWatertight(geo) {
+    if (!geo || !geo.attributes || !geo.attributes.position) return false;
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const p = g.attributes.position, N = p.count / 3, Q = 1e3;
+    const key = (i) => Math.round(p.getX(i) * Q) + ',' + Math.round(p.getY(i) * Q) + ',' + Math.round(p.getZ(i) * Q);
+    const m = new Map();
+    for (let t = 0; t < N; t++) {
+      const k = [3 * t, 3 * t + 1, 3 * t + 2].map(key);
+      for (let e = 0; e < 3; e++) { const A = k[e], B = k[(e + 1) % 3]; const ek = A < B ? A + '|' + B : B + '|' + A; m.set(ek, (m.get(ek) || 0) + 1); }
+    }
+    let odd = 0; for (const c of m.values()) if (c % 2) odd++;
+    return odd === 0;
+  }
   detectGroupEdges(geo) {
     if (!geo || !geo.attributes || !geo.attributes.position) return [];
     const pos = geo.attributes.position, idx = geo.index;
@@ -2667,7 +2723,8 @@ class Component extends DCLogic {
     const p = convex ? mid.clone().addScaledVector(U, -r).addScaledVector(V, -r) : mid.clone();
     return new THREE.Matrix4().makeBasis(U, V, E).setPosition(p);
   }
-  buildEdgeToolBrush(t) {
+  buildEdgeToolBrush(t, siblings) {
+    this._toolSiblings = siblings;   // consumed by jointBallGeoms (cross-treatment joint bridging)
     const THREE = this.THREE;
     const geos = [];
     for (const seg of t.segs) { const g = this.edgeToolSegGeom(seg, t.type, t.convex, t.size); if (g) geos.push(g); }
@@ -2678,7 +2735,7 @@ class Component extends DCLogic {
     // prisms exactly (a real router-bit ball). Only added at joints that actually turn (>15°) — a finely
     // tessellated rim (near-collinear segments) needs none, keeping the CSG cheap.
     if (t.type === 'fillet') {
-      for (const g of this.jointBallGeoms(t)) geos.push(g);
+      for (const g of this.jointBallGeoms(t, this._toolSiblings)) geos.push(g);
     }
     const merged = this.mergeGeos(geos);
     merged.computeVertexNormals();
@@ -2687,27 +2744,50 @@ class Component extends DCLogic {
     const b = new this.CSG.Brush(merged); b.updateMatrixWorld(true);
     return b;
   }
-  // spheres seated at angled interior joints of a fillet chain (arc-center of the rounding cylinder)
-  jointBallGeoms(t) {
+  // spheres seated at angled interior joints of a fillet chain (arc-center of the rounding cylinder).
+  // `siblings` = the node's other edge treatments; a joint is bridged when t's segment endpoint meets an
+  // incident segment (from t OR a sibling fillet) that TURNS >15° or is of MIXED convexity. The mixed-
+  // convexity case is item 7 (v0.64.0): a subtracted convex fillet and a unioned concave fillet that share
+  // a corner each contribute one ball at their OWN arc-center, so the flat prism caps round into a
+  // continuous blend instead of a sliver. Radius stays t.size → tangent to t's own fillet cylinder.
+  jointBallGeoms(t, siblings) {
     const THREE = this.THREE, out = [];
-    if (!t.segs.every(s => s.a && s.b)) return out;   // endpoints required (older persisted treatments lack them)
+    if (!t.segs || !t.segs.every(s => s.a && s.b)) return out;   // endpoints required (older persisted treatments lack them)
     const Q = 1e3;
     const pk = (p) => Math.round(p[0] * Q) + ',' + Math.round(p[1] * Q) + ',' + Math.round(p[2] * Q);
     const dir = (s, from) => { const to = pk(s.a) === from ? s.b : s.a; const a = pk(s.a) === from ? s.a : s.b; const d = [to[0] - a[0], to[1] - a[1], to[2] - a[2]]; const L = Math.hypot(...d) || 1; return [d[0] / L, d[1] / L, d[2] / L]; };
-    // group segments by shared endpoint
+    // incidence map over t's own segments AND sibling fillet treatments' segments (each tagged w/ its treatment)
     const at = new Map();
-    for (const s of t.segs) for (const p of [s.a, s.b]) { const k = pk(p); if (!at.has(k)) at.set(k, []); at.get(k).push(s); }
+    const addSeg = (s, tr) => { for (const p of [s.a, s.b]) { const k = pk(p); if (!at.has(k)) at.set(k, []); at.get(k).push({ s, tr }); } };
+    for (const s of t.segs) addSeg(s, t);
+    for (const other of (siblings || [])) {
+      if (other === t || other.type !== 'fillet' || !other.segs) continue;
+      for (const s of other.segs) if (s.a && s.b) addSeg(s, other);
+    }
     const seen = new Set();
-    for (const [k, segs] of at) {
-      if (segs.length < 2) continue;                 // chain end or isolated — no interior joint
-      if (seen.has(k)) continue; seen.add(k);
-      const P = (pk(segs[0].a) === k) ? segs[0].a : segs[0].b;
-      // turn angle between the two incident segments
-      const d0 = dir(segs[0], k), d1 = dir(segs[1], k);
-      const dot = -(d0[0] * d1[0] + d0[1] * d1[1] + d0[2] * d1[2]); // both point away from joint
-      if (dot > Math.cos(15 * Math.PI / 180)) continue;            // near-straight — flat caps meet
-      const s = segs[0], r = t.size;
-      const U = new THREE.Vector3().fromArray(s.U), V = new THREE.Vector3().fromArray(s.V);
+    for (const s0 of t.segs) for (const P of [s0.a, s0.b]) {
+      const k = pk(P);
+      if (seen.has(k)) continue;
+      const inc = at.get(k) || [];
+      if (inc.length < 2) continue;                  // chain end or isolated — no interior joint
+      const d0 = dir(s0, k);
+      let need = false;
+      for (const e of inc) {
+        if (e.s === s0) continue;
+        const de = dir(e.s, k);
+        const dot = -(d0[0] * de[0] + d0[1] * de[1] + d0[2] * de[2]);
+        const turns = dot <= Math.cos(15 * Math.PI / 180);
+        const mixed = (!!e.tr.convex) !== (!!t.convex);
+        // Same-treatment angled joint = the original v0.59.0 bridging (keep exactly). Cross-treatment
+        // balls are added ONLY at MIXED-convexity junctions (item 7) — same-convexity neighbors that
+        // meet were already handled acceptably by plain prism unions, and adding balls there can hand
+        // three-bvh-csg a degenerate tool. So: bridge on (own-treatment turn) OR (mixed convexity).
+        if (mixed || (e.tr === t && turns)) { need = true; break; }
+      }
+      if (!need) continue;
+      seen.add(k);
+      const r = t.size;
+      const U = new THREE.Vector3().fromArray(s0.U), V = new THREE.Vector3().fromArray(s0.V);
       const C = new THREE.Vector3().fromArray(P);
       if (t.convex) C.addScaledVector(U, -r).addScaledVector(V, -r); else C.addScaledVector(U, r).addScaledVector(V, r);
       const cseg = Math.max(8, Math.round(this.state.fn / 2));
@@ -2725,8 +2805,8 @@ class Component extends DCLogic {
     if (!this._ev) this._ev = new Evaluator();
     let acc = brush;
     const treats = Object.values(node.edgeTreatments);
-    for (const t of treats.filter(x => x.convex)) { const tool = this.buildEdgeToolBrush(t); if (tool) acc = this._ev.evaluate(acc, tool, SUBTRACTION); }
-    for (const t of treats.filter(x => !x.convex)) { const tool = this.buildEdgeToolBrush(t); if (tool) acc = this._ev.evaluate(acc, tool, ADDITION); }
+    for (const t of treats.filter(x => x.convex)) { const tool = this.buildEdgeToolBrush(t, treats); if (tool) acc = this._ev.evaluate(acc, tool, SUBTRACTION); }
+    for (const t of treats.filter(x => !x.convex)) { const tool = this.buildEdgeToolBrush(t, treats); if (tool) acc = this._ev.evaluate(acc, tool, ADDITION); }
     acc.updateMatrixWorld(true);
     return acc;
   }

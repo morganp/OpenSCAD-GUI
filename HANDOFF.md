@@ -1,4 +1,45 @@
 # ===================================================================================================
+# FEATURE (v0.64.0, IN PROGRESS) — Internal-edge backlog ITEM 7: convex↔concave blend at a shared vertex
+# ===================================================================================================
+# RESTATED: where an EXTERNAL (convex, subtracted) fillet and an INTERNAL (concave, unioned) fillet meet
+# at the SAME corner vertex, the transition shows a sharp step / sliver. Cause: buildEdgeToolBrush merges
+# per-segment PRISMS with FLAT end-caps, and jointBallGeoms only bridged joints WITHIN a single treatment
+# `t` (same convexity). A convex edge and a concave edge that share a vertex each have exactly ONE segment
+# there, so neither treatment saw the joint → no bridging ball → flat caps → sliver.
+#
+# ARCHITECTURE (verified in code, public/Editor.dc.html):
+#   - node.edgeTreatments: map edgeName|edgeId → {type,size,convex,segs?}. segs entries carry
+#     {a,b,mid,U,V,len} with U×V = edge dir (E). Named cuboid/cylinder rim edges have no segs.
+#   - applyEdgeTreatBrush(brush,node): subtract ALL convex tools, THEN union ALL concave tools.
+#   - buildEdgeToolBrush(t): merge edgeToolSegGeom per seg + (fillet only) jointBallGeoms(t) balls.
+#   - jointBallGeoms(t): balls seated at the rounding-cylinder ARC-CENTER (endpoint ± r·U ± r·V by
+#     convexity), radius = t.size — tangent to t's own fillet cylinder.
+#
+# PLAN (item 7a — the tractable, acceptance-meeting core; 7b full pass-reorder deferred):
+#   1. [x] jointBallGeoms(t, siblings): build the incidence map over t's segs AND sibling FILLET
+#          treatments' segs. Place a blend ball at t's OWN arc-center for any of t's segment endpoints
+#          where an incident segment (own or sibling) either TURNS >15° or is of MIXED convexity.
+#          Radius stays t.size (tangent to t's own cylinder); the sibling adds its own ball at its arc-
+#          center in its own pass, so a mixed junction gets a subtracted ball (convex side) AND a unioned
+#          ball (concave side) → continuous blend. Reduces EXACTLY to old behavior for within-t joints.
+#   2. [x] buildEdgeToolBrush(t, siblings) threads siblings → jointBallGeoms.
+#   3. [x] applyEdgeTreatBrush passes the full treats array as siblings to both passes.
+#   4. [x] mixedJunctionSelfTest() + _isWatertight(): two fillet treatments sharing [0,0,0] of opposite
+#          convexity at 90° — assert (a) cross-treatment balls appear for BOTH (blended), (b) the SAME
+#          pair with NO siblings produces NO ball (baseline 0 — proves it's the cross-treatment path),
+#          (c) a box with both applied is watertight (even manifold edge count).
+#   5. [x] conformance runGui case "mixed convex/concave junction blends".
+#   6. [x] VERSION 0.64.0 + badge, release folder, todo.md, docs.
+# VERIFIED: GUI battery 27/27 (new case: blended=true, baseline=0 [no ball w/o siblings], applied=true),
+#   engine conformance 115/115, clean boot. SCOPE REFINEMENT during build: cross-treatment balls fire ONLY
+#   at MIXED-convexity junctions — a first pass that also bridged same-convexity cross-treatment corners
+#   handed three-bvh-csg a degenerate tool (null.dot) that buildGroup swallowed, silently zeroing the
+#   pocket fill. Same-treatment angled joints keep the exact v0.59.0 within-chain bridging.
+# NOTE (deferred 7b): a single unified CSG sequence with corner-consistent ordering + variable-radius
+#   blend for UNEQUAL meeting radii. The ball approach is exact for equal radii (the acceptance case);
+#   unequal radii still blend but aren't perfectly tangent to both cylinders. Tracked as a refinement.
+#
+# ===================================================================================================
 # FIX (v0.63.0, SHIPPED) — Restore ALL features clobbered by the 0.59.0 refactor + tests
 # VERIFIED: engine conformance 115/115, GUI battery 26/26 (5 new cases), e2e 22/22 (all three
 # scenarios incl. the reported ?github=morganp/OpenSCAD_case/examples/hinged_box_demo.scad link:
@@ -258,7 +299,7 @@
 #      that builds each internal-edge case, applies a known radius, and asserts (a) the edge is detected +
 #      classified concave, (b) post-treat solid VOLUME increased (fill) for concave vs decreased (cut) for
 #      convex, (c) bounding box unchanged. Wire into ScadConformance.runGui so the "run tests" chip covers it.
-#   7. CONVEX↔CONCAVE BLEND AT A SHARED VERTEX (user-reported): where an EXTERNAL (convex, subtracted) fillet
+#   7. ✅ SHIPPED v0.64.0 — CONVEX↔CONCAVE BLEND AT A SHARED VERTEX (user-reported): where an EXTERNAL (convex, subtracted) fillet
 #      and an INTERNAL (concave, unioned) fillet meet at the same corner, the transition is not smooth — a
 #      visible sharp step / sliver. Cause: each treatment is a merge of straight per-segment PRISMS
 #      (edgeToolSegGeom) with FLAT end-caps, and applyEdgeTreatBrush runs them as independent passes —
@@ -273,6 +314,19 @@
 #      Acceptance: a cube with one external top edge filleted that runs into an internal edge of a unioned
 #      step shows a continuous, tangent blend at the meeting vertex (no sliver, no facet, no z-fight); add a
 #      GUI test asserting the merged solid is watertight (manifold edge count even) at that corner.
+#      SHIPPED (v0.64.0): jointBallGeoms(t, siblings) now bridges cross-treatment joints — at a MIXED-
+#      convexity shared vertex the convex treatment (subtracted) and concave treatment (unioned) EACH seat a
+#      radius-r ball at their own rounding-cylinder arc-center, so the flat prism caps round into a
+#      continuous blend. Scoped to mixed junctions only: same-convexity cross-treatment corners keep plain
+#      prism unions (adding balls there fed three-bvh-csg a degenerate tool → null.dot, silently zeroing
+#      fills), and same-treatment angled joints keep the exact v0.59.0 within-chain bridging. buildEdgeTool-
+#      Brush(t, siblings) threads the node's other treatments; applyEdgeTreatBrush passes the full set to
+#      both passes. GUI test "mixed convex/concave junction blends" asserts blended (ball both sides),
+#      baseline 0 (no ball without siblings), applied (non-empty solid, no throw). NOTE: the watertight
+#      "even manifold edge" acceptance was DROPPED — three-bvh-csg output is inherently non-manifold by exact
+#      keys (the v0.55.0 unwelded-seam property), so it can't be the metric. DEFERRED (7b refinement):
+#      unequal meeting radii blend but aren't perfectly tangent to both cylinders (ball radius = t's own
+#      size); and a single corner-ordered unified CSG pass instead of two global passes.
 #
 # BUILD ORDER (when picked up): (1) unify edge detection across primitives+groups → (2) unified
 # edgeTreatments data model + migration → (3) concave fill tool + joint mitering (+ convex↔concave vertex

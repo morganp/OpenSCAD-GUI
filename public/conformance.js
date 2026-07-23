@@ -499,6 +499,22 @@
       if (ok) passed++;
       cases.push({ name: 'custom shape: unknown module stays advanced', ok, detail, src: 'capsule(); with no library loaded' });
     }
+    // convex↔concave blend at a shared vertex (item 7, v0.64.0): a subtracted convex fillet and a
+    // unioned concave fillet meeting at one corner each get a bridging ball via the cross-treatment
+    // joint path (none without siblings), and a box carrying both applies to a non-empty solid.
+    {
+      let ok = false, detail = '';
+      if (!haveEditor || typeof editor.mixedJunctionSelfTest !== 'function') { detail = 'editor self-test unavailable'; }
+      else {
+        try {
+          const r = editor.mixedJunctionSelfTest();
+          if (!r.ok) { detail = r.reason || 'fixture failed'; }
+          else { ok = r.blended && r.baseline === 0 && r.applied; if (!ok) detail = 'blended=' + r.blended + ' baseline=' + r.baseline + ' applied=' + r.applied + (r.detail ? ' ' + r.detail : ''); }
+        } catch (e) { detail = 'threw: ' + (e && e.message || e); }
+      }
+      if (ok) passed++;
+      cases.push({ name: 'mixed convex/concave junction blends', ok, detail, src: 'convex fillet ∩ concave fillet at one vertex' });
+    }
     // deep-link URL parsing (v0.58.0, re-implemented v0.62.0): all four accepted ?github= forms
     // reduce to owner/repo/ref/path; exercised via parseGithubSpec + the loader's URL regex.
     {
